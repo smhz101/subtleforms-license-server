@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -21,6 +21,9 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Renewal reminder emails, renew and upgrade from the account.
 
 == Changelog ==
+
+= 1.2.0 - 2026-10-11 =
+* Pricing cards list each plan's real features: WooCommerce checkout and integrations on Pro, white label and translation on Agency, and the features every plan shares
 
 = 1.1.0 =
 * New: account connection flow at /connect-site/ with a one-time code exchanged at POST /sfls/v1/connect/exchange.

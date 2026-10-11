@@ -122,11 +122,12 @@ final class SFLS_Plans {
 		return (array) apply_filters(
 			'sfls_feature_labels',
 			array(
-				'csv_export'        => __( 'CSV export', 'subtleforms-license-server' ),
-				'webhooks'          => __( 'Webhooks', 'subtleforms-license-server' ),
-				'integrations'      => __( 'CRM, email marketing and payment integrations', 'subtleforms-license-server' ),
-				'conditional_logic' => __( 'Advanced conditional logic', 'subtleforms-license-server' ),
-				'white_label'       => __( 'White label', 'subtleforms-license-server' ),
+				'csv_export'        => __( 'CSV export of entries', 'subtleforms-license-server' ),
+				'webhooks'          => __( 'Webhooks with retries', 'subtleforms-license-server' ),
+				'integrations'      => __( 'WooCommerce checkout, Mailchimp, Brevo, Kit, HubSpot and Zapier', 'subtleforms-license-server' ),
+				// Advanced logic is in every plan (see common items), so this slug has no line of its own.
+				'conditional_logic' => '',
+				'white_label'       => __( 'White label and WPML/Polylang translation', 'subtleforms-license-server' ),
 			)
 		);
 	}
@@ -140,11 +141,13 @@ final class SFLS_Plans {
 		return (array) apply_filters(
 			'sfls_common_items',
 			array(
-				__( 'Stripe payments', 'subtleforms-license-server' ),
-				__( 'Coupons', 'subtleforms-license-server' ),
-				__( 'Calculations', 'subtleforms-license-server' ),
-				__( 'Signature field', 'subtleforms-license-server' ),
-				__( 'Priority support', 'subtleforms-license-server' ),
+				__( 'Stripe checkout with coupons', 'subtleforms-license-server' ),
+				__( 'Advanced conditional logic and conditional emails', 'subtleforms-license-server' ),
+				__( 'Calculation, Signature and Picture Choice fields', 'subtleforms-license-server' ),
+				__( 'Multi-file uploads', 'subtleforms-license-server' ),
+				__( 'Entry PDFs and form analytics', 'subtleforms-license-server' ),
+				__( 'Pro templates', 'subtleforms-license-server' ),
+				__( 'Updates and priority support', 'subtleforms-license-server' ),
 			)
 		);
 	}

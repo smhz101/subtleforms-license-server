@@ -113,7 +113,10 @@ final class SFLS_Shortcodes {
 		$labels   = SFLS_Plans::feature_labels();
 		$features = array();
 		foreach ( SFLS_Plans::features( $plan ) as $slug ) {
-			$features[] = $labels[ $slug ] ?? ucwords( str_replace( '_', ' ', $slug ) );
+			$label = $labels[ $slug ] ?? ucwords( str_replace( '_', ' ', $slug ) );
+			if ( '' !== $label ) {
+				$features[] = $label;
+			}
 		}
 		$features = array_merge( $features, SFLS_Plans::common_items() );
 
