@@ -1,0 +1,1360 @@
+# Copyright (C) 2026 SubtleForms
+# This file is distributed under the GPL-2.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: SubtleForms License Server 1.1.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/subtleforms-license-server\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-10-11T13:34:44+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.11.0\n"
+"X-Domain: subtleforms-license-server\n"
+
+#. Plugin Name of the plugin
+#: subtleforms-license-server.php
+msgid "SubtleForms License Server"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: subtleforms-license-server.php
+msgid "https://subtleforms.com"
+msgstr ""
+
+#. Description of the plugin
+#: subtleforms-license-server.php
+msgid "Issues and validates SubtleForms Pro license keys, sells them through WooCommerce, connects customer sites, runs the customer members area and serves Pro updates. Install on subtleforms.com only."
+msgstr ""
+
+#. Author of the plugin
+#: subtleforms-license-server.php
+#: includes/class-sfls-connect.php:402
+msgid "SubtleForms"
+msgstr ""
+
+#: includes/class-sfls-account.php:68
+#: includes/class-sfls-account.php:75
+#: includes/class-sfls-account.php:88
+#: includes/class-sfls-admin.php:39
+#: includes/class-sfls-admin.php:194
+msgid "Licenses"
+msgstr ""
+
+#: includes/class-sfls-account.php:69
+#: includes/class-sfls-account.php:76
+#: includes/class-sfls-account.php:95
+msgid "Pro downloads"
+msgstr ""
+
+#: includes/class-sfls-account.php:194
+msgid "No licenses yet"
+msgstr ""
+
+#: includes/class-sfls-account.php:194
+msgid "Buy SubtleForms Pro and your license key shows up here, ready to connect to your sites."
+msgstr ""
+
+#: includes/class-sfls-account.php:194
+#: includes/class-sfls-account.php:358
+#: includes/class-sfls-account.php:487
+#: includes/class-sfls-connect.php:497
+msgid "See plans"
+msgstr ""
+
+#: includes/class-sfls-account.php:198
+msgid "Connect a site from SubtleForms › Settings › License in WordPress, or paste the key there. Local and staging sites never count towards your limit."
+msgstr ""
+
+#: includes/class-sfls-account.php:227
+msgid "Renew"
+msgstr ""
+
+#. translators: %s: plan name
+#: includes/class-sfls-account.php:233
+msgid "Upgrade to %s"
+msgstr ""
+
+#: includes/class-sfls-account.php:238
+msgid "Download Pro"
+msgstr ""
+
+#: includes/class-sfls-account.php:243
+msgid "This license has expired. Pro keeps working for a short grace period. Renew now to keep updates and support."
+msgstr ""
+
+#: includes/class-sfls-account.php:245
+msgid "This license has expired. Renew it to turn Pro features and updates back on."
+msgstr ""
+
+#: includes/class-sfls-account.php:247
+msgid "This license is suspended. Contact support if you think this is a mistake."
+msgstr ""
+
+#: includes/class-sfls-account.php:251
+msgid "Copied"
+msgstr ""
+
+#: includes/class-sfls-account.php:253
+msgid "Copy"
+msgstr ""
+
+#: includes/class-sfls-account.php:257
+msgid "Term"
+msgstr ""
+
+#: includes/class-sfls-account.php:257
+msgid "Renews"
+msgstr ""
+
+#: includes/class-sfls-account.php:257
+#: includes/class-sfls-admin.php:187
+#: includes/class-sfls-licenses.php:449
+#: includes/class-sfls-reminders.php:180
+msgid "Expired"
+msgstr ""
+
+#: includes/class-sfls-account.php:258
+#: includes/class-sfls-admin.php:246
+#: includes/class-sfls-admin.php:443
+#: includes/class-sfls-admin.php:481
+#: includes/class-sfls-admin.php:494
+#: includes/class-sfls-admin.php:519
+#: includes/class-sfls-reminders.php:181
+#: includes/class-sfls-woo.php:90
+msgid "Sites"
+msgstr ""
+
+#: includes/class-sfls-account.php:258
+msgid "Unlimited"
+msgstr ""
+
+#: includes/class-sfls-account.php:259
+msgid "Purchased"
+msgstr ""
+
+#: includes/class-sfls-account.php:269
+msgid "Connected sites"
+msgstr ""
+
+#: includes/class-sfls-account.php:271
+msgid "No sites yet. In WordPress, go to SubtleForms › Settings › License and click Connect account."
+msgstr ""
+
+#: includes/class-sfls-account.php:289
+msgid "Staging, free"
+msgstr ""
+
+#. translators: %s: human time difference
+#: includes/class-sfls-account.php:295
+msgid "Last seen %s ago"
+msgstr ""
+
+#. translators: %s: version
+#: includes/class-sfls-account.php:301
+#: includes/class-sfls-connect.php:485
+msgid "Pro %s"
+msgstr ""
+
+#. translators: %s: domain
+#: includes/class-sfls-account.php:305
+msgid "Disconnect %s? Pro stops working there until it is connected again."
+msgstr ""
+
+#. translators: %s: domain
+#: includes/class-sfls-account.php:305
+#: includes/class-sfls-admin.php:397
+msgid "Deactivate"
+msgstr ""
+
+#: includes/class-sfls-account.php:326
+#: includes/class-sfls-woo.php:175
+msgid "That license was not found in your account."
+msgstr ""
+
+#. translators: %s: domain
+#: includes/class-sfls-account.php:333
+msgid "%s was disconnected. You can use the key on another site now."
+msgstr ""
+
+#: includes/class-sfls-account.php:353
+msgid "No releases yet"
+msgstr ""
+
+#: includes/class-sfls-account.php:353
+msgid "The first SubtleForms Pro release will be available here."
+msgstr ""
+
+#: includes/class-sfls-account.php:358
+#: includes/class-sfls-account.php:421
+msgid "Downloads need an active license."
+msgstr ""
+
+#: includes/class-sfls-account.php:362
+msgid "Latest release"
+msgstr ""
+
+#. translators: %s: version
+#. translators: %s: plan name
+#: includes/class-sfls-account.php:364
+#: includes/class-sfls-products.php:316
+msgid "SubtleForms Pro %s"
+msgstr ""
+
+#. translators: %s: WordPress version
+#: includes/class-sfls-account.php:369
+msgid "WordPress %s+"
+msgstr ""
+
+#. translators: %s: PHP version
+#: includes/class-sfls-account.php:371
+msgid "PHP %s+"
+msgstr ""
+
+#: includes/class-sfls-account.php:378
+msgid "Download zip"
+msgstr ""
+
+#: includes/class-sfls-account.php:384
+msgid "What is new"
+msgstr ""
+
+#: includes/class-sfls-account.php:386
+msgid "Install it in WordPress from Plugins › Add New › Upload Plugin. Connected sites also get updates automatically in Dashboard › Updates."
+msgstr ""
+
+#: includes/class-sfls-account.php:391
+msgid "Older versions"
+msgstr ""
+
+#: includes/class-sfls-account.php:397
+#: includes/class-sfls-account.php:481
+msgid "Download"
+msgstr ""
+
+#: includes/class-sfls-account.php:399
+msgid "Not available"
+msgstr ""
+
+#: includes/class-sfls-account.php:428
+msgid "That version is not available for download."
+msgstr ""
+
+#: includes/class-sfls-account.php:462
+#: includes/class-sfls-account.php:463
+#: includes/class-sfls-products.php:313
+msgid "SubtleForms Pro"
+msgstr ""
+
+#: includes/class-sfls-account.php:463
+msgid "Manage licenses"
+msgstr ""
+
+#: includes/class-sfls-account.php:466
+#: includes/class-sfls-admin.php:199
+msgid "Active licenses"
+msgstr ""
+
+#: includes/class-sfls-account.php:471
+#: includes/class-sfls-admin.php:516
+#: includes/class-sfls-licenses.php:471
+#: includes/class-sfls-shortcodes.php:84
+msgid "Lifetime"
+msgstr ""
+
+#: includes/class-sfls-account.php:473
+msgid "None"
+msgstr ""
+
+#: includes/class-sfls-account.php:475
+msgid "Next renewal"
+msgstr ""
+
+#: includes/class-sfls-account.php:477
+msgid "Latest Pro version"
+msgstr ""
+
+#: includes/class-sfls-account.php:487
+msgid "You do not have a license yet."
+msgstr ""
+
+#: includes/class-sfls-admin.php:40
+#: includes/class-sfls-admin.php:348
+msgid "All licenses"
+msgstr ""
+
+#: includes/class-sfls-admin.php:41
+#: includes/class-sfls-admin.php:194
+#: includes/class-sfls-admin.php:432
+#: includes/class-sfls-admin.php:448
+msgid "Issue license"
+msgstr ""
+
+#: includes/class-sfls-admin.php:42
+#: includes/class-sfls-admin.php:459
+msgid "Products"
+msgstr ""
+
+#: includes/class-sfls-admin.php:43
+#: includes/class-sfls-admin.php:546
+msgid "Pro releases"
+msgstr ""
+
+#: includes/class-sfls-admin.php:44
+msgid "Settings"
+msgstr ""
+
+#: includes/class-sfls-admin.php:65
+msgid "Set up products"
+msgstr ""
+
+#: includes/class-sfls-admin.php:76
+msgid "Sorry, you are not allowed to manage licenses."
+msgstr ""
+
+#: includes/class-sfls-admin.php:184
+msgid "All"
+msgstr ""
+
+#: includes/class-sfls-admin.php:185
+#: includes/class-sfls-admin.php:370
+#: includes/class-sfls-licenses.php:447
+msgid "Active"
+msgstr ""
+
+#: includes/class-sfls-admin.php:186
+msgid "Expiring soon"
+msgstr ""
+
+#: includes/class-sfls-admin.php:188
+#: includes/class-sfls-admin.php:371
+#: includes/class-sfls-licenses.php:450
+msgid "Suspended"
+msgstr ""
+
+#: includes/class-sfls-admin.php:200
+msgid "Total activations"
+msgstr ""
+
+#: includes/class-sfls-admin.php:201
+msgid "Expiring in 30 days"
+msgstr ""
+
+#: includes/class-sfls-admin.php:206
+msgid "View"
+msgstr ""
+
+#: includes/class-sfls-admin.php:213
+msgid "WooCommerce is not active, so licenses cannot be sold yet. You can still issue keys by hand."
+msgstr ""
+
+#: includes/class-sfls-admin.php:215
+msgid "No license products yet."
+msgstr ""
+
+#: includes/class-sfls-admin.php:215
+msgid "Set up pricing in a minute"
+msgstr ""
+
+#: includes/class-sfls-admin.php:238
+msgid "Search licenses"
+msgstr ""
+
+#: includes/class-sfls-admin.php:238
+msgid "Key or email"
+msgstr ""
+
+#: includes/class-sfls-admin.php:238
+msgid "Search"
+msgstr ""
+
+#: includes/class-sfls-admin.php:242
+msgid "Key"
+msgstr ""
+
+#: includes/class-sfls-admin.php:243
+msgid "Customer"
+msgstr ""
+
+#: includes/class-sfls-admin.php:244
+#: includes/class-sfls-admin.php:359
+#: includes/class-sfls-admin.php:438
+#: includes/class-sfls-admin.php:480
+#: includes/class-sfls-admin.php:519
+#: includes/class-sfls-reminders.php:178
+#: includes/class-sfls-woo.php:83
+msgid "Plan"
+msgstr ""
+
+#: includes/class-sfls-admin.php:245
+#: includes/class-sfls-admin.php:369
+#: includes/class-sfls-admin.php:519
+msgid "Status"
+msgstr ""
+
+#: includes/class-sfls-admin.php:247
+#: includes/class-sfls-admin.php:367
+#: includes/class-sfls-reminders.php:180
+msgid "Expires"
+msgstr ""
+
+#: includes/class-sfls-admin.php:248
+#: includes/class-sfls-admin.php:414
+msgid "Order"
+msgstr ""
+
+#: includes/class-sfls-admin.php:256
+msgid "No licenses match."
+msgstr ""
+
+#: includes/class-sfls-admin.php:256
+msgid "No licenses yet. Issue one, or sell a product marked as a SubtleForms license."
+msgstr ""
+
+#: includes/class-sfls-admin.php:273
+msgid "Edit"
+msgstr ""
+
+#: includes/class-sfls-admin.php:276
+msgid "+1 year"
+msgstr ""
+
+#: includes/class-sfls-admin.php:279
+msgid "Suspend"
+msgstr ""
+
+#: includes/class-sfls-admin.php:280
+msgid "Resume"
+msgstr ""
+
+#: includes/class-sfls-admin.php:281
+#: includes/class-sfls-admin.php:419
+msgid "Delete this license permanently?"
+msgstr ""
+
+#: includes/class-sfls-admin.php:281
+#: includes/class-sfls-admin.php:418
+msgid "Delete"
+msgstr ""
+
+#: includes/class-sfls-admin.php:283
+msgid "Show more details"
+msgstr ""
+
+#. translators: %s: count
+#: includes/class-sfls-admin.php:295
+msgid "%s item"
+msgid_plural "%s items"
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/class-sfls-admin.php:339
+#: includes/class-sfls-admin.php:348
+msgid "Edit license"
+msgstr ""
+
+#: includes/class-sfls-admin.php:340
+#: includes/class-sfls-admin.php:674
+#: includes/class-sfls-admin.php:727
+msgid "License not found."
+msgstr ""
+
+#: includes/class-sfls-admin.php:340
+msgid "Back to licenses"
+msgstr ""
+
+#: includes/class-sfls-admin.php:353
+msgid "Details"
+msgstr ""
+
+#: includes/class-sfls-admin.php:365
+msgid "Sites allowed"
+msgstr ""
+
+#: includes/class-sfls-admin.php:365
+msgid "0 for unlimited. Local and staging sites are always free."
+msgstr ""
+
+#: includes/class-sfls-admin.php:367
+msgid "Leave empty for a lifetime license."
+msgstr ""
+
+#: includes/class-sfls-admin.php:374
+#: includes/class-sfls-admin.php:437
+msgid "Customer email"
+msgstr ""
+
+#. translators: %s: user display name
+#: includes/class-sfls-admin.php:377
+msgid "Linked account: %s"
+msgstr ""
+
+#. translators: %s: user display name
+#: includes/class-sfls-admin.php:377
+msgid "View user"
+msgstr ""
+
+#: includes/class-sfls-admin.php:381
+#: includes/class-sfls-admin.php:446
+msgid "Notes"
+msgstr ""
+
+#: includes/class-sfls-admin.php:383
+msgid "Save license"
+msgstr ""
+
+#: includes/class-sfls-admin.php:386
+msgid "Activations"
+msgstr ""
+
+#: includes/class-sfls-admin.php:388
+msgid "Not active on any site yet."
+msgstr ""
+
+#: includes/class-sfls-admin.php:390
+msgid "Site"
+msgstr ""
+
+#: includes/class-sfls-admin.php:390
+msgid "Pro version"
+msgstr ""
+
+#: includes/class-sfls-admin.php:390
+msgid "Activated"
+msgstr ""
+
+#: includes/class-sfls-admin.php:390
+msgid "Last seen"
+msgstr ""
+
+#: includes/class-sfls-admin.php:393
+msgid "staging"
+msgstr ""
+
+#: includes/class-sfls-admin.php:400
+msgid "Remove every activation from this license?"
+msgstr ""
+
+#: includes/class-sfls-admin.php:400
+msgid "Deactivate all sites"
+msgstr ""
+
+#: includes/class-sfls-admin.php:406
+msgid "License key"
+msgstr ""
+
+#: includes/class-sfls-admin.php:407
+msgid "Replace this key with a new one? Sites using the old key stop validating until the new key is entered."
+msgstr ""
+
+#: includes/class-sfls-admin.php:407
+msgid "Regenerate key"
+msgstr ""
+
+#: includes/class-sfls-admin.php:409
+msgid "History"
+msgstr ""
+
+#: includes/class-sfls-admin.php:411
+msgid "Created"
+msgstr ""
+
+#: includes/class-sfls-admin.php:412
+msgid "Updated"
+msgstr ""
+
+#: includes/class-sfls-admin.php:418
+msgid "Removes the key and all its activations. This cannot be undone."
+msgstr ""
+
+#: includes/class-sfls-admin.php:419
+msgid "Delete license"
+msgstr ""
+
+#: includes/class-sfls-admin.php:433
+msgid "For complimentary, partner, support or test keys. Paid keys are issued automatically when a WooCommerce order completes."
+msgstr ""
+
+#: includes/class-sfls-admin.php:437
+msgid "If an account uses this email, the key appears in its My Account › Licenses."
+msgstr ""
+
+#: includes/class-sfls-admin.php:443
+msgid "plan"
+msgstr ""
+
+#: includes/class-sfls-admin.php:443
+msgid "Empty for the plan default, 0 for unlimited."
+msgstr ""
+
+#: includes/class-sfls-admin.php:444
+#: includes/class-sfls-woo.php:99
+msgid "Duration (months)"
+msgstr ""
+
+#: includes/class-sfls-admin.php:444
+msgid "0 for lifetime."
+msgstr ""
+
+#: includes/class-sfls-admin.php:445
+msgid "How many"
+msgstr ""
+
+#: includes/class-sfls-admin.php:462
+msgid "WooCommerce is required to sell licenses."
+msgstr ""
+
+#: includes/class-sfls-admin.php:462
+msgid "Install and activate WooCommerce, then come back here to create the products in one step."
+msgstr ""
+
+#: includes/class-sfls-admin.php:464
+msgid "Install WooCommerce"
+msgstr ""
+
+#: includes/class-sfls-admin.php:474
+msgid "Set your prices and save. The license products are created for you: virtual, sold one at a time, and wired to issue keys. Saving again updates the same products."
+msgstr ""
+
+#. translators: %s: currency code
+#: includes/class-sfls-admin.php:483
+msgid "Yearly price (%s)"
+msgstr ""
+
+#. translators: %s: currency code
+#: includes/class-sfls-admin.php:485
+msgid "Renewal price (%s)"
+msgstr ""
+
+#. translators: %s: currency code
+#: includes/class-sfls-admin.php:487
+msgid "Lifetime price (%s)"
+msgstr ""
+
+#. translators: %s: currency code
+#: includes/class-sfls-admin.php:487
+msgid "optional"
+msgstr ""
+
+#: includes/class-sfls-admin.php:494
+msgid "sites"
+msgstr ""
+
+#: includes/class-sfls-admin.php:494
+msgid "0 = unlimited"
+msgstr ""
+
+#: includes/class-sfls-admin.php:496
+msgid "Yearly price"
+msgstr ""
+
+#: includes/class-sfls-admin.php:497
+msgid "Renewal price"
+msgstr ""
+
+#: includes/class-sfls-admin.php:498
+msgid "Lifetime price"
+msgstr ""
+
+#: includes/class-sfls-admin.php:500
+msgid "not sold"
+msgstr ""
+
+#: includes/class-sfls-admin.php:505
+msgid "Renewal products are hidden from the shop; customers reach them from the Renew button in their account. Clearing a price moves that product to draft so it is no longer sold."
+msgstr ""
+
+#: includes/class-sfls-admin.php:506
+msgid "Save products"
+msgstr ""
+
+#: includes/class-sfls-admin.php:510
+msgid "License products"
+msgstr ""
+
+#: includes/class-sfls-admin.php:512
+msgid "None yet. Fill in the prices above and save."
+msgstr ""
+
+#: includes/class-sfls-admin.php:515
+#: includes/class-sfls-shortcodes.php:83
+msgid "Yearly"
+msgstr ""
+
+#: includes/class-sfls-admin.php:517
+#: includes/class-sfls-woo.php:109
+msgid "Renewal"
+msgstr ""
+
+#: includes/class-sfls-admin.php:519
+msgid "Product"
+msgstr ""
+
+#: includes/class-sfls-admin.php:519
+msgid "Type"
+msgstr ""
+
+#: includes/class-sfls-admin.php:519
+msgid "Price"
+msgstr ""
+
+#: includes/class-sfls-admin.php:530
+msgid "Show prices on your site"
+msgstr ""
+
+#: includes/class-sfls-admin.php:531
+msgid "Pricing cards with Buy buttons that go straight to checkout. Add period=\"lifetime\" to open on lifetime prices."
+msgstr ""
+
+#: includes/class-sfls-admin.php:532
+msgid "Every Pro release with its changes."
+msgstr ""
+
+#: includes/class-sfls-admin.php:533
+msgid "The current Pro version number."
+msgstr ""
+
+#: includes/class-sfls-admin.php:547
+msgid "Upload a new SubtleForms Pro zip and every site with an active license is offered the update in Dashboard › Updates. Customers can also download it from My Account › Pro downloads."
+msgstr ""
+
+#. translators: %s: version
+#: includes/class-sfls-admin.php:549
+msgid "Current release: %s"
+msgstr ""
+
+#: includes/class-sfls-admin.php:553
+msgid "package missing"
+msgstr ""
+
+#: includes/class-sfls-admin.php:560
+msgid "Plugin zip"
+msgstr ""
+
+#: includes/class-sfls-admin.php:560
+msgid "Leave empty to only update the details below."
+msgstr ""
+
+#: includes/class-sfls-admin.php:562
+#: includes/class-sfls-admin.php:576
+msgid "Version"
+msgstr ""
+
+#: includes/class-sfls-admin.php:563
+msgid "Requires WordPress"
+msgstr ""
+
+#: includes/class-sfls-admin.php:564
+msgid "Tested up to"
+msgstr ""
+
+#: includes/class-sfls-admin.php:565
+msgid "Requires PHP"
+msgstr ""
+
+#: includes/class-sfls-admin.php:569
+msgid "Changelog"
+msgstr ""
+
+#: includes/class-sfls-admin.php:569
+msgid "One change per line, starting with \"* \", shows as a list."
+msgstr ""
+
+#: includes/class-sfls-admin.php:571
+msgid "Publish release"
+msgstr ""
+
+#: includes/class-sfls-admin.php:576
+msgid "Earlier releases"
+msgstr ""
+
+#: includes/class-sfls-admin.php:576
+msgid "Released"
+msgstr ""
+
+#: includes/class-sfls-admin.php:576
+msgid "Package"
+msgstr ""
+
+#: includes/class-sfls-admin.php:578
+msgid "missing"
+msgstr ""
+
+#: includes/class-sfls-admin.php:593
+msgid "License settings"
+msgstr ""
+
+#: includes/class-sfls-admin.php:599
+msgid "Pricing page URL"
+msgstr ""
+
+#: includes/class-sfls-admin.php:599
+msgid "Where \"See plans\" links point. Leave empty for /pricing/."
+msgstr ""
+
+#: includes/class-sfls-admin.php:601
+msgid "Renewal reminders"
+msgstr ""
+
+#: includes/class-sfls-admin.php:601
+msgid "Days before expiry to email the customer, separated by commas. Leave empty to turn reminders off."
+msgstr ""
+
+#: includes/class-sfls-admin.php:603
+msgid "After expiry"
+msgstr ""
+
+#: includes/class-sfls-admin.php:603
+msgid "Send one more reminder the day after a license expires"
+msgstr ""
+
+#: includes/class-sfls-admin.php:605
+msgid "Support email"
+msgstr ""
+
+#: includes/class-sfls-admin.php:605
+msgid "Shown to customers and used as Reply-To on reminder emails."
+msgstr ""
+
+#: includes/class-sfls-admin.php:607
+msgid "Uninstall"
+msgstr ""
+
+#: includes/class-sfls-admin.php:607
+msgid "Delete all licenses, activations and release files when the plugin is deleted"
+msgstr ""
+
+#: includes/class-sfls-admin.php:610
+msgid "Save settings"
+msgstr ""
+
+#: includes/class-sfls-admin.php:614
+msgid "Reminder schedule"
+msgstr ""
+
+#. translators: %s: date and time
+#: includes/class-sfls-admin.php:618
+msgid "Reminders are checked daily. Next check: %s."
+msgstr ""
+
+#: includes/class-sfls-admin.php:619
+msgid "The daily check is not scheduled. Deactivate and activate the plugin to schedule it."
+msgstr ""
+
+#: includes/class-sfls-admin.php:624
+msgid "Send due reminders now"
+msgstr ""
+
+#. translators: %s: keys
+#: includes/class-sfls-admin.php:656
+msgid "Issued: %s"
+msgstr ""
+
+#: includes/class-sfls-admin.php:671
+msgid "License updated."
+msgstr ""
+
+#: includes/class-sfls-admin.php:682
+msgid "License extended by one year."
+msgstr ""
+
+#: includes/class-sfls-admin.php:686
+msgid "License suspended."
+msgstr ""
+
+#: includes/class-sfls-admin.php:690
+msgid "License resumed."
+msgstr ""
+
+#: includes/class-sfls-admin.php:694
+msgid "All sites deactivated."
+msgstr ""
+
+#. translators: %s: domain
+#: includes/class-sfls-admin.php:700
+msgid "%s deactivated."
+msgstr ""
+
+#. translators: %s: key
+#: includes/class-sfls-admin.php:705
+msgid "New key: %s"
+msgstr ""
+
+#: includes/class-sfls-admin.php:709
+msgid "License deleted."
+msgstr ""
+
+#: includes/class-sfls-admin.php:747
+msgid "The expiry date was not understood, so it was left unchanged."
+msgstr ""
+
+#: includes/class-sfls-admin.php:757
+msgid "License saved."
+msgstr ""
+
+#: includes/class-sfls-admin.php:778
+msgid "WooCommerce is required."
+msgstr ""
+
+#. translators: 1: created count, 2: updated count
+#: includes/class-sfls-admin.php:793
+msgid "Products saved: %1$d created, %2$d updated."
+msgstr ""
+
+#: includes/class-sfls-admin.php:817
+msgid "Settings saved."
+msgstr ""
+
+#. translators: %d: number of emails
+#: includes/class-sfls-admin.php:830
+msgid "%d reminder sent."
+msgid_plural "%d reminders sent."
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/class-sfls-admin.php:862
+msgid "Release saved. Licensed sites will see it within 12 hours."
+msgstr ""
+
+#: includes/class-sfls-connect.php:115
+msgid "This link is missing information. Start the connection again from SubtleForms in your WordPress admin."
+msgstr ""
+
+#: includes/class-sfls-connect.php:119
+msgid "The return address is not a web address."
+msgstr ""
+
+#: includes/class-sfls-connect.php:124
+msgid "The return address does not belong to the site being connected. For your safety the connection was stopped."
+msgstr ""
+
+#: includes/class-sfls-connect.php:185
+msgid "Your session expired. Choose the license again."
+msgstr ""
+
+#: includes/class-sfls-connect.php:192
+msgid "Choose one of your licenses."
+msgstr ""
+
+#: includes/class-sfls-connect.php:329
+msgid "Sign in to connect your site"
+msgstr ""
+
+#. translators: %s: domain
+#: includes/class-sfls-connect.php:333
+msgid "Use the account you bought SubtleForms Pro with. You will then choose the license for %s."
+msgstr ""
+
+#: includes/class-sfls-connect.php:334
+msgid "Use the account you bought SubtleForms Pro with."
+msgstr ""
+
+#: includes/class-sfls-connect.php:356
+msgid "This license is suspended. Contact support to restore it."
+msgstr ""
+
+#: includes/class-sfls-connect.php:359
+msgid "This license has expired. Renew it to connect sites."
+msgstr ""
+
+#: includes/class-sfls-connect.php:365
+msgid "Every site on this license is in use. Disconnect one in your account, or upgrade."
+msgstr ""
+
+#. translators: %s: email address
+#: includes/class-sfls-connect.php:424
+msgid "Signed in as %s."
+msgstr ""
+
+#: includes/class-sfls-connect.php:427
+msgid "Switch account"
+msgstr ""
+
+#: includes/class-sfls-connect.php:432
+msgid "Need help?"
+msgstr ""
+
+#: includes/class-sfls-connect.php:444
+#: includes/class-sfls-connect.php:447
+msgid "Cannot connect this site"
+msgstr ""
+
+#: includes/class-sfls-connect.php:449
+msgid "Go to SubtleForms"
+msgstr ""
+
+#. translators: %s: site name
+#: includes/class-sfls-connect.php:466
+msgid "Connect %s"
+msgstr ""
+
+#: includes/class-sfls-connect.php:477
+msgid "Choose the SubtleForms Pro license to use on this site."
+msgstr ""
+
+#: includes/class-sfls-connect.php:479
+msgid "Connect a site to your SubtleForms account to unlock Pro features and updates."
+msgstr ""
+
+#: includes/class-sfls-connect.php:494
+msgid "You do not have a SubtleForms Pro license yet."
+msgstr ""
+
+#: includes/class-sfls-connect.php:494
+msgid "Pick a plan, then come back here to connect your site in one click."
+msgstr ""
+
+#: includes/class-sfls-connect.php:496
+#: includes/class-sfls-connect.php:533
+msgid "Cancel"
+msgstr ""
+
+#: includes/class-sfls-connect.php:511
+#: includes/class-sfls-reminders.php:179
+msgid "License"
+msgstr ""
+
+#: includes/class-sfls-connect.php:527
+msgid "Already active on this site."
+msgstr ""
+
+#: includes/class-sfls-connect.php:534
+msgid "Connect site"
+msgstr ""
+
+#. translators: %s: domain
+#: includes/class-sfls-connect.php:539
+msgid "Connecting activates SubtleForms Pro on %s and sends the license key to that site over a secure one-time code."
+msgstr ""
+
+#: includes/class-sfls-connect.php:555
+msgid "Lifetime license"
+msgstr ""
+
+#. translators: %s: date
+#: includes/class-sfls-connect.php:560
+msgid "Expired %s"
+msgstr ""
+
+#. translators: %s: date
+#: includes/class-sfls-connect.php:560
+msgid "Expires %s"
+msgstr ""
+
+#: includes/class-sfls-licenses.php:248
+#: includes/class-sfls-rest.php:254
+msgid "license_key and site_url are required."
+msgstr ""
+
+#: includes/class-sfls-licenses.php:256
+msgid "This license has expired. Renew it from your SubtleForms account."
+msgstr ""
+
+#: includes/class-sfls-licenses.php:257
+msgid "This license is not active. Contact SubtleForms support."
+msgstr ""
+
+#. translators: %d: number of sites
+#: includes/class-sfls-licenses.php:269
+msgid "This license is already active on %d site. Deactivate it there, or upgrade your plan."
+msgid_plural "This license is already active on %d sites. Deactivate one, or upgrade your plan."
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/class-sfls-licenses.php:448
+msgid "Grace period"
+msgstr ""
+
+#. translators: %d: sites used
+#: includes/class-sfls-licenses.php:486
+msgid "%d site used, unlimited"
+msgid_plural "%d sites used, unlimited"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: 1: sites used, 2: sites allowed
+#: includes/class-sfls-licenses.php:489
+msgid "%1$d of %2$d site used"
+msgid_plural "%1$d of %2$d sites used"
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/class-sfls-plans.php:25
+msgid "Starter"
+msgstr ""
+
+#: includes/class-sfls-plans.php:30
+msgid "Pro"
+msgstr ""
+
+#: includes/class-sfls-plans.php:35
+msgid "Agency"
+msgstr ""
+
+#: includes/class-sfls-plans.php:110
+msgid "Unlimited sites"
+msgstr ""
+
+#. translators: %d: number of sites
+#: includes/class-sfls-plans.php:113
+msgid "%d site"
+msgid_plural "%d sites"
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/class-sfls-plans.php:125
+msgid "CSV export"
+msgstr ""
+
+#: includes/class-sfls-plans.php:126
+msgid "Webhooks"
+msgstr ""
+
+#: includes/class-sfls-plans.php:127
+msgid "CRM, email marketing and payment integrations"
+msgstr ""
+
+#: includes/class-sfls-plans.php:128
+msgid "Advanced conditional logic"
+msgstr ""
+
+#: includes/class-sfls-plans.php:129
+msgid "White label"
+msgstr ""
+
+#: includes/class-sfls-plans.php:143
+msgid "Stripe payments"
+msgstr ""
+
+#: includes/class-sfls-plans.php:144
+msgid "Coupons"
+msgstr ""
+
+#: includes/class-sfls-plans.php:145
+msgid "Calculations"
+msgstr ""
+
+#: includes/class-sfls-plans.php:146
+msgid "Signature field"
+msgstr ""
+
+#: includes/class-sfls-plans.php:147
+msgid "Priority support"
+msgstr ""
+
+#. translators: %s: product name, e.g. "SubtleForms Pro Agency"
+#: includes/class-sfls-products.php:241
+msgid "%s Lifetime"
+msgstr ""
+
+#. translators: %s: product name, e.g. "SubtleForms Pro Agency"
+#: includes/class-sfls-products.php:246
+msgid "%s Renewal"
+msgstr ""
+
+#. translators: 1: plan name, 2: sites, 3: period
+#: includes/class-sfls-products.php:283
+msgid "SubtleForms Pro %1$s license for %2$s, %3$s."
+msgstr ""
+
+#: includes/class-sfls-products.php:286
+msgid "lifetime updates and support"
+msgstr ""
+
+#: includes/class-sfls-products.php:286
+msgid "one year of updates and support"
+msgstr ""
+
+#: includes/class-sfls-releases.php:176
+msgid "This package is not available."
+msgstr ""
+
+#: includes/class-sfls-reminders.php:161
+msgid "Your SubtleForms Pro license has expired"
+msgstr ""
+
+#: includes/class-sfls-reminders.php:162
+msgid "Your license has expired"
+msgstr ""
+
+#. translators: %d: grace period days
+#: includes/class-sfls-reminders.php:165
+msgid "Your SubtleForms Pro license expired yesterday. Pro keeps working for %d days, after which Pro features, updates and support stop on your sites. Renew now to keep everything running."
+msgstr ""
+
+#: includes/class-sfls-reminders.php:170
+msgid "Your SubtleForms Pro license expires tomorrow"
+msgstr ""
+
+#. translators: %d: days
+#: includes/class-sfls-reminders.php:172
+msgid "Your SubtleForms Pro license expires in %d day"
+msgid_plural "Your SubtleForms Pro license expires in %d days"
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/class-sfls-reminders.php:173
+msgid "Time to renew SubtleForms Pro"
+msgstr ""
+
+#: includes/class-sfls-reminders.php:174
+msgid "Your SubtleForms Pro license is coming up for renewal. Renew it to keep getting updates, new features and priority support without a gap."
+msgstr ""
+
+#. translators: %s: first name
+#: includes/class-sfls-reminders.php:184
+msgid "Hi %s,"
+msgstr ""
+
+#. translators: %s: first name
+#: includes/class-sfls-reminders.php:184
+msgid "Hi,"
+msgstr ""
+
+#: includes/class-sfls-reminders.php:191
+msgid "Renew your license"
+msgstr ""
+
+#. translators: %s: support email
+#: includes/class-sfls-reminders.php:195
+msgid "Questions? Reply to this email or write to %s."
+msgstr ""
+
+#: includes/class-sfls-rest.php:99
+msgid "This site is not activated for this license."
+msgstr ""
+
+#: includes/class-sfls-rest.php:176
+msgid "This download link has expired. Check for updates again."
+msgstr ""
+
+#: includes/class-sfls-rest.php:180
+msgid "An active license is required to download updates."
+msgstr ""
+
+#: includes/class-sfls-rest.php:185
+msgid "No package is available."
+msgstr ""
+
+#: includes/class-sfls-rest.php:209
+msgid "This connection code is invalid or has expired. Connect the site again."
+msgstr ""
+
+#: includes/class-sfls-rest.php:259
+msgid "That license key was not found. Check it in your SubtleForms account."
+msgstr ""
+
+#: includes/class-sfls-rest.php:301
+msgid "Too many requests. Try again in a minute."
+msgstr ""
+
+#: includes/class-sfls-shortcodes.php:64
+msgid "No license products are on sale yet. Create them in Licenses › Products."
+msgstr ""
+
+#: includes/class-sfls-shortcodes.php:121
+msgid "one-time"
+msgstr ""
+
+#: includes/class-sfls-shortcodes.php:123
+msgid "/year"
+msgstr ""
+
+#. translators: %d: months
+#: includes/class-sfls-shortcodes.php:126
+msgid "/ %d month"
+msgid_plural "/ %d months"
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/class-sfls-shortcodes.php:134
+msgid "Most popular"
+msgstr ""
+
+#. translators: %s: plan name
+#: includes/class-sfls-shortcodes.php:145
+msgid "Buy %s"
+msgstr ""
+
+#: includes/class-sfls-shortcodes.php:175
+msgid "Latest"
+msgstr ""
+
+#: includes/class-sfls-woo.php:72
+msgid "SubtleForms license"
+msgstr ""
+
+#: includes/class-sfls-woo.php:73
+msgid "Issue a SubtleForms Pro license key when this product is bought."
+msgstr ""
+
+#: includes/class-sfls-woo.php:91
+msgid "Leave empty for the plan default. 0 means unlimited."
+msgstr ""
+
+#: includes/class-sfls-woo.php:100
+msgid "12 for yearly. 0 for lifetime."
+msgstr ""
+
+#: includes/class-sfls-woo.php:110
+msgid "Extend the customer’s existing key for this plan instead of issuing a new one."
+msgstr ""
+
+#: includes/class-sfls-woo.php:190
+msgid "This option is not on sale right now. Contact support and we will sort it out."
+msgstr ""
+
+#: includes/class-sfls-woo.php:233
+#: includes/class-sfls-woo.php:274
+msgid "Renews license"
+msgstr ""
+
+#: includes/class-sfls-woo.php:234
+#: includes/class-sfls-woo.php:275
+msgid "Upgrades license"
+msgstr ""
+
+#: includes/class-sfls-woo.php:276
+msgid "License IDs"
+msgstr ""
+
+#. translators: 1: masked key, 2: plan
+#: includes/class-sfls-woo.php:365
+msgid "SubtleForms license %1$s upgraded to %2$s."
+msgstr ""
+
+#. translators: %s: masked key
+#: includes/class-sfls-woo.php:384
+msgid "SubtleForms license %s renewed."
+msgstr ""
+
+#. translators: %d: number of keys
+#: includes/class-sfls-woo.php:401
+msgid "%d SubtleForms license key issued."
+msgid_plural "%d SubtleForms license keys issued."
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/class-sfls-woo.php:503
+#: includes/class-sfls-woo.php:533
+msgid "Your SubtleForms Pro license"
+msgstr ""
+
+#: includes/class-sfls-woo.php:507
+msgid "Activate it in WordPress: SubtleForms › Settings › License."
+msgstr ""
+
+#. translators: 1: plan, 2: expiry date
+#: includes/class-sfls-woo.php:538
+msgid "%1$s plan · renews %2$s"
+msgstr ""
+
+#: includes/class-sfls-woo.php:540
+msgid "never"
+msgstr ""
+
+#: includes/class-sfls-woo.php:544
+msgid "In WordPress, open SubtleForms › Settings › License and click Connect account, or paste the key and click Activate."
+msgstr ""
