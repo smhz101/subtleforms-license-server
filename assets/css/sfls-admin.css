@@ -1,0 +1,332 @@
+/**
+ * SubtleForms License Server: admin screens.
+ */
+
+.sfls-admin .sfls-lead {
+	max-width: 760px;
+	font-size: 14px;
+	color: #50575e;
+}
+
+.sfls-admin-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 16px;
+	margin: 16px 0 8px;
+}
+
+.sfls-admin-card {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 16px 20px;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+	background: #fff;
+}
+
+.sfls-admin-card-label {
+	color: #646970;
+	font-size: 13px;
+}
+
+.sfls-admin-card-value {
+	font-size: 28px;
+	font-weight: 600;
+	line-height: 1.2;
+	color: #1e1e1e;
+}
+
+.sfls-admin-card-link {
+	position: absolute;
+	top: 16px;
+	right: 20px;
+	font-size: 13px;
+	text-decoration: none;
+}
+
+.sfls-admin .subsubsub {
+	margin-top: 12px;
+}
+
+.sfls-admin .sfls-search .search-box {
+	margin-top: 8px;
+}
+
+.sfls-mono {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 13px;
+}
+
+.sfls-table .column-key {
+	width: 32%;
+}
+
+.sfls-table .column-customer {
+	width: 22%;
+	overflow-wrap: anywhere;
+	word-break: normal;
+}
+
+.sfls-table .column-order,
+.sfls-table .column-sites {
+	width: 8%;
+}
+
+.sfls-admin-pill {
+	display: inline-block;
+	padding: 0 8px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 20px;
+	background: #f0f0f1;
+	color: #50575e;
+	vertical-align: middle;
+}
+
+.sfls-admin-pill--ok {
+	background: #e7f5ea;
+	color: #007017;
+}
+
+.sfls-admin-pill--warn {
+	background: #fcf3e3;
+	color: #8a4d00;
+}
+
+.sfls-admin-pill--bad {
+	background: #fcf0f1;
+	color: #b32d2e;
+}
+
+.sfls-panel {
+	margin: 16px 0;
+	padding: 4px 24px 12px;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+	background: #fff;
+}
+
+.sfls-panel > h2 {
+	margin: 16px 0 8px;
+	font-size: 15px;
+}
+
+.sfls-panel .form-table th {
+	width: 180px;
+}
+
+.sfls-panel--danger {
+	border-color: #f2c4c5;
+}
+
+.sfls-button-danger.button {
+	color: #b32d2e;
+	border-color: #b32d2e;
+}
+
+.sfls-button-danger.button:hover,
+.sfls-button-danger.button:focus {
+	color: #fff;
+	background: #b32d2e;
+	border-color: #b32d2e;
+}
+
+.sfls-danger-text {
+	color: #b32d2e;
+}
+
+.sfls-edit {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 320px;
+	gap: 20px;
+	align-items: start;
+}
+
+.sfls-edit .sfls-panel {
+	margin-top: 0;
+}
+
+.sfls-keybox {
+	display: block;
+	padding: 10px 12px;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	background: #f6f7f7;
+	word-break: break-all;
+}
+
+.sfls-meta-list {
+	margin: 0 0 8px;
+}
+
+.sfls-meta-list li {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 0;
+	padding: 6px 0;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.sfls-meta-list li:last-child {
+	border-bottom: 0;
+}
+
+.sfls-meta-list li span:first-child {
+	color: #646970;
+}
+
+.sfls-acts {
+	margin-bottom: 8px;
+}
+
+.sfls-right {
+	text-align: right;
+}
+
+.sfls-wizard {
+	padding: 0;
+	overflow: hidden;
+}
+
+.sfls-wizard > .description,
+.sfls-wizard > .submit {
+	margin-left: 24px;
+	margin-right: 24px;
+}
+
+.sfls-wizard-table {
+	border: 0;
+	border-bottom: 1px solid #dcdcde;
+	box-shadow: none;
+}
+
+.sfls-wizard-table thead th {
+	padding: 12px 16px;
+	background: #f6f7f7;
+	font-weight: 600;
+}
+
+.sfls-wizard-table thead th:first-child,
+.sfls-wizard-table tbody th {
+	padding-left: 24px;
+}
+
+.sfls-wizard-table tbody th,
+.sfls-wizard-table tbody td {
+	padding: 16px;
+	vertical-align: middle;
+	border-top: 1px solid #f0f0f1;
+}
+
+.sfls-wizard-table tbody th strong {
+	display: block;
+	font-size: 14px;
+}
+
+.sfls-plan-feats {
+	display: block;
+	margin-top: 2px;
+	color: #646970;
+	font-size: 12px;
+	font-weight: 400;
+}
+
+.sfls-wizard-table td .description {
+	display: block;
+	margin-top: 4px;
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.sfls-wizard-table thead th:nth-child(2) {
+	width: 110px;
+}
+
+.sfls-wizard-table thead th:nth-child(n+3) {
+	width: 170px;
+}
+
+.sfls-optional {
+	color: #646970;
+	font-weight: 400;
+}
+
+.sfls-money {
+	display: inline-flex;
+	align-items: stretch;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	background: #fff;
+	overflow: hidden;
+}
+
+.sfls-money:focus-within {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+}
+
+.sfls-money-symbol {
+	display: flex;
+	align-items: center;
+	padding: 0 10px;
+	background: #f6f7f7;
+	border-right: 1px solid #dcdcde;
+	color: #50575e;
+}
+
+.sfls-money input[type="text"] {
+	width: 110px;
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+	min-height: 32px;
+}
+
+.sfls-money input[type="text"]:focus {
+	box-shadow: none;
+	outline: 0;
+}
+
+.sfls-help ul {
+	margin: 0 0 8px;
+}
+
+.sfls-help li {
+	margin-bottom: 8px;
+}
+
+@media (max-width: 960px) {
+	.sfls-edit {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 782px) {
+	.sfls-wizard-table thead {
+		display: none;
+	}
+
+	.sfls-wizard-table tbody tr {
+		display: block;
+		padding: 12px 16px;
+		border-top: 1px solid #f0f0f1;
+	}
+
+	.sfls-wizard-table tbody th,
+	.sfls-wizard-table tbody td {
+		display: block;
+		padding: 6px 0 !important;
+		border: 0;
+	}
+
+	.sfls-wizard-table tbody td::before {
+		content: attr(data-colname);
+		display: block;
+		margin-bottom: 4px;
+		font-weight: 600;
+	}
+}

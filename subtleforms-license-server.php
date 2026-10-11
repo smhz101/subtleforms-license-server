@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       SubtleForms License Server
  * Plugin URI:        https://subtleforms.com
- * Description:       Issues and validates SubtleForms Pro license keys, sells them through WooCommerce, and serves Pro updates. Install on subtleforms.com only.
- * Version:           1.0.0
+ * Description:       Issues and validates SubtleForms Pro license keys, sells them through WooCommerce, connects customer sites, runs the customer members area and serves Pro updates. Install on subtleforms.com only.
+ * Version:           1.1.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            SubtleForms
@@ -15,26 +15,56 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SFLS_VERSION', '1.0.0' );
+define( 'SFLS_VERSION', '1.1.0' );
 define( 'SFLS_FILE', __FILE__ );
 define( 'SFLS_DIR', plugin_dir_path( __FILE__ ) );
+define( 'SFLS_URL', plugin_dir_url( __FILE__ ) );
 
+require_once SFLS_DIR . 'includes/class-sfls-settings.php';
 require_once SFLS_DIR . 'includes/class-sfls-plans.php';
 require_once SFLS_DIR . 'includes/class-sfls-db.php';
 require_once SFLS_DIR . 'includes/class-sfls-licenses.php';
 require_once SFLS_DIR . 'includes/class-sfls-releases.php';
+require_once SFLS_DIR . 'includes/class-sfls-products.php';
+require_once SFLS_DIR . 'includes/class-sfls-assets.php';
+require_once SFLS_DIR . 'includes/class-sfls-connect.php';
 require_once SFLS_DIR . 'includes/class-sfls-rest.php';
 require_once SFLS_DIR . 'includes/class-sfls-woo.php';
+require_once SFLS_DIR . 'includes/class-sfls-account.php';
+require_once SFLS_DIR . 'includes/class-sfls-shortcodes.php';
+require_once SFLS_DIR . 'includes/class-sfls-reminders.php';
 require_once SFLS_DIR . 'includes/class-sfls-admin.php';
 
-register_activation_hook( __FILE__, array( 'SFLS_DB', 'install' ) );
+register_activation_hook(
+	__FILE__,
+	static function () {
+		SFLS_DB::install();
+		update_option( 'sfls_version', SFLS_VERSION );
+		update_option( 'sfls_flush_rewrite', 1 );
+		SFLS_Reminders::schedule();
+	}
+);
+
+register_deactivation_hook(
+	__FILE__,
+	static function () {
+		SFLS_Reminders::unschedule();
+		delete_option( 'sfls_flush_rewrite' );
+		flush_rewrite_rules();
+	}
+);
 
 add_action(
 	'plugins_loaded',
 	static function () {
 		SFLS_DB::maybe_upgrade();
 		( new SFLS_REST() )->register();
+		( new SFLS_Connect() )->register();
+		( new SFLS_Assets() )->register();
 		( new SFLS_Woo() )->register();
+		( new SFLS_Account() )->register();
+		( new SFLS_Shortcodes() )->register();
+		( new SFLS_Reminders() )->register();
 		if ( is_admin() ) {
 			( new SFLS_Admin() )->register();
 		}
@@ -43,4 +73,17 @@ add_action(
 			WP_CLI::add_command( 'sfls', 'SFLS_CLI' );
 		}
 	}
+);
+
+// Flush rewrite rules once after activation or an upgrade, when every rule
+// (connect page, My Account endpoints) has been registered.
+add_action(
+	'init',
+	static function () {
+		if ( get_option( 'sfls_flush_rewrite' ) ) {
+			delete_option( 'sfls_flush_rewrite' );
+			flush_rewrite_rules();
+		}
+	},
+	99
 );

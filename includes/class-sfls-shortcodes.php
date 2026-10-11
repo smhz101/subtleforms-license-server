@@ -1,0 +1,195 @@
+<?php
+/**
+ * Shortcodes for the marketing site.
+ *
+ *   [sfls_pricing period="yearly|lifetime"]  Pricing cards from the license products.
+ *   [sfls_changelog limit="0"]               Every Pro release, newest first.
+ *   [sfls_latest_version]                    The current Pro version number.
+ *
+ * @package SFLS
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Shortcode renderers.
+ */
+final class SFLS_Shortcodes {
+
+	/**
+	 * Register shortcodes.
+	 */
+	public function register(): void {
+		add_shortcode( 'sfls_pricing', array( $this, 'pricing' ) );
+		add_shortcode( 'sfls_changelog', array( $this, 'changelog' ) );
+		add_shortcode( 'sfls_latest_version', array( $this, 'latest_version' ) );
+	}
+
+	/**
+	 * Load the stylesheet for a rendered shortcode.
+	 */
+	private function styles(): void {
+		SFLS_Assets::register_handles();
+		wp_enqueue_style( 'sfls-front' );
+	}
+
+	/**
+	 * [sfls_pricing]
+	 *
+	 * @param array|string $atts Attributes.
+	 */
+	public function pricing( $atts ): string {
+		$atts = shortcode_atts(
+			array(
+				'period'  => 'yearly',
+				'popular' => 'pro',
+			),
+			$atts,
+			'sfls_pricing'
+		);
+
+		if ( ! SFLS_Products::woo_active() ) {
+			return '';
+		}
+
+		$this->styles();
+		$sets = array(
+			'yearly'   => SFLS_Products::sellable( 'yearly' ),
+			'lifetime' => SFLS_Products::sellable( 'lifetime' ),
+		);
+		$sets = array_filter( $sets );
+
+		if ( ! $sets ) {
+			if ( current_user_can( 'manage_options' ) ) {
+				return '<div class="sfls sfls-notice-box">' . esc_html__( 'No license products are on sale yet. Create them in Licenses › Products.', 'subtleforms-license-server' ) . '</div>';
+			}
+			return '';
+		}
+
+		$period = in_array( $atts['period'], array( 'yearly', 'lifetime' ), true ) ? $atts['period'] : 'yearly';
+		if ( ! isset( $sets[ $period ] ) ) {
+			$period = (string) array_key_first( $sets );
+		}
+		$uid    = wp_unique_id( 'sfls-pricing-' );
+		$toggle = count( $sets ) > 1;
+
+		ob_start();
+		echo '<div class="sfls sfls-pricing" id="' . esc_attr( $uid ) . '">';
+		if ( $toggle ) {
+			foreach ( array_keys( $sets ) as $p ) {
+				echo '<input type="radio" class="sfls-period-input sfls-period-input--' . esc_attr( $p ) . '" name="' . esc_attr( $uid ) . '-period" id="' . esc_attr( $uid . '-' . $p ) . '"' . checked( $period, $p, false ) . '>';
+			}
+			echo '<div class="sfls-period-toggle">';
+			echo '<label class="sfls-period-label sfls-period-label--yearly" for="' . esc_attr( $uid . '-yearly' ) . '">' . esc_html__( 'Yearly', 'subtleforms-license-server' ) . '</label>';
+			echo '<label class="sfls-period-label sfls-period-label--lifetime" for="' . esc_attr( $uid . '-lifetime' ) . '">' . esc_html__( 'Lifetime', 'subtleforms-license-server' ) . '</label>';
+			echo '</div>';
+		}
+		foreach ( $sets as $p => $rows ) {
+			if ( ! $toggle && $p !== $period ) {
+				continue;
+			}
+			echo '<div class="sfls-pricing-grid sfls-pricing-grid--' . esc_attr( $p ) . '">';
+			foreach ( $rows as $plan => $row ) {
+				$this->pricing_card( $plan, $row, $plan === $atts['popular'] );
+			}
+			echo '</div>';
+		}
+		echo '</div>';
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * One pricing card.
+	 *
+	 * @param string $plan    Plan slug.
+	 * @param array  $row     Product row from SFLS_Products.
+	 * @param bool   $popular Highlight.
+	 */
+	private function pricing_card( string $plan, array $row, bool $popular ): void {
+		$product = wc_get_product( $row['id'] );
+		if ( ! $product ) {
+			return;
+		}
+		$labels   = SFLS_Plans::feature_labels();
+		$features = array();
+		foreach ( SFLS_Plans::features( $plan ) as $slug ) {
+			$features[] = $labels[ $slug ] ?? ucwords( str_replace( '_', ' ', $slug ) );
+		}
+		$features = array_merge( $features, SFLS_Plans::common_items() );
+
+		if ( 0 === $row['months'] ) {
+			$suffix = __( 'one-time', 'subtleforms-license-server' );
+		} elseif ( 12 === $row['months'] ) {
+			$suffix = __( '/year', 'subtleforms-license-server' );
+		} else {
+			/* translators: %d: months */
+			$suffix = sprintf( _n( '/ %d month', '/ %d months', $row['months'], 'subtleforms-license-server' ), $row['months'] );
+		}
+
+		$price   = (float) wc_get_price_to_display( $product );
+		$regular = (float) wc_get_price_to_display( $product, array( 'price' => $product->get_regular_price() ) );
+
+		echo '<div class="sfls-plan' . ( $popular ? ' is-popular' : '' ) . '">';
+		if ( $popular ) {
+			echo '<span class="sfls-plan-badge">' . esc_html__( 'Most popular', 'subtleforms-license-server' ) . '</span>';
+		}
+		echo '<h3 class="sfls-plan-name">' . esc_html( SFLS_Plans::label( $plan ) ) . '</h3>';
+		echo '<p class="sfls-plan-sites">' . esc_html( SFLS_Plans::sites_label( (int) $row['sites'] ) ) . '</p>';
+		echo '<p class="sfls-plan-price">';
+		if ( $product->is_on_sale() && $regular > $price ) {
+			echo '<del class="sfls-plan-was">' . wp_kses_post( wc_price( $regular ) ) . '</del> ';
+		}
+		echo '<span class="sfls-plan-amount">' . wp_kses_post( wc_price( $price ) ) . '</span> <span class="sfls-plan-period">' . esc_html( $suffix ) . '</span></p>';
+		echo '<a class="sfls-btn sfls-btn--' . ( $popular ? 'primary' : 'secondary' ) . ' sfls-btn--block" href="' . esc_url( SFLS_Products::buy_url( $row['id'] ) ) . '" rel="nofollow">';
+		/* translators: %s: plan name */
+		echo esc_html( sprintf( __( 'Buy %s', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) ) ) . '</a>';
+		echo '<ul class="sfls-plan-features">';
+		foreach ( $features as $feature ) {
+			echo '<li>' . esc_html( $feature ) . '</li>';
+		}
+		echo '</ul>';
+		echo '</div>';
+	}
+
+	/**
+	 * [sfls_changelog]
+	 *
+	 * @param array|string $atts Attributes.
+	 */
+	public function changelog( $atts ): string {
+		$atts     = shortcode_atts( array( 'limit' => 0 ), $atts, 'sfls_changelog' );
+		$releases = SFLS_Releases::all();
+		if ( (int) $atts['limit'] > 0 ) {
+			$releases = array_slice( $releases, 0, (int) $atts['limit'] );
+		}
+		if ( ! $releases ) {
+			return '';
+		}
+		$this->styles();
+		ob_start();
+		echo '<div class="sfls sfls-changelog-list">';
+		foreach ( $releases as $i => $rel ) {
+			echo '<article class="sfls-changelog-entry" id="' . esc_attr( 'v' . sanitize_title( $rel['version'] ) ) . '">';
+			echo '<header><h3>' . esc_html( $rel['version'] ) . '</h3>';
+			if ( 0 === $i ) {
+				echo '<span class="sfls-pill sfls-pill--ok">' . esc_html__( 'Latest', 'subtleforms-license-server' ) . '</span>';
+			}
+			$date = SFLS_Releases::date_label( $rel );
+			if ( '' !== $date ) {
+				echo '<time datetime="' . esc_attr( $rel['updated'] ) . '">' . esc_html( $date ) . '</time>';
+			}
+			echo '</header>';
+			echo '<div class="sfls-changelog-body">' . wp_kses_post( SFLS_Releases::changelog_html( $rel ) ) . '</div>';
+			echo '</article>';
+		}
+		echo '</div>';
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * [sfls_latest_version]
+	 */
+	public function latest_version(): string {
+		return esc_html( SFLS_Releases::current()['version'] );
+	}
+}

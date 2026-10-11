@@ -7,20 +7,32 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Creates and upgrades the license and activation tables.
+ */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '1';
+	const SCHEMA_VERSION = '2';
 
+	/**
+	 * Licenses table name.
+	 */
 	public static function licenses(): string {
 		global $wpdb;
 		return $wpdb->prefix . 'sfls_licenses';
 	}
 
+	/**
+	 * Activations table name.
+	 */
 	public static function activations(): string {
 		global $wpdb;
 		return $wpdb->prefix . 'sfls_activations';
 	}
 
+	/**
+	 * Create or upgrade the tables and the private release folder.
+	 */
 	public static function install(): void {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -41,6 +53,7 @@ final class SFLS_DB {
   order_id bigint(20) unsigned NOT NULL DEFAULT 0,
   product_id bigint(20) unsigned NOT NULL DEFAULT 0,
   notes text NULL,
+  reminders text NULL,
   expires_at datetime NULL,
   created_at datetime NOT NULL,
   updated_at datetime NOT NULL,
@@ -80,16 +93,19 @@ final class SFLS_DB {
 		if ( ! file_exists( $dir . '/index.php' ) ) {
 			file_put_contents( $dir . '/index.php', "<?php\n// Silence.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		}
-
-		if ( function_exists( 'flush_rewrite_rules' ) ) {
-			add_rewrite_endpoint( 'licenses', EP_ROOT | EP_PAGES );
-			flush_rewrite_rules();
-		}
 	}
 
+	/**
+	 * Run the installer when the schema changed, and ask for a rewrite flush
+	 * when the plugin version changed.
+	 */
 	public static function maybe_upgrade(): void {
 		if ( get_option( 'sfls_schema_version' ) !== self::SCHEMA_VERSION ) {
 			self::install();
+		}
+		if ( get_option( 'sfls_version' ) !== SFLS_VERSION ) {
+			update_option( 'sfls_version', SFLS_VERSION );
+			update_option( 'sfls_flush_rewrite', 1 );
 		}
 	}
 }

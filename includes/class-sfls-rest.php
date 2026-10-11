@@ -8,6 +8,7 @@
  *   GET  /wp-json/sfls/v1/license/status      ?license_key&site_url
  *   GET  /wp-json/sfls/v1/update/check        ?license_key&site_url&version&slug
  *   GET  /wp-json/sfls/v1/update/download     ?license_key&site&expires&sig
+ *   POST /wp-json/sfls/v1/connect/exchange    { code, site_url }
  *
  * Every response is JSON except download. Errors use a 4xx status with
  * { error, reason }, which is what the Pro client maps to a license state.
@@ -17,14 +18,23 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * REST routes.
+ */
 final class SFLS_REST {
 
 	const NS = 'sfls/v1';
 
+	/**
+	 * Hook routes.
+	 */
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'routes' ) );
 	}
 
+	/**
+	 * Register routes.
+	 */
 	public function routes(): void {
 		$open = '__return_true'; // Authenticated by license key, not by WordPress user.
 
@@ -34,10 +44,17 @@ final class SFLS_REST {
 		register_rest_route( self::NS, '/license/status', array( 'methods' => 'GET', 'callback' => array( $this, 'validate' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/check', array( 'methods' => 'GET', 'callback' => array( $this, 'update_check' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/download', array( 'methods' => 'GET', 'callback' => array( $this, 'download' ), 'permission_callback' => $open ) );
+		register_rest_route( self::NS, '/connect/exchange', array( 'methods' => 'POST', 'callback' => array( $this, 'exchange' ), 'permission_callback' => $open ) );
 	}
 
 	// ── Endpoints ───────────────────────────────────────────────────────
 
+	/**
+	 * Activate endpoint.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
 	public function activate( WP_REST_Request $req ) {
 		$limited = $this->rate_limit();
 		if ( $limited ) {
@@ -48,38 +65,20 @@ final class SFLS_REST {
 			return $error;
 		}
 
-		$state = SFLS_Licenses::state( $lic );
-		if ( ! $state['valid'] ) {
-			return $this->error( 'expired' === $state['status'] ? 403 : 403, $state['status'], 'expired' === $state['status']
-				? __( 'This license has expired. Renew it from your SubtleForms account.', 'subtleforms-license-server' )
-				: __( 'This license is not active. Contact SubtleForms support.', 'subtleforms-license-server' ) );
-		}
-
-		$existing = SFLS_Licenses::activation( (int) $lic['id'], $domain );
-		if ( ! $existing && ! SFLS_Licenses::is_local_domain( $domain ) ) {
-			$limit = (int) $lic['sites_allowed'];
-			if ( $limit > 0 && SFLS_Licenses::used_slots( (int) $lic['id'] ) >= $limit ) {
-				return $this->error(
-					400,
-					'activation_limit',
-					sprintf(
-						/* translators: %d: number of sites */
-						_n( 'This license is already active on %d site. Deactivate it there, or upgrade your plan.', 'This license is already active on %d sites. Deactivate one, or upgrade your plan.', $limit, 'subtleforms-license-server' ),
-						$limit
-					)
-				);
-			}
-		}
-
-		if ( $existing ) {
-			SFLS_Licenses::touch_activation( (int) $lic['id'], $domain, (string) $req->get_param( 'version' ) );
-		} else {
-			SFLS_Licenses::add_activation( (int) $lic['id'], $domain, (string) $req->get_param( 'version' ) );
+		$result = SFLS_Licenses::activate_domain( $lic, $domain, sanitize_text_field( (string) $req->get_param( 'version' ) ) );
+		if ( is_wp_error( $result ) ) {
+			return $this->wp_error( $result );
 		}
 
 		return rest_ensure_response( array( 'activated' => true ) + SFLS_Licenses::payload( $lic ) );
 	}
 
+	/**
+	 * Validate endpoint.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
 	public function validate( WP_REST_Request $req ) {
 		$limited = $this->rate_limit();
 		if ( $limited ) {
@@ -111,6 +110,12 @@ final class SFLS_REST {
 		return rest_ensure_response( $payload );
 	}
 
+	/**
+	 * Deactivate endpoint.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
 	public function deactivate( WP_REST_Request $req ) {
 		$limited = $this->rate_limit();
 		if ( $limited ) {
@@ -124,6 +129,12 @@ final class SFLS_REST {
 		return rest_ensure_response( array( 'deactivated' => true ) );
 	}
 
+	/**
+	 * Update check endpoint.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
 	public function update_check( WP_REST_Request $req ) {
 		$release = SFLS_Releases::current();
 		if ( '' === $release['version'] ) {
@@ -149,6 +160,12 @@ final class SFLS_REST {
 		return rest_ensure_response( $response );
 	}
 
+	/**
+	 * Download endpoint.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
 	public function download( WP_REST_Request $req ) {
 		$key     = strtoupper( sanitize_text_field( (string) $req->get_param( 'license_key' ) ) );
 		$domain  = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site' ) );
@@ -176,9 +193,57 @@ final class SFLS_REST {
 		exit;
 	}
 
+	/**
+	 * Swap a one-time code from the /connect-site/ flow for the license key.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function exchange( WP_REST_Request $req ) {
+		$limited = $this->rate_limit();
+		if ( $limited ) {
+			return $limited;
+		}
+		$code   = preg_replace( '/[^A-Za-z0-9]/', '', (string) $req->get_param( 'code' ) );
+		$domain = SFLS_Licenses::normalize_domain( sanitize_text_field( (string) $req->get_param( 'site_url' ) ) );
+		$fail   = $this->error( 400, 'invalid_code', __( 'This connection code is invalid or has expired. Connect the site again.', 'subtleforms-license-server' ) );
+
+		if ( '' === $code || '' === $domain ) {
+			return $fail;
+		}
+
+		$data = SFLS_Connect::consume_code( $code );
+		if ( ! $data || ! hash_equals( (string) $data['domain'], $domain ) ) {
+			return $fail;
+		}
+
+		$lic = SFLS_Licenses::find( (int) $data['license_id'] );
+		if ( ! $lic ) {
+			return $fail;
+		}
+
+		$user = get_userdata( (int) $data['user_id'] );
+		SFLS_Licenses::touch_activation( (int) $lic['id'], $domain );
+
+		do_action( 'sfls_site_connected', $lic, $domain, (int) $data['user_id'] );
+
+		return rest_ensure_response(
+			array(
+				'license_key' => $lic['license_key'],
+				'account'     => array(
+					'email' => $user ? $user->user_email : $lic['customer_email'],
+					'name'  => $user ? $user->display_name : '',
+				),
+			) + SFLS_Licenses::payload( $lic )
+		);
+	}
+
 	// ── Helpers ─────────────────────────────────────────────────────────
 
 	/**
+	 * Look up the license and domain of a request.
+	 *
+	 * @param WP_REST_Request $req Request.
 	 * @return array{0:?array,1:string,2:?WP_REST_Response}
 	 */
 	private function resolve( WP_REST_Request $req ): array {
@@ -197,6 +262,23 @@ final class SFLS_REST {
 		return array( $lic, $domain, null );
 	}
 
+	/**
+	 * Error response in the shape the Pro client expects.
+	 *
+	 * @param WP_Error $error Error with a status in its data.
+	 */
+	private function wp_error( WP_Error $error ): WP_REST_Response {
+		$data = (array) $error->get_error_data();
+		return $this->error( (int) ( $data['status'] ?? 400 ), (string) $error->get_error_code(), $error->get_error_message() );
+	}
+
+	/**
+	 * Error response.
+	 *
+	 * @param int    $code    HTTP status.
+	 * @param string $reason  Machine reason.
+	 * @param string $message Human message.
+	 */
 	private function error( int $code, string $reason, string $message ): WP_REST_Response {
 		return new WP_REST_Response(
 			array(
@@ -213,7 +295,7 @@ final class SFLS_REST {
 	 */
 	private function rate_limit(): ?WP_REST_Response {
 		$ip  = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'unknown';
-		$key = 'sfls_rl_' . md5( $ip );
+		$key  = 'sfls_rl_' . md5( $ip );
 		$hits = (int) get_transient( $key );
 		if ( $hits >= 30 ) {
 			return $this->error( 429, 'rate_limited', __( 'Too many requests. Try again in a minute.', 'subtleforms-license-server' ) );

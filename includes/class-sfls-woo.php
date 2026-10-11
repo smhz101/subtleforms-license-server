@@ -1,24 +1,31 @@
 <?php
 /**
- * WooCommerce: sell licenses, deliver keys, show them in My Account.
+ * WooCommerce: sell licenses, renew and upgrade them, deliver keys.
  *
- * Mark a product as a SubtleForms license in Product data › General. When an
- * order with it is completed, one key per quantity is issued, saved on the
- * order, added to the customer's emails and listed under My Account ›
- * Licenses. Refunded or cancelled orders suspend their keys. A product marked
- * as a renewal extends the customer's existing key for the same plan instead
- * of issuing a new one.
+ * Mark a product as a SubtleForms license in Product data › General (or let
+ * Licenses › Products create the products). When an order with it is
+ * completed, one key per quantity is issued, saved on the order and added to
+ * the customer's emails. Refunded or cancelled orders suspend their keys.
+ *
+ * Renewal products extend a key instead of issuing one. When the renewal was
+ * started from My Account › Licenses, the cart item carries
+ * `sfls_renew_license` and exactly that key is extended. An upgrade carries
+ * `sfls_upgrade_license`: the existing key moves to the bought plan.
  *
  * @package SFLS
  */
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * WooCommerce glue.
+ */
 final class SFLS_Woo {
 
+	/**
+	 * Hook in when WooCommerce is loaded.
+	 */
 	public function register(): void {
-		add_action( 'init', array( $this, 'endpoint' ) );
-
 		if ( ! class_exists( 'WooCommerce' ) && ! did_action( 'woocommerce_loaded' ) ) {
 			add_action( 'woocommerce_loaded', array( $this, 'hooks' ) );
 			return;
@@ -26,6 +33,9 @@ final class SFLS_Woo {
 		$this->hooks();
 	}
 
+	/**
+	 * WooCommerce hooks.
+	 */
 	public function hooks(): void {
 		// Product settings.
 		add_action( 'woocommerce_product_options_general_product_data', array( $this, 'product_fields' ) );
@@ -37,22 +47,23 @@ final class SFLS_Woo {
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'suspend_for_order' ) );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'suspend_for_order' ) );
 
+		// Cart: buy, renew and upgrade links.
+		add_action( 'template_redirect', array( $this, 'handle_cart_links' ), 5 );
+		add_filter( 'woocommerce_get_item_data', array( $this, 'cart_item_data' ), 10, 2 );
+		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'order_line_item' ), 10, 3 );
+		add_filter( 'woocommerce_order_item_display_meta_key', array( $this, 'order_meta_label' ), 10, 2 );
+		add_filter( 'woocommerce_order_item_display_meta_value', array( $this, 'order_meta_value' ), 10, 2 );
+
 		// Delivery.
 		add_action( 'woocommerce_email_after_order_table', array( $this, 'email_keys' ), 10, 4 );
 		add_action( 'woocommerce_order_details_after_order_table', array( $this, 'order_keys' ) );
-
-		// My Account.
-		add_filter( 'woocommerce_account_menu_items', array( $this, 'menu_item' ) );
-		add_action( 'woocommerce_account_licenses_endpoint', array( $this, 'account_page' ) );
-		add_action( 'template_redirect', array( $this, 'handle_account_deactivate' ) );
-	}
-
-	public function endpoint(): void {
-		add_rewrite_endpoint( 'licenses', EP_ROOT | EP_PAGES );
 	}
 
 	// ── Product settings ────────────────────────────────────────────────
 
+	/**
+	 * License fields in Product data › General.
+	 */
 	public function product_fields(): void {
 		echo '<div class="options_group show_if_simple show_if_virtual">';
 		woocommerce_wp_checkbox(
@@ -102,6 +113,11 @@ final class SFLS_Woo {
 		echo '</div>';
 	}
 
+	/**
+	 * Save the license fields.
+	 *
+	 * @param int $product_id Product ID.
+	 */
 	public function save_product_fields( int $product_id ): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the product save nonce.
 		update_post_meta( $product_id, '_sfls_enabled', isset( $_POST['_sfls_enabled'] ) ? 'yes' : 'no' );
@@ -116,12 +132,173 @@ final class SFLS_Woo {
 			}
 		}
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		SFLS_Products::flush();
+	}
+
+	// ── Cart links ──────────────────────────────────────────────────────
+
+	/**
+	 * Handle ?sfls_buy, ?sfls_renew and ?sfls_upgrade.
+	 */
+	public function handle_cart_links(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Buy links are public; renew/upgrade are nonce-checked below.
+		$buy     = absint( $_GET['sfls_buy'] ?? 0 );
+		$renew   = absint( $_GET['sfls_renew'] ?? 0 );
+		$upgrade = absint( $_GET['sfls_upgrade'] ?? 0 );
+		$plan    = sanitize_key( wp_unslash( $_GET['plan'] ?? '' ) );
+		// phpcs:enable
+		if ( ! $buy && ! $renew && ! $upgrade ) {
+			return;
+		}
+		if ( function_exists( 'wc_load_cart' ) && null === WC()->cart ) {
+			wc_load_cart();
+		}
+		if ( ! WC()->cart ) {
+			return;
+		}
+
+		if ( $buy ) {
+			$product = wc_get_product( $buy );
+			if ( $product && $product->is_purchasable() && 'yes' === $product->get_meta( '_sfls_enabled' ) ) {
+				$this->put_in_cart( $buy, array() );
+			}
+			wp_safe_redirect( wc_get_checkout_url() );
+			exit;
+		}
+
+		$account = wc_get_account_endpoint_url( 'licenses' );
+		$id      = $renew ? $renew : $upgrade;
+		check_admin_referer( ( $renew ? 'sfls_renew_' : 'sfls_upgrade_' ) . $id );
+
+		$lic = SFLS_Licenses::find( $id );
+		if ( ! is_user_logged_in() || ! $lic || ! SFLS_Licenses::user_owns( $lic, wp_get_current_user() ) ) {
+			wc_add_notice( __( 'That license was not found in your account.', 'subtleforms-license-server' ), 'error' );
+			wp_safe_redirect( $account );
+			exit;
+		}
+
+		if ( $renew ) {
+			$product = SFLS_Products::find( $lic['plan'], 'renewal' ) ?? SFLS_Products::find( $lic['plan'], 'yearly' );
+			$data    = array( 'sfls_renew_license' => (int) $lic['id'] );
+		} else {
+			$options = SFLS_Products::upgrade_options( $lic );
+			$product = $options[ $plan ] ?? null;
+			$data    = array( 'sfls_upgrade_license' => (int) $lic['id'] );
+		}
+
+		if ( ! $product ) {
+			wc_add_notice( __( 'This option is not on sale right now. Contact support and we will sort it out.', 'subtleforms-license-server' ), 'error' );
+			wp_safe_redirect( $account );
+			exit;
+		}
+
+		$this->put_in_cart( (int) $product['id'], $data );
+		wp_safe_redirect( wc_get_checkout_url() );
+		exit;
+	}
+
+	/**
+	 * Add a license product, replacing other cart lines for the same product.
+	 *
+	 * @param int   $product_id Product ID.
+	 * @param array $data       Cart item data.
+	 */
+	private function put_in_cart( int $product_id, array $data ): void {
+		foreach ( WC()->cart->get_cart() as $key => $item ) {
+			if ( (int) $item['product_id'] === $product_id ) {
+				$same = ( $item['sfls_renew_license'] ?? 0 ) === ( $data['sfls_renew_license'] ?? 0 )
+					&& ( $item['sfls_upgrade_license'] ?? 0 ) === ( $data['sfls_upgrade_license'] ?? 0 );
+				if ( $same ) {
+					return; // Already there.
+				}
+				WC()->cart->remove_cart_item( $key );
+			}
+		}
+		try {
+			WC()->cart->add_to_cart( $product_id, 1, 0, array(), $data );
+		} catch ( Exception $e ) {
+			wc_add_notice( $e->getMessage(), 'error' );
+		}
+	}
+
+	/**
+	 * Show which license a renewal or upgrade applies to in cart and checkout.
+	 *
+	 * @param array $item_data Display rows.
+	 * @param array $cart_item Cart item.
+	 * @return array
+	 */
+	public function cart_item_data( $item_data, $cart_item ) {
+		foreach ( array(
+			'sfls_renew_license'   => __( 'Renews license', 'subtleforms-license-server' ),
+			'sfls_upgrade_license' => __( 'Upgrades license', 'subtleforms-license-server' ),
+		) as $key => $label ) {
+			if ( ! empty( $cart_item[ $key ] ) ) {
+				$lic = SFLS_Licenses::find( (int) $cart_item[ $key ] );
+				if ( $lic ) {
+					$item_data[] = array(
+						'key'   => $label,
+						'value' => SFLS_Licenses::mask_key( $lic['license_key'] ),
+					);
+				}
+			}
+		}
+		return $item_data;
+	}
+
+	/**
+	 * Copy renewal/upgrade targets onto the order line.
+	 *
+	 * @param WC_Order_Item_Product $item     Line item.
+	 * @param string                $cart_key Cart key.
+	 * @param array                 $values   Cart item.
+	 */
+	public function order_line_item( $item, $cart_key, $values ): void {
+		if ( ! empty( $values['sfls_renew_license'] ) ) {
+			$item->add_meta_data( '_sfls_renew_license', (int) $values['sfls_renew_license'], true );
+		}
+		if ( ! empty( $values['sfls_upgrade_license'] ) ) {
+			$item->add_meta_data( '_sfls_upgrade_license', (int) $values['sfls_upgrade_license'], true );
+		}
+	}
+
+	/**
+	 * Label for our order item meta (shown in admin).
+	 *
+	 * @param string $key  Display key.
+	 * @param object $meta Meta object.
+	 * @return string
+	 */
+	public function order_meta_label( $key, $meta ) {
+		$labels = array(
+			'_sfls_renew_license'   => __( 'Renews license', 'subtleforms-license-server' ),
+			'_sfls_upgrade_license' => __( 'Upgrades license', 'subtleforms-license-server' ),
+			'_sfls_license_ids'     => __( 'License IDs', 'subtleforms-license-server' ),
+		);
+		return $labels[ $meta->key ] ?? $key;
+	}
+
+	/**
+	 * Show masked keys instead of raw IDs.
+	 *
+	 * @param string $value Display value.
+	 * @param object $meta  Meta object.
+	 * @return string
+	 */
+	public function order_meta_value( $value, $meta ) {
+		if ( in_array( $meta->key, array( '_sfls_renew_license', '_sfls_upgrade_license' ), true ) ) {
+			$lic = SFLS_Licenses::find( (int) $meta->value );
+			return $lic ? esc_html( SFLS_Licenses::mask_key( $lic['license_key'] ) ) : $value;
+		}
+		return $value;
 	}
 
 	// ── Issue / suspend ─────────────────────────────────────────────────
 
 	/**
 	 * Virtual-only orders often stop at "processing"; issue keys there too.
+	 *
+	 * @param int $order_id Order ID.
 	 */
 	public function maybe_issue_virtual( int $order_id ): void {
 		$order = wc_get_order( $order_id );
@@ -130,6 +307,29 @@ final class SFLS_Woo {
 		}
 	}
 
+	/**
+	 * Whether a license belongs to the customer of an order.
+	 *
+	 * @param array    $lic   License.
+	 * @param WC_Order $order Order.
+	 */
+	private function order_owns( array $lic, WC_Order $order ): bool {
+		$customer = (int) $order->get_customer_id();
+		if ( $customer && (int) $lic['user_id'] === $customer ) {
+			return true;
+		}
+		$user = $customer ? get_userdata( $customer ) : false;
+		if ( $user && SFLS_Licenses::user_owns( $lic, $user ) ) {
+			return true;
+		}
+		return '' !== $lic['customer_email'] && 0 === strcasecmp( $lic['customer_email'], (string) $order->get_billing_email() );
+	}
+
+	/**
+	 * Issue, renew or upgrade keys for an order.
+	 *
+	 * @param int $order_id Order ID.
+	 */
 	public function issue_for_order( int $order_id ): void {
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
@@ -145,26 +345,49 @@ final class SFLS_Woo {
 				continue; // Already issued.
 			}
 
-			$plan   = get_post_meta( $product_id, '_sfls_plan', true ) ?: 'pro';
-			$sites  = get_post_meta( $product_id, '_sfls_sites', true );
-			$months = get_post_meta( $product_id, '_sfls_months', true );
+			$plan   = get_post_meta( $product_id, '_sfls_plan', true );
+			$plan   = $plan ? $plan : 'pro';
+			$sites  = (string) get_post_meta( $product_id, '_sfls_sites', true );
+			$months = (string) get_post_meta( $product_id, '_sfls_months', true );
 			$months = '' === $months ? 12 : (int) $months;
 			$email  = $order->get_billing_email();
 			$ids    = array();
 
-			$renewal = 'yes' === get_post_meta( $product_id, '_sfls_renewal', true )
-				? $this->renewable_license( (int) $order->get_customer_id(), $email, $plan )
-				: null;
+			$target_upgrade = (int) $item->get_meta( '_sfls_upgrade_license' );
+			$target_renew   = (int) $item->get_meta( '_sfls_renew_license' );
+			$upgrade        = $target_upgrade ? SFLS_Licenses::find( $target_upgrade ) : null;
+			$upgrade        = ( $upgrade && $this->order_owns( $upgrade, $order ) ) ? $upgrade : null;
+
+			if ( $upgrade ) {
+				$this->apply_upgrade( $upgrade, $plan, $sites, $months, $product_id );
+				$ids[] = (int) $upgrade['id'];
+				/* translators: 1: masked key, 2: plan */
+				$order->add_order_note( sprintf( __( 'SubtleForms license %1$s upgraded to %2$s.', 'subtleforms-license-server' ), SFLS_Licenses::mask_key( $upgrade['license_key'] ), SFLS_Plans::label( $plan ) ) );
+				wc_update_order_item_meta( $item_id, '_sfls_license_ids', implode( ',', $ids ) );
+				continue;
+			}
+
+			$renewal = null;
+			if ( $target_renew ) {
+				$renewal = SFLS_Licenses::find( $target_renew );
+				$renewal = ( $renewal && $this->order_owns( $renewal, $order ) ) ? $renewal : null;
+			}
+			if ( ! $renewal && 'yes' === get_post_meta( $product_id, '_sfls_renewal', true ) ) {
+				$renewal = $this->renewable_license( (int) $order->get_customer_id(), $email, $plan );
+			}
+
 			if ( $renewal && 1 === (int) $item->get_quantity() ) {
 				SFLS_Licenses::extend( (int) $renewal['id'], max( 1, $months ) );
+				SFLS_Licenses::update( (int) $renewal['id'], array( 'reminders' => '' ) );
 				$ids[] = (int) $renewal['id'];
-				$order->add_order_note( sprintf( 'SubtleForms license %s renewed.', $renewal['license_key'] ) );
+				/* translators: %s: masked key */
+				$order->add_order_note( sprintf( __( 'SubtleForms license %s renewed.', 'subtleforms-license-server' ), SFLS_Licenses::mask_key( $renewal['license_key'] ) ) );
 			} else {
 				for ( $i = 0; $i < max( 1, (int) $item->get_quantity() ); $i++ ) {
 					$lic   = SFLS_Licenses::create(
 						array(
 							'plan'           => $plan,
-							'sites_allowed'  => '' === $sites ? null : (int) $sites,
+							'sites_allowed'  => '' === $sites ? (int) ( SFLS_Plans::get( $plan )['sites'] ?? 1 ) : (int) $sites,
 							'customer_email' => $email,
 							'user_id'        => (int) $order->get_customer_id(),
 							'order_id'       => $order_id,
@@ -172,18 +395,50 @@ final class SFLS_Woo {
 							'months'         => $months,
 						)
 					);
-					if ( '' === $sites ) {
-						SFLS_Licenses::update( (int) $lic['id'], array( 'sites_allowed' => (int) ( SFLS_Plans::get( $plan )['sites'] ?? 1 ) ) );
-					}
 					$ids[] = (int) $lic['id'];
 				}
-				$order->add_order_note( sprintf( '%d SubtleForms license key(s) issued.', count( $ids ) ) );
+				/* translators: %d: number of keys */
+				$order->add_order_note( sprintf( _n( '%d SubtleForms license key issued.', '%d SubtleForms license keys issued.', count( $ids ), 'subtleforms-license-server' ), count( $ids ) ) );
 			}
 
 			wc_update_order_item_meta( $item_id, '_sfls_license_ids', implode( ',', $ids ) );
 		}
 	}
 
+	/**
+	 * Move a license to a bigger plan. Expiry is kept, or pushed out to a full
+	 * term from today when that is later. A lifetime purchase makes it lifetime.
+	 *
+	 * @param array  $lic        License.
+	 * @param string $plan       New plan.
+	 * @param string $sites      Product site limit ('' = plan default).
+	 * @param int    $months     Product duration (0 = lifetime).
+	 * @param int    $product_id Product ID.
+	 */
+	private function apply_upgrade( array $lic, string $plan, string $sites, int $months, int $product_id ): void {
+		$limit = '' === $sites ? (int) ( SFLS_Plans::get( $plan )['sites'] ?? 1 ) : (int) $sites;
+		$data  = array(
+			'plan'          => $plan,
+			'sites_allowed' => $limit,
+			'status'        => 'active',
+			'product_id'    => $product_id,
+		);
+		if ( 0 === $months ) {
+			$data['expires_at'] = null;
+		} elseif ( ! empty( $lic['expires_at'] ) ) {
+			$current            = strtotime( $lic['expires_at'] . ' UTC' );
+			$term               = strtotime( "+{$months} months" );
+			$data['expires_at'] = gmdate( 'Y-m-d H:i:s', max( $current, $term ) );
+			$data['reminders']  = '';
+		}
+		SFLS_Licenses::update( (int) $lic['id'], $data );
+	}
+
+	/**
+	 * Suspend keys issued by an order.
+	 *
+	 * @param int $order_id Order ID.
+	 */
 	public function suspend_for_order( int $order_id ): void {
 		foreach ( $this->order_licenses( $order_id ) as $lic ) {
 			if ( (int) $lic['order_id'] === $order_id ) {
@@ -194,16 +449,22 @@ final class SFLS_Woo {
 
 	/**
 	 * A license this customer could renew: same plan, issued earlier.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $email   Billing email.
+	 * @param string $plan    Plan.
 	 */
 	private function renewable_license( int $user_id, string $email, string $plan ): ?array {
 		global $wpdb;
-		$table = SFLS_DB::licenses();
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE plan = %s AND status <> 'suspended' AND ( ( user_id > 0 AND user_id = %d ) OR customer_email = %s ) AND expires_at IS NOT NULL ORDER BY expires_at ASC LIMIT 1", $plan, $user_id, $email ), ARRAY_A );
-		return $row ?: null;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE plan = %s AND status <> 'suspended' AND ( ( user_id > 0 AND user_id = %d ) OR customer_email = %s ) AND expires_at IS NOT NULL ORDER BY expires_at ASC LIMIT 1", $plan, $user_id, $email ), ARRAY_A );
+		return $row ? $row : null;
 	}
 
 	/**
+	 * Licenses attached to an order's items.
+	 *
+	 * @param int $order_id Order ID.
 	 * @return array[]
 	 */
 	private function order_licenses( int $order_id ): array {
@@ -225,6 +486,14 @@ final class SFLS_Woo {
 
 	// ── Delivery ────────────────────────────────────────────────────────
 
+	/**
+	 * Keys in order emails.
+	 *
+	 * @param WC_Order $order         Order.
+	 * @param bool     $sent_to_admin Admin email.
+	 * @param bool     $plain_text    Plain text email.
+	 * @param mixed    $email         Email object.
+	 */
 	public function email_keys( $order, $sent_to_admin, $plain_text, $email = null ): void {
 		$licenses = $this->order_licenses( $order->get_id() );
 		if ( ! $licenses ) {
@@ -241,6 +510,11 @@ final class SFLS_Woo {
 		$this->render_keys( $licenses, true );
 	}
 
+	/**
+	 * Keys on the thank-you / order page.
+	 *
+	 * @param WC_Order $order Order.
+	 */
 	public function order_keys( $order ): void {
 		$licenses = $this->order_licenses( $order->get_id() );
 		if ( $licenses ) {
@@ -248,11 +522,17 @@ final class SFLS_Woo {
 		}
 	}
 
+	/**
+	 * Print keys.
+	 *
+	 * @param array[] $licenses Licenses.
+	 * @param bool    $email    Inline styles for email.
+	 */
 	private function render_keys( array $licenses, bool $email ): void {
-		$style = $email ? ' style="font-family:monospace;font-size:15px;padding:10px 12px;background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;display:inline-block;"' : ' class="sfls-key"';
+		$style = $email ? 'font-family:monospace;font-size:15px;padding:10px 12px;background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;display:inline-block;' : '';
 		echo '<h2>' . esc_html__( 'Your SubtleForms Pro license', 'subtleforms-license-server' ) . '</h2>';
 		foreach ( $licenses as $lic ) {
-			echo '<p><code' . $style . '>' . esc_html( $lic['license_key'] ) . '</code><br><small>' . esc_html( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $style is a fixed literal.
+			echo '<p><code class="sfls-key" style="' . esc_attr( $style ) . '">' . esc_html( $lic['license_key'] ) . '</code><br><small>' . esc_html(
 				sprintf(
 					/* translators: 1: plan, 2: expiry date */
 					__( '%1$s plan · renews %2$s', 'subtleforms-license-server' ),
@@ -261,79 +541,6 @@ final class SFLS_Woo {
 				)
 			) . '</small></p>';
 		}
-		echo '<p>' . esc_html__( 'In WordPress, open SubtleForms › Settings › License, paste the key and click Activate.', 'subtleforms-license-server' ) . '</p>';
-	}
-
-	// ── My Account ──────────────────────────────────────────────────────
-
-	public function menu_item( array $items ): array {
-		$new = array();
-		foreach ( $items as $key => $label ) {
-			$new[ $key ] = $label;
-			if ( 'orders' === $key ) {
-				$new['licenses'] = __( 'Licenses', 'subtleforms-license-server' );
-			}
-		}
-		return $new;
-	}
-
-	public function account_page(): void {
-		$user = wp_get_current_user();
-		global $wpdb;
-		$table = SFLS_DB::licenses();
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id = %d OR customer_email = %s ORDER BY created_at DESC", $user->ID, $user->user_email ), ARRAY_A );
-
-		if ( ! $rows ) {
-			echo '<p>' . esc_html__( 'You have no licenses yet.', 'subtleforms-license-server' ) . ' <a href="' . esc_url( home_url( '/pro/' ) ) . '">' . esc_html__( 'Get SubtleForms Pro', 'subtleforms-license-server' ) . '</a></p>';
-			return;
-		}
-
-		foreach ( $rows as $lic ) {
-			$state = SFLS_Licenses::state( $lic );
-			$acts  = SFLS_Licenses::activations( (int) $lic['id'] );
-			$limit = (int) $lic['sites_allowed'];
-			echo '<section class="sfls-account-license" style="margin:0 0 24px;padding:16px;border:1px solid #dcdcde;border-radius:8px;">';
-			echo '<p style="margin:0 0 8px;"><strong>' . esc_html( SFLS_Plans::label( $lic['plan'] ) ) . '</strong> &middot; ' . esc_html( ucfirst( str_replace( '_', ' ', $state['status'] ) ) ) . '</p>';
-			echo '<p style="margin:0 0 8px;"><code style="font-size:15px;">' . esc_html( $lic['license_key'] ) . '</code></p>';
-			echo '<p style="margin:0 0 12px;font-size:14px;">';
-			printf(
-				/* translators: 1: used sites, 2: allowed sites, 3: expiry */
-				esc_html__( 'Sites: %1$d of %2$s · Expires: %3$s', 'subtleforms-license-server' ),
-				(int) SFLS_Licenses::used_slots( (int) $lic['id'] ),
-				$limit ? (int) $limit : esc_html__( 'unlimited', 'subtleforms-license-server' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-				$lic['expires_at'] ? esc_html( wp_date( get_option( 'date_format' ), strtotime( $lic['expires_at'] . ' UTC' ) ) ) : esc_html__( 'never', 'subtleforms-license-server' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-			);
-			echo '</p>';
-			if ( $acts ) {
-				echo '<table class="shop_table"><thead><tr><th>' . esc_html__( 'Site', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Activated', 'subtleforms-license-server' ) . '</th><th></th></tr></thead><tbody>';
-				foreach ( $acts as $act ) {
-					$url = wp_nonce_url( add_query_arg( array( 'sfls_deactivate' => (int) $lic['id'], 'domain' => rawurlencode( $act['domain'] ) ), wc_get_account_endpoint_url( 'licenses' ) ), 'sfls_deactivate_' . $lic['id'] );
-					echo '<tr><td>' . esc_html( $act['domain'] ) . ( $act['is_local'] ? ' <small>(' . esc_html__( 'free: local/staging', 'subtleforms-license-server' ) . ')</small>' : '' ) . '</td><td>' . esc_html( wp_date( get_option( 'date_format' ), strtotime( $act['activated_at'] . ' UTC' ) ) ) . '</td><td><a href="' . esc_url( $url ) . '">' . esc_html__( 'Deactivate', 'subtleforms-license-server' ) . '</a></td></tr>';
-				}
-				echo '</tbody></table>';
-			}
-			echo '</section>';
-		}
-	}
-
-	public function handle_account_deactivate(): void {
-		if ( empty( $_GET['sfls_deactivate'] ) || ! is_user_logged_in() ) {
-			return;
-		}
-		$id = absint( $_GET['sfls_deactivate'] );
-		check_admin_referer( 'sfls_deactivate_' . $id );
-		$lic  = SFLS_Licenses::find( $id );
-		$user = wp_get_current_user();
-		if ( ! $lic || ( (int) $lic['user_id'] !== (int) $user->ID && $lic['customer_email'] !== $user->user_email ) ) {
-			return;
-		}
-		$domain = SFLS_Licenses::normalize_domain( sanitize_text_field( wp_unslash( $_GET['domain'] ?? '' ) ) );
-		SFLS_Licenses::remove_activation( $id, $domain );
-		if ( function_exists( 'wc_add_notice' ) ) {
-			wc_add_notice( __( 'Site deactivated. You can use the key on another site now.', 'subtleforms-license-server' ) );
-		}
-		wp_safe_redirect( wc_get_account_endpoint_url( 'licenses' ) );
-		exit;
+		echo '<p>' . esc_html__( 'In WordPress, open SubtleForms › Settings › License and click Connect account, or paste the key and click Activate.', 'subtleforms-license-server' ) . '</p>';
 	}
 }
