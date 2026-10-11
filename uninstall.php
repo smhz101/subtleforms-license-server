@@ -18,6 +18,8 @@ global $wpdb;
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_activations" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_licenses" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_activation_log" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_download_tokens" );
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfls\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfls\\_%'" );
 // phpcs:enable
 

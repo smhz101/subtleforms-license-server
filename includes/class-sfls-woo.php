@@ -3,14 +3,20 @@
  * WooCommerce: sell licenses, renew and upgrade them, deliver keys.
  *
  * Mark a product as a SubtleForms license in Product data › General (or let
- * Licenses › Products create the products). When an order with it is
- * completed, one key per quantity is issued, saved on the order and added to
- * the customer's emails. Refunded or cancelled orders suspend their keys.
+ * Licenses › Products create the products). Keys are issued when the order is
+ * paid: orders that contain only license products move straight to Completed
+ * when payment completes (whether or not the products are downloadable), and
+ * paid orders that also contain other items issue their keys at Processing.
+ * The `_sfls_issued` order flag makes sure an order never issues twice.
+ * Refunded or cancelled orders suspend their keys.
+ *
+ * The cart holds one license at a time: buying another plan swaps it.
  *
  * Renewal products extend a key instead of issuing one. When the renewal was
  * started from My Account › Licenses, the cart item carries
  * `sfls_renew_license` and exactly that key is extended. An upgrade carries
- * `sfls_upgrade_license`: the existing key moves to the bought plan.
+ * `sfls_upgrade_license`: the existing key moves to the bought plan, priced by
+ * SFLS_Upgrades.
  *
  * @package SFLS
  */
@@ -41,22 +47,85 @@ final class SFLS_Woo {
 		add_action( 'woocommerce_product_options_general_product_data', array( $this, 'product_fields' ) );
 		add_action( 'woocommerce_process_product_meta', array( $this, 'save_product_fields' ) );
 
+		// Payment: license-only orders complete themselves.
+		add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'payment_complete_status' ), 10, 3 );
+
 		// Issue / suspend.
 		add_action( 'woocommerce_order_status_completed', array( $this, 'issue_for_order' ) );
-		add_action( 'woocommerce_order_status_processing', array( $this, 'maybe_issue_virtual' ) );
+		add_action( 'woocommerce_order_status_processing', array( $this, 'maybe_issue_paid' ) );
+		add_action( 'woocommerce_payment_complete', array( $this, 'maybe_issue_paid' ) );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'suspend_for_order' ) );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'suspend_for_order' ) );
 
-		// Cart: buy, renew and upgrade links.
+		// Cart: buy, renew and upgrade links; one plan at a time.
 		add_action( 'template_redirect', array( $this, 'handle_cart_links' ), 5 );
+		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'one_plan_at_a_time' ), 20, 6 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'cart_item_data' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'order_line_item' ), 10, 3 );
 		add_filter( 'woocommerce_order_item_display_meta_key', array( $this, 'order_meta_label' ), 10, 2 );
 		add_filter( 'woocommerce_order_item_display_meta_value', array( $this, 'order_meta_value' ), 10, 2 );
+	}
 
-		// Delivery.
-		add_action( 'woocommerce_email_after_order_table', array( $this, 'email_keys' ), 10, 4 );
-		add_action( 'woocommerce_order_details_after_order_table', array( $this, 'order_keys' ) );
+	// ── License products ────────────────────────────────────────────────
+
+	/**
+	 * Whether a product (or its parent, for variations) sells a license.
+	 *
+	 * @param int|WC_Product|null $product Product or ID.
+	 */
+	public static function is_license_product( $product ): bool {
+		if ( $product instanceof WC_Product ) {
+			$id = $product->get_parent_id() ? $product->get_parent_id() : $product->get_id();
+		} else {
+			$id = (int) $product;
+		}
+		return $id > 0 && 'yes' === get_post_meta( $id, '_sfls_enabled', true );
+	}
+
+	/**
+	 * Count license and other line items of an order.
+	 *
+	 * @param WC_Order $order Order.
+	 * @return array{license:int,other:int}
+	 */
+	public static function order_mix( WC_Order $order ): array {
+		$mix = array(
+			'license' => 0,
+			'other'   => 0,
+		);
+		foreach ( $order->get_items() as $item ) {
+			if ( $item instanceof WC_Order_Item_Product && self::is_license_product( (int) $item->get_product_id() ) ) {
+				++$mix['license'];
+			} else {
+				++$mix['other'];
+			}
+		}
+		return $mix;
+	}
+
+	/**
+	 * Whether every line item of an order is a license product.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	public static function order_is_license_only( WC_Order $order ): bool {
+		$mix = self::order_mix( $order );
+		return $mix['license'] > 0 && 0 === $mix['other'];
+	}
+
+	/**
+	 * Whether the cart has items and every one is a license product.
+	 */
+	public static function cart_is_license_only(): bool {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart || WC()->cart->is_empty() ) {
+			return false;
+		}
+		foreach ( WC()->cart->get_cart() as $item ) {
+			if ( ! self::is_license_product( (int) ( $item['product_id'] ?? 0 ) ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	// ── Product settings ────────────────────────────────────────────────
@@ -158,10 +227,7 @@ final class SFLS_Woo {
 		}
 
 		if ( $buy ) {
-			$product = wc_get_product( $buy );
-			if ( $product && $product->is_purchasable() && 'yes' === $product->get_meta( '_sfls_enabled' ) ) {
-				$this->put_in_cart( $buy, array() );
-			}
+			$this->buy( $buy );
 			wp_safe_redirect( wc_get_checkout_url() );
 			exit;
 		}
@@ -198,27 +264,120 @@ final class SFLS_Woo {
 	}
 
 	/**
-	 * Add a license product, replacing other cart lines for the same product.
+	 * Put a license product in the cart for a Buy button, replacing any other
+	 * plan already there. Returns whether the product is in the cart.
+	 *
+	 * @param int $product_id Product ID.
+	 */
+	public function buy( int $product_id ): bool {
+		$product = wc_get_product( $product_id );
+		if ( ! $product || ! $product->is_purchasable() || ! self::is_license_product( $product ) ) {
+			return false;
+		}
+		return $this->put_in_cart( $product_id, array() );
+	}
+
+	/**
+	 * Add a license product. Every other license line (another plan, or the
+	 * same product for a different license) is removed first, so the cart only
+	 * ever holds one plan. Unrelated items stay. Returns whether it is in the
+	 * cart afterwards.
 	 *
 	 * @param int   $product_id Product ID.
 	 * @param array $data       Cart item data.
 	 */
-	private function put_in_cart( int $product_id, array $data ): void {
+	public function put_in_cart( int $product_id, array $data ): bool {
+		$swapped = false;
 		foreach ( WC()->cart->get_cart() as $key => $item ) {
+			if ( ! self::is_license_product( (int) $item['product_id'] ) ) {
+				continue;
+			}
+			$same = (int) $item['product_id'] === $product_id
+				&& (int) ( $item['sfls_renew_license'] ?? 0 ) === (int) ( $data['sfls_renew_license'] ?? 0 )
+				&& (int) ( $item['sfls_upgrade_license'] ?? 0 ) === (int) ( $data['sfls_upgrade_license'] ?? 0 );
+			if ( $same ) {
+				continue; // Already there; keep it.
+			}
+			WC()->cart->remove_cart_item( $key );
+			$swapped = true;
+		}
+		foreach ( WC()->cart->get_cart() as $item ) {
 			if ( (int) $item['product_id'] === $product_id ) {
-				$same = ( $item['sfls_renew_license'] ?? 0 ) === ( $data['sfls_renew_license'] ?? 0 )
-					&& ( $item['sfls_upgrade_license'] ?? 0 ) === ( $data['sfls_upgrade_license'] ?? 0 );
-				if ( $same ) {
-					return; // Already there.
-				}
-				WC()->cart->remove_cart_item( $key );
+				return true;
 			}
 		}
 		try {
-			WC()->cart->add_to_cart( $product_id, 1, 0, array(), $data );
+			$added = WC()->cart->add_to_cart( $product_id, 1, 0, array(), $data );
 		} catch ( Exception $e ) {
 			wc_add_notice( $e->getMessage(), 'error' );
+			return false;
 		}
+		if ( $added && $swapped ) {
+			self::swap_notice( $product_id );
+		}
+		return (bool) $added;
+	}
+
+	/**
+	 * "You can buy one plan at a time. We swapped your cart to {plan}."
+	 *
+	 * @param int $product_id The product now in the cart.
+	 */
+	private static function swap_notice( int $product_id ): void {
+		$message = sprintf(
+			/* translators: %s: plan, e.g. "Agency" or "Pro Lifetime" */
+			__( 'You can buy one plan at a time. We swapped your cart to %s.', 'subtleforms-license-server' ),
+			self::plan_name( $product_id )
+		);
+		if ( ! wc_has_notice( $message, 'notice' ) ) {
+			wc_add_notice( $message, 'notice' );
+		}
+	}
+
+	/**
+	 * Plan name of a license product: "Agency", "Pro Lifetime".
+	 *
+	 * @param int $product_id Product ID.
+	 */
+	public static function plan_name( int $product_id ): string {
+		$plan  = (string) get_post_meta( $product_id, '_sfls_plan', true );
+		$label = SFLS_Plans::label( '' === $plan ? 'pro' : $plan );
+		if ( 'lifetime' === SFLS_Products::type_of( $product_id ) ) {
+			/* translators: %s: plan name */
+			return sprintf( __( '%s Lifetime', 'subtleforms-license-server' ), $label );
+		}
+		return $label;
+	}
+
+	/**
+	 * Server-side guard for every other way into the cart (shop buttons, the
+	 * Store API, add-to-cart links): adding a license product removes the plan
+	 * that was there before and says so.
+	 *
+	 * @param bool  $passed       Validation result so far.
+	 * @param int   $product_id   Product being added.
+	 * @param int   $quantity     Quantity.
+	 * @param int   $variation_id Variation.
+	 * @param array $variations   Variation attributes.
+	 * @param array $item_data    Cart item data.
+	 * @return bool
+	 */
+	public function one_plan_at_a_time( $passed, $product_id = 0, $quantity = 1, $variation_id = 0, $variations = array(), $item_data = array() ) {
+		unset( $quantity, $variation_id, $variations, $item_data );
+		if ( ! $passed || ! self::is_license_product( (int) $product_id ) || ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return $passed;
+		}
+		$swapped = false;
+		foreach ( WC()->cart->get_cart() as $key => $item ) {
+			if ( (int) $item['product_id'] !== (int) $product_id && self::is_license_product( (int) $item['product_id'] ) ) {
+				WC()->cart->remove_cart_item( $key );
+				$swapped = true;
+			}
+		}
+		if ( $swapped ) {
+			self::swap_notice( (int) $product_id );
+		}
+		return $passed;
 	}
 
 	/**
@@ -293,17 +452,44 @@ final class SFLS_Woo {
 		return $value;
 	}
 
+	// ── Payment ─────────────────────────────────────────────────────────
+
+	/**
+	 * Orders that only contain license products need no processing: complete
+	 * them as soon as payment completes, downloadable flag or not.
+	 *
+	 * @param string        $status   Status WooCommerce picked.
+	 * @param int           $order_id Order ID.
+	 * @param WC_Order|null $order    Order.
+	 * @return string
+	 */
+	public function payment_complete_status( $status, $order_id = 0, $order = null ) {
+		$order = $order instanceof WC_Order ? $order : wc_get_order( (int) $order_id );
+		if ( $order instanceof WC_Order && 'processing' === $status && self::order_is_license_only( $order ) ) {
+			return 'completed';
+		}
+		return $status;
+	}
+
 	// ── Issue / suspend ─────────────────────────────────────────────────
 
 	/**
-	 * Virtual-only orders often stop at "processing"; issue keys there too.
+	 * Issue keys for paid orders at Processing (orders with other items stay
+	 * there until shipped) and right after payment completes. Cash on delivery
+	 * is not paid yet, so it waits for Completed.
 	 *
 	 * @param int $order_id Order ID.
 	 */
-	public function maybe_issue_virtual( int $order_id ): void {
-		$order = wc_get_order( $order_id );
-		if ( $order && ! $order->needs_processing() ) {
-			$this->issue_for_order( $order_id );
+	public function maybe_issue_paid( $order_id ): void {
+		$order = wc_get_order( (int) $order_id );
+		if ( ! $order instanceof WC_Order || 'cod' === $order->get_payment_method() ) {
+			return;
+		}
+		if ( ! $order->get_date_paid() && ! $order->is_paid() ) {
+			return;
+		}
+		if ( self::order_mix( $order )['license'] > 0 ) {
+			$this->issue_for_order( (int) $order_id );
 		}
 	}
 
@@ -326,19 +512,67 @@ final class SFLS_Woo {
 	}
 
 	/**
-	 * Issue, renew or upgrade keys for an order.
+	 * Take a short lock on an order so two requests (payment webhook and the
+	 * customer's return, say) cannot issue at the same time.
 	 *
 	 * @param int $order_id Order ID.
 	 */
-	public function issue_for_order( int $order_id ): void {
+	private static function lock( int $order_id ): bool {
+		global $wpdb;
+		$name = 'sfls_issue_lock_' . $order_id;
+		// Same pattern as WP_Upgrader::create_lock(): INSERT IGNORE is atomic.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$got = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} ( option_name, option_value, autoload ) VALUES ( %s, %s, 'off' )", $name, (string) time() ) );
+		if ( ! $got ) {
+			$since = (int) get_option( $name );
+			if ( $since && $since > time() - MINUTE_IN_SECONDS ) {
+				return false;
+			}
+			update_option( $name, (string) time(), false ); // Stale lock from a crashed request.
+		}
+		return true;
+	}
+
+	/**
+	 * Release the order lock.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private static function unlock( int $order_id ): void {
+		delete_option( 'sfls_issue_lock_' . $order_id );
+	}
+
+	/**
+	 * Issue, renew or upgrade keys for an order, once.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public function issue_for_order( $order_id ): void {
+		$order_id = (int) $order_id;
+		$order    = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order || 'yes' === $order->get_meta( '_sfls_issued' ) ) {
+			return;
+		}
+		if ( 0 === self::order_mix( $order )['license'] ) {
+			return;
+		}
+		if ( ! self::lock( $order_id ) ) {
+			return;
+		}
+
+		// Re-read inside the lock: another request may have just finished.
 		$order = wc_get_order( $order_id );
-		if ( ! $order ) {
+		if ( ! $order instanceof WC_Order || 'yes' === $order->get_meta( '_sfls_issued' ) ) {
+			self::unlock( $order_id );
 			return;
 		}
 
 		foreach ( $order->get_items() as $item_id => $item ) {
+			if ( ! $item instanceof WC_Order_Item_Product ) {
+				continue;
+			}
 			$product_id = (int) $item->get_product_id();
-			if ( 'yes' !== get_post_meta( $product_id, '_sfls_enabled', true ) ) {
+			if ( ! self::is_license_product( $product_id ) ) {
 				continue;
 			}
 			if ( $item->get_meta( '_sfls_license_ids' ) ) {
@@ -359,10 +593,21 @@ final class SFLS_Woo {
 			$upgrade        = ( $upgrade && $this->order_owns( $upgrade, $order ) ) ? $upgrade : null;
 
 			if ( $upgrade ) {
-				$this->apply_upgrade( $upgrade, $plan, $sites, $months, $product_id );
+				$keep = 'yes' === $item->get_meta( '_sfls_upgrade_keep_expiry' );
+				$this->apply_upgrade( $upgrade, $plan, $sites, $months, $product_id, $keep );
 				$ids[] = (int) $upgrade['id'];
-				/* translators: 1: masked key, 2: plan */
-				$order->add_order_note( sprintf( __( 'SubtleForms license %1$s upgraded to %2$s.', 'subtleforms-license-server' ), SFLS_Licenses::mask_key( $upgrade['license_key'] ), SFLS_Plans::label( $plan ) ) );
+				$after = SFLS_Licenses::find( (int) $upgrade['id'] );
+				$order->add_order_note(
+					sprintf(
+						/* translators: 1: masked key, 2: old plan, 3: new plan, 4: sites, 5: amount charged */
+						__( 'SubtleForms license %1$s upgraded from %2$s to %3$s (%4$s), same key. Charged %5$s for the rest of the current term.', 'subtleforms-license-server' ),
+						SFLS_Licenses::mask_key( $upgrade['license_key'] ),
+						SFLS_Plans::label( $upgrade['plan'] ),
+						SFLS_Plans::label( $plan ),
+						SFLS_Plans::sites_label( (int) ( $after['sites_allowed'] ?? 0 ) ),
+						html_entity_decode( wp_strip_all_tags( wc_price( (float) $item->get_total(), array( 'currency' => $order->get_currency() ) ) ), ENT_QUOTES, 'UTF-8' )
+					)
+				);
 				wc_update_order_item_meta( $item_id, '_sfls_license_ids', implode( ',', $ids ) );
 				continue;
 			}
@@ -403,19 +648,28 @@ final class SFLS_Woo {
 
 			wc_update_order_item_meta( $item_id, '_sfls_license_ids', implode( ',', $ids ) );
 		}
+
+		$order->update_meta_data( '_sfls_issued', 'yes' );
+		$order->save_meta_data();
+		self::unlock( $order_id );
+
+		do_action( 'sfls_order_issued', $order_id );
 	}
 
 	/**
-	 * Move a license to a bigger plan. Expiry is kept, or pushed out to a full
-	 * term from today when that is later. A lifetime purchase makes it lifetime.
+	 * Move a license to a bigger plan, keeping the key. A prorated upgrade
+	 * (the customer paid the difference for the rest of the term) keeps the
+	 * expiry. Otherwise the expiry is kept, or pushed out to a full term from
+	 * today when that is later. A lifetime purchase makes it lifetime.
 	 *
-	 * @param array  $lic        License.
-	 * @param string $plan       New plan.
-	 * @param string $sites      Product site limit ('' = plan default).
-	 * @param int    $months     Product duration (0 = lifetime).
-	 * @param int    $product_id Product ID.
+	 * @param array  $lic         License.
+	 * @param string $plan        New plan.
+	 * @param string $sites       Product site limit ('' = plan default).
+	 * @param int    $months      Product duration (0 = lifetime).
+	 * @param int    $product_id  Product ID.
+	 * @param bool   $keep_expiry Prorated: leave the expiry as it is.
 	 */
-	private function apply_upgrade( array $lic, string $plan, string $sites, int $months, int $product_id ): void {
+	public function apply_upgrade( array $lic, string $plan, string $sites, int $months, int $product_id, bool $keep_expiry = false ): void {
 		$limit = '' === $sites ? (int) ( SFLS_Plans::get( $plan )['sites'] ?? 1 ) : (int) $sites;
 		$data  = array(
 			'plan'          => $plan,
@@ -425,13 +679,14 @@ final class SFLS_Woo {
 		);
 		if ( 0 === $months ) {
 			$data['expires_at'] = null;
-		} elseif ( ! empty( $lic['expires_at'] ) ) {
+		} elseif ( ! empty( $lic['expires_at'] ) && ! $keep_expiry ) {
 			$current            = strtotime( $lic['expires_at'] . ' UTC' );
 			$term               = strtotime( "+{$months} months" );
 			$data['expires_at'] = gmdate( 'Y-m-d H:i:s', max( $current, $term ) );
 			$data['reminders']  = '';
 		}
 		SFLS_Licenses::update( (int) $lic['id'], $data );
+		do_action( 'sfls_license_upgraded', (int) $lic['id'], $lic['plan'], $plan );
 	}
 
 	/**
@@ -439,8 +694,9 @@ final class SFLS_Woo {
 	 *
 	 * @param int $order_id Order ID.
 	 */
-	public function suspend_for_order( int $order_id ): void {
-		foreach ( $this->order_licenses( $order_id ) as $lic ) {
+	public function suspend_for_order( $order_id ): void {
+		$order_id = (int) $order_id;
+		foreach ( self::order_licenses( $order_id ) as $lic ) {
 			if ( (int) $lic['order_id'] === $order_id ) {
 				SFLS_Licenses::update( (int) $lic['id'], array( 'status' => 'suspended' ) );
 			}
@@ -467,7 +723,7 @@ final class SFLS_Woo {
 	 * @param int $order_id Order ID.
 	 * @return array[]
 	 */
-	private function order_licenses( int $order_id ): array {
+	public static function order_licenses( int $order_id ): array {
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
 			return array();
@@ -477,70 +733,10 @@ final class SFLS_Woo {
 			foreach ( array_filter( explode( ',', (string) $item->get_meta( '_sfls_license_ids' ) ) ) as $id ) {
 				$lic = SFLS_Licenses::find( (int) $id );
 				if ( $lic ) {
-					$out[] = $lic;
+					$out[ (int) $lic['id'] ] = $lic;
 				}
 			}
 		}
-		return $out;
-	}
-
-	// ── Delivery ────────────────────────────────────────────────────────
-
-	/**
-	 * Keys in order emails.
-	 *
-	 * @param WC_Order $order         Order.
-	 * @param bool     $sent_to_admin Admin email.
-	 * @param bool     $plain_text    Plain text email.
-	 * @param mixed    $email         Email object.
-	 */
-	public function email_keys( $order, $sent_to_admin, $plain_text, $email = null ): void {
-		$licenses = $this->order_licenses( $order->get_id() );
-		if ( ! $licenses ) {
-			return;
-		}
-		if ( $plain_text ) {
-			echo "\n" . esc_html__( 'Your SubtleForms Pro license', 'subtleforms-license-server' ) . "\n";
-			foreach ( $licenses as $lic ) {
-				echo esc_html( $lic['license_key'] . ' (' . SFLS_Plans::label( $lic['plan'] ) . ')' ) . "\n";
-			}
-			echo esc_html__( 'Activate it in WordPress: SubtleForms › Settings › License.', 'subtleforms-license-server' ) . "\n\n";
-			return;
-		}
-		$this->render_keys( $licenses, true );
-	}
-
-	/**
-	 * Keys on the thank-you / order page.
-	 *
-	 * @param WC_Order $order Order.
-	 */
-	public function order_keys( $order ): void {
-		$licenses = $this->order_licenses( $order->get_id() );
-		if ( $licenses ) {
-			$this->render_keys( $licenses, false );
-		}
-	}
-
-	/**
-	 * Print keys.
-	 *
-	 * @param array[] $licenses Licenses.
-	 * @param bool    $email    Inline styles for email.
-	 */
-	private function render_keys( array $licenses, bool $email ): void {
-		$style = $email ? 'font-family:monospace;font-size:15px;padding:10px 12px;background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;display:inline-block;' : '';
-		echo '<h2>' . esc_html__( 'Your SubtleForms Pro license', 'subtleforms-license-server' ) . '</h2>';
-		foreach ( $licenses as $lic ) {
-			echo '<p><code class="sfls-key" style="' . esc_attr( $style ) . '">' . esc_html( $lic['license_key'] ) . '</code><br><small>' . esc_html(
-				sprintf(
-					/* translators: 1: plan, 2: expiry date */
-					__( '%1$s plan · renews %2$s', 'subtleforms-license-server' ),
-					SFLS_Plans::label( $lic['plan'] ),
-					$lic['expires_at'] ? wp_date( get_option( 'date_format' ), strtotime( $lic['expires_at'] . ' UTC' ) ) : __( 'never', 'subtleforms-license-server' )
-				)
-			) . '</small></p>';
-		}
-		echo '<p>' . esc_html__( 'In WordPress, open SubtleForms › Settings › License and click Connect account, or paste the key and click Activate.', 'subtleforms-license-server' ) . '</p>';
+		return array_values( $out );
 	}
 }

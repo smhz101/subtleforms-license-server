@@ -110,6 +110,7 @@ final class SFLS_Licenses {
 	public static function delete( int $id ): void {
 		global $wpdb;
 		$wpdb->delete( SFLS_DB::activations(), array( 'license_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->delete( SFLS_DB::activation_log(), array( 'license_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->delete( SFLS_DB::licenses(), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
@@ -241,9 +242,10 @@ final class SFLS_Licenses {
 	 * @param array  $lic     License.
 	 * @param string $domain  Normalised domain.
 	 * @param string $version Pro version reported by the site.
+	 * @param string $source  Where the request came from (api, connect, admin) for the log.
 	 * @return true|WP_Error WP_Error data carries the HTTP status.
 	 */
-	public static function activate_domain( array $lic, string $domain, string $version = '' ) {
+	public static function activate_domain( array $lic, string $domain, string $version = '', string $source = 'api' ) {
 		if ( '' === $domain ) {
 			return new WP_Error( 'missing_parameters', __( 'license_key and site_url are required.', 'subtleforms-license-server' ), array( 'status' => 400 ) );
 		}
@@ -277,6 +279,7 @@ final class SFLS_Licenses {
 			self::touch_activation( (int) $lic['id'], $domain, $version );
 		} else {
 			self::add_activation( (int) $lic['id'], $domain, $version );
+			self::log( (int) $lic['id'], $domain, 'activate', $source );
 			do_action( 'sfls_domain_activated', $lic, $domain, $version );
 		}
 
@@ -336,27 +339,82 @@ final class SFLS_Licenses {
 	 *
 	 * @param int    $license_id License ID.
 	 * @param string $domain     Domain.
+	 * @param string $source     Who removed it (api, account, admin) for the log.
 	 */
-	public static function remove_activation( int $license_id, string $domain ): void {
+	public static function remove_activation( int $license_id, string $domain, string $source = 'api' ): void {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->delete(
+		$deleted = $wpdb->delete(
 			SFLS_DB::activations(),
 			array(
 				'license_id' => $license_id,
 				'domain'     => $domain,
 			)
 		);
+		if ( $deleted ) {
+			self::log( $license_id, $domain, 'deactivate', $source );
+		}
 	}
 
 	/**
 	 * Remove every activation of a license.
 	 *
-	 * @param int $license_id License ID.
+	 * @param int    $license_id License ID.
+	 * @param string $source     Who removed them, for the log.
 	 */
-	public static function reset_activations( int $license_id ): void {
+	public static function reset_activations( int $license_id, string $source = 'admin' ): void {
+		foreach ( self::activations( $license_id ) as $act ) {
+			self::remove_activation( $license_id, (string) $act['domain'], $source );
+		}
+	}
+
+	// ── Activity log ────────────────────────────────────────────────────
+
+	/**
+	 * IP address of the current request ('' on the command line). Behind a
+	 * proxy or CDN, filter `sfls_client_ip` to read the forwarded address.
+	 */
+	public static function client_ip(): string {
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		$ip = (string) apply_filters( 'sfls_client_ip', $ip );
+		return false !== filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
+	}
+
+	/**
+	 * Record an activation or deactivation.
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $domain     Domain.
+	 * @param string $event      activate | deactivate.
+	 * @param string $source     api | connect | account | admin | cli.
+	 */
+	public static function log( int $license_id, string $domain, string $event, string $source = '' ): void {
 		global $wpdb;
-		$wpdb->delete( SFLS_DB::activations(), array( 'license_id' => $license_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert(
+			SFLS_DB::activation_log(),
+			array(
+				'license_id' => $license_id,
+				'domain'     => substr( $domain, 0, 190 ),
+				'event'      => sanitize_key( $event ),
+				'source'     => sanitize_key( ( defined( 'WP_CLI' ) && WP_CLI && 'api' === $source ) ? 'cli' : $source ),
+				'ip'         => self::client_ip(),
+				'created_at' => current_time( 'mysql', true ),
+			)
+		);
+	}
+
+	/**
+	 * Log entries of a license, newest first.
+	 *
+	 * @param int $license_id License ID.
+	 * @param int $limit      Max rows.
+	 * @return array[]
+	 */
+	public static function log_entries( int $license_id, int $limit = 50 ): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_activation_log WHERE license_id = %d ORDER BY id DESC LIMIT %d", $license_id, $limit ), ARRAY_A );
 	}
 
 	// ── Domains ─────────────────────────────────────────────────────────
@@ -492,9 +550,13 @@ final class SFLS_Licenses {
 	/**
 	 * The payload SubtleForms Pro stores for a license.
 	 *
-	 * @param array $lic License.
+	 * `is_local` tells the requesting site whether it is recognised as a local or
+	 * staging site that does not use a seat.
+	 *
+	 * @param array  $lic    License.
+	 * @param string $domain Normalised domain of the requesting site ('' when unknown).
 	 */
-	public static function payload( array $lic ): array {
+	public static function payload( array $lic, string $domain = '' ): array {
 		$state = self::state( $lic );
 		$limit = (int) $lic['sites_allowed'];
 		return array(
@@ -507,58 +569,117 @@ final class SFLS_Licenses {
 			'sites_allowed'        => $limit,
 			'sites_used'           => self::used_slots( (int) $lic['id'] ),
 			'check_again_in'       => 12 * HOUR_IN_SECONDS,
+			'is_local'             => '' !== $domain && self::is_local_domain( $domain ),
 		);
 	}
 
 	// ── Admin queries ───────────────────────────────────────────────────
 
 	/**
-	 * Search licenses for the admin list.
+	 * Search licenses for the admin list and the CSV export.
 	 *
-	 * @param string $search Key or email fragment.
-	 * @param string $filter '', active, expiring, expired, suspended.
-	 * @param int    $per    Rows per page.
-	 * @param int    $offset Offset.
+	 * @param array $args {
+	 *     @type string $search Key, email or activated domain fragment.
+	 *     @type string $status '', active, expiring (in 30 days), expired, suspended.
+	 *     @type string $plan   Plan slug or ''.
+	 *     @type int    $per    Rows per page (0 = all).
+	 *     @type int    $offset Offset.
+	 * }
 	 * @return array{0:array[],1:int} Rows and total.
 	 */
-	public static function query( string $search, string $filter, int $per, int $offset ): array {
+	public static function query( array $args ): array {
 		global $wpdb;
+		$search = trim( (string) ( $args['search'] ?? '' ) );
+		$status = (string) ( $args['status'] ?? '' );
+		$plan   = sanitize_key( (string) ( $args['plan'] ?? '' ) );
+		$per    = max( 0, (int) ( $args['per'] ?? 20 ) );
+		$offset = max( 0, (int) ( $args['offset'] ?? 0 ) );
+
 		$like = '' === $search ? '' : '%' . $wpdb->esc_like( $search ) . '%';
 		$now  = current_time( 'mysql', true );
 		$soon = gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS );
-		$args = array( $like, $like, $like, $filter, $filter, $now, $filter, $now, $soon, $filter, $now, $filter );
+		$vals = array( $like, $like, $like, $like, $plan, $plan, $status, $status, $now, $status, $now, $soon, $status, $now, $status );
+		$per  = $per > 0 ? $per : 1000000; // 0 = everything (CSV export).
 
 		// The replacements are passed as one array, which the placeholder-count sniff cannot read.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
 		$rows  = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$wpdb->prefix}sfls_licenses
-				WHERE ( %s = '' OR license_key LIKE %s OR customer_email LIKE %s )
+				"SELECT l.* FROM {$wpdb->prefix}sfls_licenses l
+				WHERE ( %s = '' OR l.license_key LIKE %s OR l.customer_email LIKE %s
+					OR EXISTS ( SELECT 1 FROM {$wpdb->prefix}sfls_activations a WHERE a.license_id = l.id AND a.domain LIKE %s ) )
+				AND ( %s = '' OR l.plan = %s )
 				AND ( %s = ''
-					OR ( %s = 'active' AND status = 'active' AND ( expires_at IS NULL OR expires_at > %s ) )
-					OR ( %s = 'expiring' AND status = 'active' AND expires_at > %s AND expires_at <= %s )
-					OR ( %s = 'expired' AND status = 'active' AND expires_at <= %s )
-					OR ( %s = 'suspended' AND status IN ( 'suspended', 'refunded' ) ) )
-				ORDER BY id DESC LIMIT %d OFFSET %d",
-				array_merge( $args, array( $per, $offset ) )
+					OR ( %s = 'active' AND l.status = 'active' AND ( l.expires_at IS NULL OR l.expires_at > %s ) )
+					OR ( %s = 'expiring' AND l.status = 'active' AND l.expires_at > %s AND l.expires_at <= %s )
+					OR ( %s = 'expired' AND l.status = 'active' AND l.expires_at <= %s )
+					OR ( %s = 'suspended' AND l.status IN ( 'suspended', 'refunded' ) ) )
+				ORDER BY l.id DESC LIMIT %d OFFSET %d",
+				array_merge( $vals, array( $per, $offset ) )
 			),
 			ARRAY_A
 		);
 		$total = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->prefix}sfls_licenses
-				WHERE ( %s = '' OR license_key LIKE %s OR customer_email LIKE %s )
+				"SELECT COUNT(*) FROM {$wpdb->prefix}sfls_licenses l
+				WHERE ( %s = '' OR l.license_key LIKE %s OR l.customer_email LIKE %s
+					OR EXISTS ( SELECT 1 FROM {$wpdb->prefix}sfls_activations a WHERE a.license_id = l.id AND a.domain LIKE %s ) )
+				AND ( %s = '' OR l.plan = %s )
 				AND ( %s = ''
-					OR ( %s = 'active' AND status = 'active' AND ( expires_at IS NULL OR expires_at > %s ) )
-					OR ( %s = 'expiring' AND status = 'active' AND expires_at > %s AND expires_at <= %s )
-					OR ( %s = 'expired' AND status = 'active' AND expires_at <= %s )
-					OR ( %s = 'suspended' AND status IN ( 'suspended', 'refunded' ) ) )",
-				$args
+					OR ( %s = 'active' AND l.status = 'active' AND ( l.expires_at IS NULL OR l.expires_at > %s ) )
+					OR ( %s = 'expiring' AND l.status = 'active' AND l.expires_at > %s AND l.expires_at <= %s )
+					OR ( %s = 'expired' AND l.status = 'active' AND l.expires_at <= %s )
+					OR ( %s = 'suspended' AND l.status IN ( 'suspended', 'refunded' ) ) )",
+				$vals
 			)
 		);
 		// phpcs:enable
 
 		return array( (array) $rows, $total );
+	}
+
+	/**
+	 * Rows for the CSV export, one per license.
+	 *
+	 * @param array[] $licenses Licenses.
+	 * @return array[] First row is the header.
+	 */
+	public static function csv_rows( array $licenses ): array {
+		$out = array( array( 'id', 'license_key', 'plan', 'status', 'sites_allowed', 'sites_used', 'domains', 'customer_email', 'user_id', 'order_id', 'expires_at', 'created_at' ) );
+		foreach ( $licenses as $lic ) {
+			$domains = wp_list_pluck( self::activations( (int) $lic['id'] ), 'domain' );
+			$out[]   = array(
+				(int) $lic['id'],
+				(string) $lic['license_key'],
+				(string) $lic['plan'],
+				self::state( $lic )['status'],
+				(int) $lic['sites_allowed'],
+				self::used_slots( (int) $lic['id'] ),
+				implode( ' ', $domains ),
+				(string) $lic['customer_email'],
+				(int) $lic['user_id'],
+				(int) $lic['order_id'],
+				(string) ( $lic['expires_at'] ?? '' ),
+				(string) $lic['created_at'],
+			);
+		}
+		return array_map( array( self::class, 'csv_safe_row' ), $out );
+	}
+
+	/**
+	 * Neutralise spreadsheet formulas (=, +, -, @) in CSV cells.
+	 *
+	 * @param array $row Cells.
+	 * @return array
+	 */
+	public static function csv_safe_row( array $row ): array {
+		return array_map(
+			static function ( $cell ) {
+				$cell = (string) $cell;
+				return ( '' !== $cell && in_array( $cell[0], array( '=', '+', '-', '@', "\t", "\r" ), true ) ) ? "'" . $cell : $cell;
+			},
+			$row
+		);
 	}
 
 	/**

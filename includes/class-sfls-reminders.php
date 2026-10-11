@@ -24,6 +24,7 @@ final class SFLS_Reminders {
 	 */
 	public function register(): void {
 		add_action( self::HOOK, array( self::class, 'run' ) );
+		add_action( self::HOOK, array( 'SFLS_Releases', 'purge_tokens' ) );
 		add_action( 'init', array( self::class, 'schedule' ) );
 	}
 
@@ -146,9 +147,14 @@ final class SFLS_Reminders {
 	 * @param array  $lic   License.
 	 * @param string $stage before | lapsed.
 	 * @param int    $left  Days left.
+	 * @param string $to    Recipient override (test sends).
+	 * @param string $name  First name override.
+	 * @param bool   $test  Mark the email as a test.
 	 */
-	public static function send( array $lic, string $stage, int $left ): bool {
-		[ $to, $name ] = self::recipient( $lic );
+	public static function send( array $lic, string $stage, int $left, string $to = '', string $name = '', bool $test = false ): bool {
+		if ( '' === $to ) {
+			[ $to, $name ] = self::recipient( $lic );
+		}
 		if ( '' === $to ) {
 			return false;
 		}
@@ -197,19 +203,62 @@ final class SFLS_Reminders {
 			)
 		) . '</p>';
 
-		$headers = array( 'Reply-To: ' . SFLS_Settings::support_email() );
-
-		if ( function_exists( 'WC' ) && WC()->mailer() ) {
-			$mailer = WC()->mailer();
-			$html   = $mailer->wrap_message( $heading, $body );
-			$ok     = (bool) $mailer->send( $to, $subject, $html, $headers );
-		} else {
-			$html      = '<!doctype html><html><body style="margin:0;padding:24px;background:#f6f7f7;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;color:#1e1e1e;font-size:15px;line-height:1.5;"><div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e5e5;border-radius:8px;padding:28px;"><h1 style="font-size:20px;margin:0 0 16px;">' . esc_html( $heading ) . '</h1>' . $body . '<p style="color:#757575;font-size:13px;margin-top:24px;">' . esc_html( $site ) . '</p></div></body></html>';
-			$headers[] = 'Content-Type: text/html; charset=UTF-8';
-			$ok        = wp_mail( $to, $subject, $html, $headers );
+		if ( $test ) {
+			/* translators: %s: email subject */
+			$subject = sprintf( __( '[Test] %s', 'subtleforms-license-server' ), $subject );
+			$body    = '<p style="padding:10px 12px;background:#fcf9e8;border:1px solid #f0e6b4;border-radius:4px;">' . esc_html__( 'This is a test of the renewal reminder. The license shown is an example and no customer received this email.', 'subtleforms-license-server' ) . '</p>' . $body;
 		}
 
-		do_action( 'sfls_reminder_sent', $lic, $stage, $ok );
+		$support   = SFLS_Settings::support_email();
+		$site_name = str_replace( array( '"', "\r", "\n" ), '', $site );
+		$headers   = array( 'Reply-To: "' . $site_name . '" <' . $support . '>' );
+
+		$ok = (bool) SFLS_Delivery::as_license_mail(
+			static function () use ( $to, $subject, $heading, $body, $headers, $site, $site_name, $support ) {
+				if ( function_exists( 'WC' ) && WC()->mailer() ) {
+					$mailer = WC()->mailer();
+					$html   = $mailer->wrap_message( $heading, $body );
+					return (bool) $mailer->send( $to, $subject, $html, $headers );
+				}
+				$html      = '<!doctype html><html><body style="margin:0;padding:24px;background:#f6f7f7;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;color:#1e1e1e;font-size:15px;line-height:1.5;"><div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e5e5;border-radius:8px;padding:28px;"><h1 style="font-size:20px;margin:0 0 16px;">' . esc_html( $heading ) . '</h1>' . $body . '<p style="color:#757575;font-size:13px;margin-top:24px;">' . esc_html( $site ) . '</p></div></body></html>';
+				$headers[] = 'Content-Type: text/html; charset=UTF-8';
+				if ( SFLS_Settings::support_email_on_site_domain() ) {
+					$headers[] = 'From: "' . $site_name . '" <' . $support . '>';
+				}
+				return wp_mail( $to, $subject, $html, $headers );
+			}
+		);
+
+		if ( ! $test ) {
+			do_action( 'sfls_reminder_sent', $lic, $stage, $ok );
+		}
 		return $ok;
+	}
+
+	/**
+	 * Send an example reminder to an admin, without touching any license.
+	 *
+	 * @param string $to    Recipient.
+	 * @param string $stage before | lapsed.
+	 */
+	public static function send_test( string $to, string $stage = 'before' ): bool {
+		if ( ! is_email( $to ) ) {
+			return false;
+		}
+		$days = SFLS_Settings::reminder_days();
+		$left = 'lapsed' === $stage ? 0 : ( $days ? (int) min( $days ) : 7 );
+		$user = wp_get_current_user();
+		$lic  = array(
+			'id'             => 0,
+			'license_key'    => 'SFP-EXAMPLE0-00000000-00000000-12345678',
+			'plan'           => 'pro',
+			'status'         => 'active',
+			'sites_allowed'  => (int) ( SFLS_Plans::get( 'pro' )['sites'] ?? 5 ),
+			'customer_email' => $to,
+			'user_id'        => 0,
+			'expires_at'     => gmdate( 'Y-m-d H:i:s', time() + ( 'lapsed' === $stage ? -DAY_IN_SECONDS : $left * DAY_IN_SECONDS ) ),
+		);
+		$name = $user->ID ? ( $user->first_name ? $user->first_name : $user->display_name ) : '';
+		return self::send( $lic, $stage, $left, $to, (string) $name, true );
 	}
 }

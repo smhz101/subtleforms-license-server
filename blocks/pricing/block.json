@@ -1,0 +1,26 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "sfls/pricing",
+	"version": "1.3.0",
+	"title": "SubtleForms Pro pricing",
+	"category": "widgets",
+	"icon": "money-alt",
+	"description": "Pricing cards for the SubtleForms Pro plans with Buy buttons that go straight to checkout.",
+	"keywords": [ "pricing", "plans", "license", "buy" ],
+	"textdomain": "subtleforms-license-server",
+	"attributes": {
+		"popular": { "type": "string", "default": "pro" },
+		"period": { "type": "string", "enum": [ "yearly", "lifetime" ], "default": "yearly" },
+		"showRenewalNote": { "type": "boolean", "default": true },
+		"buttonLabel": { "type": "string", "default": "" },
+		"lifetimeButtonLabel": { "type": "string", "default": "" }
+	},
+	"supports": {
+		"html": false,
+		"align": [ "wide", "full" ],
+		"spacing": { "margin": true, "padding": true }
+	},
+	"editorScript": "sfls-blocks-editor",
+	"style": "sfls-front"
+}

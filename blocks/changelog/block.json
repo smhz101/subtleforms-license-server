@@ -1,0 +1,22 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "sfls/changelog",
+	"version": "1.3.0",
+	"title": "SubtleForms Pro changelog",
+	"category": "widgets",
+	"icon": "list-view",
+	"description": "Every SubtleForms Pro release with its date and changes, newest first.",
+	"keywords": [ "changelog", "releases", "versions" ],
+	"textdomain": "subtleforms-license-server",
+	"attributes": {
+		"limit": { "type": "number", "default": 0 }
+	},
+	"supports": {
+		"html": false,
+		"align": [ "wide" ],
+		"spacing": { "margin": true }
+	},
+	"editorScript": "sfls-blocks-editor",
+	"style": "sfls-front"
+}

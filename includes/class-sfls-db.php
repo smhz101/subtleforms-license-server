@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '2';
+	const SCHEMA_VERSION = '3';
 
 	/**
 	 * Licenses table name.
@@ -31,6 +31,22 @@ final class SFLS_DB {
 	}
 
 	/**
+	 * Activation log table name.
+	 */
+	public static function activation_log(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_activation_log';
+	}
+
+	/**
+	 * Used download tokens table name.
+	 */
+	public static function download_tokens(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_download_tokens';
+	}
+
+	/**
 	 * Create or upgrade the tables and the private release folder.
 	 */
 	public static function install(): void {
@@ -40,6 +56,8 @@ final class SFLS_DB {
 		$charset  = $wpdb->get_charset_collate();
 		$licenses = self::licenses();
 		$acts     = self::activations();
+		$log      = self::activation_log();
+		$tokens   = self::download_tokens();
 
 		dbDelta(
 			"CREATE TABLE {$licenses} (
@@ -80,6 +98,32 @@ final class SFLS_DB {
 ) {$charset};"
 		);
 
+		// Schema 3 (1.3.0): who activated or deactivated which site, from where.
+		dbDelta(
+			"CREATE TABLE {$log} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  license_id bigint(20) unsigned NOT NULL,
+  domain varchar(190) NOT NULL,
+  event varchar(20) NOT NULL,
+  source varchar(20) NOT NULL DEFAULT '',
+  ip varchar(45) NOT NULL DEFAULT '',
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY license_id (license_id),
+  KEY created_at (created_at)
+) {$charset};"
+		);
+
+		// Schema 3 (1.3.0): signed download links that were already used.
+		dbDelta(
+			"CREATE TABLE {$tokens} (
+  token char(32) NOT NULL,
+  used_at datetime NOT NULL,
+  PRIMARY KEY  (token),
+  KEY used_at (used_at)
+) {$charset};"
+		);
+
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
 
 		// Private folder for release packages.
@@ -106,6 +150,7 @@ final class SFLS_DB {
 		if ( get_option( 'sfls_version' ) !== SFLS_VERSION ) {
 			update_option( 'sfls_version', SFLS_VERSION );
 			update_option( 'sfls_flush_rewrite', 1 );
+			SFLS_Settings::maybe_default_support_email();
 		}
 	}
 }

@@ -61,6 +61,9 @@ final class SFLS_Account {
 	 * @return array
 	 */
 	public function menu_items( $items ) {
+		if ( SFLS_Settings::simplify_account() && is_user_logged_in() && self::license_only_customer( get_current_user_id() ) ) {
+			unset( $items['edit-address'], $items['downloads'] );
+		}
 		$new = array();
 		foreach ( $items as $key => $label ) {
 			$new[ $key ] = $label;
@@ -98,6 +101,37 @@ final class SFLS_Account {
 	// ── Helpers ─────────────────────────────────────────────────────────
 
 	/**
+	 * Whether every order of a customer contains only license products (true
+	 * for customers without orders). Addresses and WooCommerce downloads mean
+	 * nothing to them, so those tabs are hidden.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	public static function license_only_customer( int $user_id ): bool {
+		static $cache = array();
+		if ( isset( $cache[ $user_id ] ) ) {
+			return $cache[ $user_id ];
+		}
+		$only   = true;
+		$orders = function_exists( 'wc_get_orders' ) ? wc_get_orders(
+			array(
+				'customer_id' => $user_id,
+				'limit'       => 200,
+				'status'      => array_keys( wc_get_order_statuses() ),
+				'return'      => 'objects',
+			)
+		) : array();
+		foreach ( (array) $orders as $order ) {
+			if ( $order instanceof WC_Order && SFLS_Woo::order_mix( $order )['other'] > 0 ) {
+				$only = false;
+				break;
+			}
+		}
+		$cache[ $user_id ] = (bool) apply_filters( 'sfls_license_only_customer', $only, $user_id );
+		return $cache[ $user_id ];
+	}
+
+	/**
 	 * Whether the user has at least one license that may download Pro.
 	 *
 	 * @param WP_User $user User.
@@ -109,6 +143,14 @@ final class SFLS_Account {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Latest Pro version for display, "Coming soon" before the first release.
+	 */
+	public static function latest_version_label(): string {
+		$version = (string) SFLS_Releases::current()['version'];
+		return '' !== $version ? $version : __( 'Coming soon', 'subtleforms-license-server' );
 	}
 
 	/**
@@ -197,8 +239,19 @@ final class SFLS_Account {
 
 		echo '<p class="sfls-intro">' . esc_html__( 'Connect a site from SubtleForms › Settings › License in WordPress, or paste the key there. Local and staging sites never count towards your limit.', 'subtleforms-license-server' ) . '</p>';
 
+		$any_valid = false;
 		foreach ( $licenses as $lic ) {
 			$this->license_card( $lic, $release );
+			$any_valid = $any_valid || SFLS_Licenses::state( $lic )['valid'];
+		}
+
+		if ( $any_valid ) {
+			echo '<article class="sfls-card sfls-install-card">';
+			echo wp_kses_post( SFLS_Delivery::steps_html() );
+			if ( ! SFLS_Releases::has_package() ) {
+				echo '<p class="sfls-muted">' . esc_html__( 'The Pro download appears here as soon as the first release is published.', 'subtleforms-license-server' ) . '</p>';
+			}
+			echo '</article>';
 		}
 		echo '</div>';
 	}
@@ -221,21 +274,32 @@ final class SFLS_Account {
 		echo '<header class="sfls-license-head"><div class="sfls-license-title"><h3>' . esc_html( SFLS_Plans::label( $lic['plan'] ) ) . '</h3>';
 		echo wp_kses_post( SFLS_Connect::pill( $state['status'] ) );
 		echo '</div><div class="sfls-license-actions">';
+		if ( $state['valid'] && SFLS_Releases::has_package() ) {
+			echo '<a class="sfls-btn sfls-btn--primary sfls-btn--sm" href="' . esc_url( self::download_url() ) . '">';
+			self::print_icon( 'download' );
+			echo esc_html__( 'Download Pro', 'subtleforms-license-server' ) . '</a>';
+		}
 		if ( $renew && 'suspended' !== $state['status'] ) {
 			echo '<a class="sfls-btn sfls-btn--' . ( 'valid' === $state['status'] ? 'secondary' : 'primary' ) . ' sfls-btn--sm" href="' . esc_url( $renew ) . '">';
 			self::print_icon( 'refresh' );
 			echo esc_html__( 'Renew', 'subtleforms-license-server' ) . '</a>';
 		}
 		foreach ( $upgrades as $plan => $row ) {
-			echo '<a class="sfls-btn sfls-btn--secondary sfls-btn--sm" href="' . esc_url( SFLS_Products::upgrade_url( $lic, $plan ) ) . '">';
+			$quote = SFLS_Upgrades::quote( $lic, (int) $row['id'] );
+			$title = $quote ? sprintf(
+				/* translators: 1: plan name, 2: price */
+				__( 'Upgrade to %1$s for %2$s today. Same key, more sites.', 'subtleforms-license-server' ),
+				SFLS_Plans::label( $plan ),
+				SFLS_Upgrades::plain_price( $quote['charge'] )
+			) : '';
+			echo '<a class="sfls-btn sfls-btn--secondary sfls-btn--sm" href="' . esc_url( SFLS_Products::upgrade_url( $lic, $plan ) ) . '" title="' . esc_attr( $title ) . '">';
 			self::print_icon( 'up' );
 			/* translators: %s: plan name */
-			echo esc_html( sprintf( __( 'Upgrade to %s', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) ) ) . '</a>';
-		}
-		if ( $state['valid'] && SFLS_Releases::has_package() ) {
-			echo '<a class="sfls-btn sfls-btn--secondary sfls-btn--sm" href="' . esc_url( self::download_url() ) . '">';
-			self::print_icon( 'download' );
-			echo esc_html__( 'Download Pro', 'subtleforms-license-server' ) . '</a>';
+			echo esc_html( sprintf( __( 'Upgrade to %s', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) ) );
+			if ( $quote ) {
+				echo ' <span class="sfls-btn-note">' . esc_html( SFLS_Upgrades::plain_price( $quote['charge'] ) ) . '</span>';
+			}
+			echo '</a>';
 		}
 		echo '</div></header>';
 
@@ -328,7 +392,7 @@ final class SFLS_Account {
 			exit;
 		}
 		$domain = SFLS_Licenses::normalize_domain( sanitize_text_field( wp_unslash( $_GET['domain'] ?? '' ) ) );
-		SFLS_Licenses::remove_activation( $id, $domain );
+		SFLS_Licenses::remove_activation( $id, $domain, 'account' );
 		/* translators: %s: domain */
 		wc_add_notice( sprintf( __( '%s was disconnected. You can use the key on another site now.', 'subtleforms-license-server' ), $domain ) );
 		wp_safe_redirect( $back . '#license-' . $id );
@@ -474,7 +538,7 @@ final class SFLS_Account {
 		}
 		echo '<div class="sfls-tile"><span class="sfls-tile-label">' . esc_html__( 'Next renewal', 'subtleforms-license-server' ) . '</span><span class="sfls-tile-value">' . esc_html( $value ) . '</span></div>';
 
-		echo '<div class="sfls-tile"><span class="sfls-tile-label">' . esc_html__( 'Latest Pro version', 'subtleforms-license-server' ) . '</span><span class="sfls-tile-value">' . esc_html( $release['version'] ? $release['version'] : '–' ) . '</span>';
+		echo '<div class="sfls-tile"><span class="sfls-tile-label">' . esc_html__( 'Latest Pro version', 'subtleforms-license-server' ) . '</span><span class="sfls-tile-value">' . esc_html( self::latest_version_label() ) . '</span>';
 		if ( $active && $release['version'] && SFLS_Releases::has_package() ) {
 			echo '<a class="sfls-tile-link" href="' . esc_url( self::download_url() ) . '">';
 			self::print_icon( 'download' );

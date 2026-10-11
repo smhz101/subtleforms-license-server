@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -17,10 +17,33 @@ Private plugin for subtleforms.com. See README.md for setup.
 * One-click account connection for SubtleForms Pro (/connect-site/).
 * WooCommerce My Account: Licenses dashboard, Pro downloads and a summary on the account dashboard.
 * Licenses › Products creates every license product from one form.
-* Pricing, changelog and latest-version shortcodes for the marketing site.
-* Renewal reminder emails, renew and upgrade from the account.
+* Pricing, changelog, latest version and account link blocks (and shortcodes) for the marketing site.
+* Renewal reminder emails, renew and prorated upgrades from the account.
+* Rate-limited license API with an activation log and single-use download links.
 
 == Changelog ==
+
+= 1.3.0 - 2026-10-11 =
+* Fixed: paid license orders now complete on their own. When every item in an order is a license product, payment moves it straight to Completed, whether or not the products are marked downloadable. Paid orders that also contain other items issue their keys at Processing. An order never issues keys twice.
+* Fixed: the cart holds one plan at a time. A Buy button replaces any other plan in the cart, adding a license another way swaps it with the notice "You can buy one plan at a time. We swapped your cart to (plan).", and the checkout order summary has a Change plan link to the pricing page.
+* Fixed: every plan feature has a label, so the Products screen no longer shows stray commas.
+* Fixed: before the first Pro release, the latest version shortcode and the My Account dashboard say Coming soon, and every Licenses screen in wp-admin warns that customers cannot download Pro yet.
+* Fixed: the support email defaults to support@ your site domain on activation instead of the admin's own address, the Settings screen warns when it is a Gmail, Outlook or Yahoo address, and it is the Reply-To (and the From address when it is on your domain) of every license email.
+* New: My Account hides the Addresses and Downloads tabs for customers whose orders only contain licenses. Turn it off in Licenses › Settings.
+* New: checkout asks only for name, email and country when the cart holds only licenses, in the Checkout block and the classic checkout. Turn it off in Licenses › Settings.
+* New: each active license in My Account › Licenses has a Download Pro button, and the page shows three steps to install Pro.
+* New: the order received page and the order emails show the license key, a Download Pro button and the three install steps.
+* Changed: upgrading from My Account charges only the difference between the plans for the time left on the license, keeps the same key and renewal date, raises the site limit and features at once and adds an order note.
+* New: Licenses › Products shows which WooCommerce product each price belongs to, with a link and a Published, Draft or Missing status. Saving never creates a second product.
+* New: Pro releases read Version, Requires at least, Tested up to and Requires PHP from the uploaded zip, check that it contains subtleforms-pro/subtleforms-pro.php, and refuse a version lower than the current one.
+* New: the licenses list filters by plan, status and expiry within 30 days, searches by key, email or site domain, and exports the results as CSV.
+* New: Send test reminder in Licenses › Settings emails an example renewal reminder to you without touching any license.
+* New: Pricing, Changelog and Latest version blocks with settings for the highlighted plan, renewal note, yearly or lifetime first and button labels. The shortcodes keep working.
+* New: Account link block that shows Sign in to visitors and My licenses with the customer's avatar once they are signed in.
+* New: license activate, validate and status requests are limited to 30 per 10 minutes per IP and per key, and answer 429 with Retry-After when the limit is reached.
+* New: every activation and deactivation is logged with the site, IP address and time, and shown on the license screen.
+* Changed: signed update download links expire after 15 minutes and work only once. The update check now returns a package address that hands out a fresh link when the update is downloaded.
+* New: license responses include is_local, so SubtleForms Pro can tell customers when a site is recognised as staging and does not use a seat.
 
 = 1.2.0 - 2026-10-11 =
 * Pricing cards list each plan's real features: WooCommerce checkout and integrations on Pro, white label and translation on Agency, and the features every plan shares

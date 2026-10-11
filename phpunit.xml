@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!--
+	SubtleForms License Server integration tests.
+
+	They run inside a real WordPress + WooCommerce site (SFLS_WP_PATH, default
+	/home/claude/wp/site) with this plugin active, create their own users,
+	products, orders and licenses, and remove them again.
+
+	Run: SFLS_WP_PATH=/path/to/wordpress vendor/bin/phpunit -c phpunit.xml
+-->
+<phpunit
+	bootstrap="tests/bootstrap.php"
+	colors="true"
+	cacheResult="false"
+	beStrictAboutOutputDuringTests="false"
+	convertDeprecationsToExceptions="false"
+	verbose="true"
+>
+	<testsuites>
+		<testsuite name="integration">
+			<directory suffix="Test.php">tests/integration</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>

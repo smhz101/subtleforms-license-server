@@ -1,0 +1,28 @@
+/* Account link block: "Sign in" or avatar + "My licenses". */
+.wp-block-sfls-account-link {
+	display: flex;
+	align-items: center;
+	margin: 0;
+	line-height: 1.2;
+}
+.wp-block-sfls-account-link .sfls-account-link__link {
+	display: inline-flex;
+	align-items: center;
+	gap: .5em;
+	color: inherit;
+	text-decoration: none;
+	white-space: nowrap;
+}
+.wp-block-sfls-account-link .sfls-account-link__link:hover .sfls-account-link__label,
+.wp-block-sfls-account-link .sfls-account-link__link:focus-visible .sfls-account-link__label {
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+.wp-block-sfls-account-link .sfls-account-link__avatar {
+	display: block;
+	width: 1.6em;
+	height: 1.6em;
+	border-radius: 50%;
+	flex: none;
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, .08);
+}

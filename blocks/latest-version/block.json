@@ -1,0 +1,21 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "sfls/latest-version",
+	"version": "1.3.0",
+	"title": "SubtleForms Pro latest version",
+	"category": "widgets",
+	"icon": "tag",
+	"description": "The current SubtleForms Pro version number, or Coming soon before the first release.",
+	"keywords": [ "version", "release" ],
+	"textdomain": "subtleforms-license-server",
+	"attributes": {
+		"prefix": { "type": "string", "default": "" }
+	},
+	"supports": {
+		"html": false,
+		"color": { "text": true, "background": false },
+		"typography": { "fontSize": true }
+	},
+	"editorScript": "sfls-blocks-editor"
+}

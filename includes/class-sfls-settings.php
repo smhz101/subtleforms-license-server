@@ -19,10 +19,12 @@ final class SFLS_Settings {
 	 */
 	public static function defaults(): array {
 		return array(
-			'pricing_url'     => '',
-			'reminder_days'   => '30,7',
-			'lapsed_reminder' => 1,
-			'support_email'   => '',
+			'pricing_url'      => '',
+			'reminder_days'    => '30,7',
+			'lapsed_reminder'  => 1,
+			'support_email'    => '',
+			'simplify_account' => 1,
+			'simple_checkout'  => 1,
 		);
 	}
 
@@ -54,10 +56,12 @@ final class SFLS_Settings {
 		update_option(
 			self::OPTION,
 			array(
-				'pricing_url'     => esc_url_raw( (string) ( $input['pricing_url'] ?? '' ) ),
-				'reminder_days'   => implode( ',', array_slice( $days, 0, 10 ) ),
-				'lapsed_reminder' => empty( $input['lapsed_reminder'] ) ? 0 : 1,
-				'support_email'   => sanitize_email( (string) ( $input['support_email'] ?? '' ) ),
+				'pricing_url'      => esc_url_raw( (string) ( $input['pricing_url'] ?? '' ) ),
+				'reminder_days'    => implode( ',', array_slice( $days, 0, 10 ) ),
+				'lapsed_reminder'  => empty( $input['lapsed_reminder'] ) ? 0 : 1,
+				'support_email'    => sanitize_email( (string) ( $input['support_email'] ?? '' ) ),
+				'simplify_account' => empty( $input['simplify_account'] ) ? 0 : 1,
+				'simple_checkout'  => empty( $input['simple_checkout'] ) ? 0 : 1,
 			)
 		);
 	}
@@ -87,5 +91,97 @@ final class SFLS_Settings {
 	public static function support_email(): string {
 		$email = (string) self::get( 'support_email' );
 		return is_email( $email ) ? $email : (string) get_option( 'admin_email' );
+	}
+
+	/**
+	 * Bare site domain without "www.", e.g. subtleforms.com.
+	 */
+	public static function site_domain(): string {
+		$host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+		return (string) preg_replace( '/^www\./', '', strtolower( $host ) );
+	}
+
+	/**
+	 * The address a fresh install should use for support: support@{site domain}.
+	 * Returns '' when that is not a valid address (for example on localhost) or
+	 * when it is the same as the admin email anyway.
+	 */
+	public static function default_support_email(): string {
+		$email = 'support@' . self::site_domain();
+		if ( ! is_email( $email ) || 0 === strcasecmp( $email, (string) get_option( 'admin_email' ) ) ) {
+			return '';
+		}
+		return $email;
+	}
+
+	/**
+	 * Fill in the support email on activation (or the first upgrade to 1.3.0)
+	 * so customers do not see the site admin's personal address.
+	 */
+	public static function maybe_default_support_email(): void {
+		$all = self::all();
+		if ( '' !== (string) $all['support_email'] ) {
+			return;
+		}
+		$default = self::default_support_email();
+		if ( '' === $default ) {
+			return;
+		}
+		$all['support_email'] = $default;
+		update_option( self::OPTION, $all );
+	}
+
+	/**
+	 * Free mail domains that should not be a business support address.
+	 *
+	 * @return string[]
+	 */
+	public static function free_mail_domains(): array {
+		return (array) apply_filters(
+			'sfls_free_mail_domains',
+			array( 'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'ymail.com', 'aol.com', 'icloud.com', 'me.com', 'proton.me', 'protonmail.com', 'gmx.com', 'mail.com' )
+		);
+	}
+
+	/**
+	 * Whether an address is on a free mail service (gmail, outlook, yahoo, ...).
+	 *
+	 * @param string $email Address.
+	 */
+	public static function is_free_mail( string $email ): bool {
+		$domain = strtolower( (string) substr( strrchr( $email, '@' ), 1 ) );
+		if ( '' === $domain ) {
+			return false;
+		}
+		if ( in_array( $domain, self::free_mail_domains(), true ) ) {
+			return true;
+		}
+		// Regional variants such as yahoo.co.uk, outlook.de, hotmail.fr.
+		return (bool) preg_match( '/^(yahoo|outlook|hotmail|live)\.[a-z.]+$/', $domain );
+	}
+
+	/**
+	 * Whether the support address is on this site's own domain, so it can be
+	 * used as the From address without failing SPF/DMARC.
+	 */
+	public static function support_email_on_site_domain(): bool {
+		$email  = self::support_email();
+		$domain = strtolower( (string) substr( strrchr( $email, '@' ), 1 ) );
+		$site   = self::site_domain();
+		return '' !== $domain && ( $domain === $site || str_ends_with( $site, '.' . $domain ) || str_ends_with( $domain, '.' . $site ) );
+	}
+
+	/**
+	 * Simplified My Account for license-only customers.
+	 */
+	public static function simplify_account(): bool {
+		return (bool) self::get( 'simplify_account' );
+	}
+
+	/**
+	 * Name, email and country only at checkout for license-only carts.
+	 */
+	public static function simple_checkout(): bool {
+		return (bool) self::get( 'simple_checkout' );
 	}
 }

@@ -1,7 +1,7 @@
 <?php
 /**
- * Pro releases: the current package, older packages and short-lived signed
- * download links.
+ * Pro releases: the current package, older packages and short-lived,
+ * single-use signed download links.
  *
  * @package SFLS
  */
@@ -189,19 +189,32 @@ final class SFLS_Releases {
 	}
 
 	/**
-	 * Signed URL valid for one hour, bound to a license key and domain.
+	 * How long a signed download link works.
+	 */
+	const LINK_TTL = 15 * MINUTE_IN_SECONDS;
+
+	/**
+	 * The plugin file every release zip must contain.
+	 */
+	const MAIN_FILE = 'subtleforms-pro/subtleforms-pro.php';
+
+	/**
+	 * Signed download URL: valid for 15 minutes, works once, bound to a
+	 * license key and domain.
 	 *
 	 * @param string $key    License key.
 	 * @param string $domain Domain.
 	 */
 	public static function signed_url( string $key, string $domain ): string {
-		$expires = time() + HOUR_IN_SECONDS;
-		$sig     = self::sign( $key, $domain, $expires );
+		$expires = time() + self::LINK_TTL;
+		$token   = bin2hex( random_bytes( 16 ) );
+		$sig     = self::sign( $key, $domain, $expires, $token );
 		return add_query_arg(
 			array(
 				'license_key' => rawurlencode( $key ),
 				'site'        => rawurlencode( $domain ),
 				'expires'     => $expires,
+				'token'       => $token,
 				'sig'         => $sig,
 			),
 			rest_url( 'sfls/v1/update/download' )
@@ -214,20 +227,167 @@ final class SFLS_Releases {
 	 * @param string $key     License key.
 	 * @param string $domain  Domain.
 	 * @param int    $expires Expiry timestamp.
+	 * @param string $token   One-time token.
 	 */
-	public static function sign( string $key, string $domain, int $expires ): string {
-		return hash_hmac( 'sha256', strtoupper( $key ) . '|' . $domain . '|' . $expires, wp_salt( 'auth' ) . 'subtleforms-license-server' );
+	public static function sign( string $key, string $domain, int $expires, string $token = '' ): string {
+		return hash_hmac( 'sha256', strtoupper( $key ) . '|' . $domain . '|' . $expires . '|' . $token, wp_salt( 'auth' ) . 'subtleforms-license-server' );
 	}
 
 	/**
-	 * Check a download link signature.
+	 * Check a download link signature and expiry (does not use it up).
 	 *
 	 * @param string $key     License key.
 	 * @param string $domain  Domain.
 	 * @param int    $expires Expiry timestamp.
 	 * @param string $sig     Signature.
+	 * @param string $token   One-time token.
 	 */
-	public static function verify( string $key, string $domain, int $expires, string $sig ): bool {
-		return $expires >= time() && hash_equals( self::sign( $key, $domain, $expires ), $sig );
+	public static function verify( string $key, string $domain, int $expires, string $sig, string $token = '' ): bool {
+		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
+			return false; // Links without a one-time token (1.2.0 and older) are no longer accepted.
+		}
+		return $expires >= time() && $expires <= time() + self::LINK_TTL && hash_equals( self::sign( $key, $domain, $expires, $token ), $sig );
+	}
+
+	/**
+	 * Mark a link token as used. Returns false when it was used before. The
+	 * primary key makes this atomic, so two parallel requests cannot both win.
+	 *
+	 * @param string $token One-time token.
+	 */
+	public static function consume_token( string $token ): bool {
+		global $wpdb;
+		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
+			return false;
+		}
+		$suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$ok = $wpdb->insert(
+			SFLS_DB::download_tokens(),
+			array(
+				'token'   => $token,
+				'used_at' => current_time( 'mysql', true ),
+			)
+		);
+		$wpdb->suppress_errors( $suppress );
+		return 1 === $ok;
+	}
+
+	/**
+	 * Forget used tokens whose links have expired anyway (daily).
+	 */
+	public static function purge_tokens(): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_download_tokens WHERE used_at < %s", gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ) ) );
+	}
+
+	// ── Release zips ────────────────────────────────────────────────────
+
+	/**
+	 * Read the plugin headers from a release zip and check its layout.
+	 *
+	 * @param string $zip_path Path to the zip.
+	 * @return array{version:string,requires:string,tested:string,requires_php:string}|WP_Error
+	 */
+	public static function inspect_zip( string $zip_path ) {
+		if ( ! class_exists( 'ZipArchive' ) ) {
+			return new WP_Error( 'no_zip', __( 'The PHP zip extension is missing on this server, so the release cannot be checked.', 'subtleforms-license-server' ) );
+		}
+		$zip = new ZipArchive();
+		if ( true !== $zip->open( $zip_path ) ) {
+			return new WP_Error( 'bad_zip', __( 'That file is not a valid zip archive.', 'subtleforms-license-server' ) );
+		}
+		$main = $zip->getFromName( self::MAIN_FILE );
+		if ( false === $main ) {
+			$top = array();
+			for ( $i = 0; $i < min( $zip->numFiles, 500 ); $i++ ) {
+				$parts                  = explode( '/', (string) $zip->getNameIndex( $i ) );
+				$top[ (string) $parts[0] ] = true;
+			}
+			$zip->close();
+			return new WP_Error(
+				'bad_layout',
+				sprintf(
+					/* translators: 1: expected path, 2: folders found in the zip */
+					__( 'This zip does not contain %1$s. Upload the SubtleForms Pro plugin zip (it must have a subtleforms-pro folder at the top). Found: %2$s.', 'subtleforms-license-server' ),
+					self::MAIN_FILE,
+					implode( ', ', array_slice( array_keys( $top ), 0, 5 ) )
+				)
+			);
+		}
+		$readme = $zip->getFromName( 'subtleforms-pro/readme.txt' );
+		$zip->close();
+
+		$headers = self::parse_headers(
+			(string) $main,
+			array(
+				'version'      => 'Version',
+				'requires'     => 'Requires at least',
+				'tested'       => 'Tested up to',
+				'requires_php' => 'Requires PHP',
+			)
+		);
+		if ( false !== $readme ) {
+			$from_readme = self::parse_headers(
+				(string) $readme,
+				array(
+					'requires'     => 'Requires at least',
+					'tested'       => 'Tested up to',
+					'requires_php' => 'Requires PHP',
+				)
+			);
+			foreach ( $from_readme as $field => $value ) {
+				if ( '' === $headers[ $field ] ) {
+					$headers[ $field ] = $value;
+				}
+			}
+		}
+		if ( '' === $headers['version'] || ! preg_match( '/^\d+(\.\d+){0,3}([-.+][0-9A-Za-z.]+)?$/', $headers['version'] ) ) {
+			return new WP_Error( 'no_version', __( 'The plugin file in this zip has no valid Version header.', 'subtleforms-license-server' ) );
+		}
+		return $headers;
+	}
+
+	/**
+	 * Read "Name: value" headers from the first 8 KB of a file, the way
+	 * get_file_data() does.
+	 *
+	 * @param string $contents File contents.
+	 * @param array  $fields   key => header name.
+	 * @return array<string,string>
+	 */
+	public static function parse_headers( string $contents, array $fields ): array {
+		$contents = str_replace( "\r", "\n", substr( $contents, 0, 8 * KB_IN_BYTES ) );
+		$out      = array();
+		foreach ( $fields as $key => $header ) {
+			$out[ $key ] = '';
+			if ( preg_match( '/^(?:[ \t]*<\?php)?[ \t\/*#@]*' . preg_quote( $header, '/' ) . ':(.*)$/mi', $contents, $m ) ) {
+				$out[ $key ] = sanitize_text_field( trim( (string) preg_replace( '/\s*(?:\*\/|\?>).*/', '', $m[1] ) ) );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Why a version may not be published, or '' when it may. A release may
+	 * replace the current version (same number) but never go below it.
+	 *
+	 * @param string $version Version to publish.
+	 */
+	public static function version_problem( string $version ): string {
+		$current = self::current()['version'];
+		if ( '' === $version ) {
+			return __( 'Enter a version number, or upload a zip so it can be read from the plugin.', 'subtleforms-license-server' );
+		}
+		if ( '' !== $current && version_compare( $version, $current, '<' ) ) {
+			return sprintf(
+				/* translators: 1: version being published, 2: current version */
+				__( 'Version %1$s is lower than the current release %2$s. Publish a higher version, or re-upload %2$s to replace its package.', 'subtleforms-license-server' ),
+				$version,
+				$current
+			);
+		}
+		return '';
 	}
 }

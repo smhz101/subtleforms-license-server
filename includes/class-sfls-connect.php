@@ -194,7 +194,7 @@ final class SFLS_Connect {
 		}
 
 		$domain = SFLS_Licenses::normalize_domain( $args['site'] );
-		$result = SFLS_Licenses::activate_domain( $lic, $domain, $args['v'] );
+		$result = SFLS_Licenses::activate_domain( $lic, $domain, $args['v'], 'connect' );
 		if ( is_wp_error( $result ) ) {
 			$this->error = $result->get_error_message();
 			return;

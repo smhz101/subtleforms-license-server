@@ -125,11 +125,51 @@ final class SFLS_Plans {
 				'csv_export'        => __( 'CSV export of entries', 'subtleforms-license-server' ),
 				'webhooks'          => __( 'Webhooks with retries', 'subtleforms-license-server' ),
 				'integrations'      => __( 'WooCommerce checkout, Mailchimp, Brevo, Kit, HubSpot and Zapier', 'subtleforms-license-server' ),
-				// Advanced logic is in every plan (see common items), so this slug has no line of its own.
-				'conditional_logic' => '',
+				'conditional_logic' => __( 'Advanced conditional logic', 'subtleforms-license-server' ),
 				'white_label'       => __( 'White label and WPML/Polylang translation', 'subtleforms-license-server' ),
 			)
 		);
+	}
+
+	/**
+	 * Feature slugs that the common items already describe, so pricing cards
+	 * do not list them twice.
+	 *
+	 * @return string[]
+	 */
+	public static function common_slugs(): array {
+		return (array) apply_filters( 'sfls_common_feature_slugs', array( 'conditional_logic' ) );
+	}
+
+	/**
+	 * Human labels of a plan's features, without empty entries.
+	 *
+	 * @param string $plan          Plan slug.
+	 * @param bool   $skip_common   Leave out slugs the common items cover.
+	 * @return string[]
+	 */
+	public static function feature_label_list( string $plan, bool $skip_common = false ): array {
+		$labels = self::feature_labels();
+		$out    = array();
+		foreach ( self::features( $plan ) as $slug ) {
+			if ( $skip_common && in_array( $slug, self::common_slugs(), true ) ) {
+				continue;
+			}
+			$label = $labels[ $slug ] ?? ucwords( str_replace( '_', ' ', (string) $slug ) );
+			$out[] = trim( (string) $label );
+		}
+		return array_values( array_unique( array_filter( $out, 'strlen' ) ) );
+	}
+
+	/**
+	 * A plan's features as one line ("A · B · C"). Labels contain commas
+	 * themselves, so a middle dot keeps the items apart; empty labels can never
+	 * leave a stray separator.
+	 *
+	 * @param string $plan Plan slug.
+	 */
+	public static function feature_line( string $plan ): string {
+		return implode( ' · ', self::feature_label_list( $plan ) );
 	}
 
 	/**

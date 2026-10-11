@@ -29,6 +29,8 @@ final class SFLS_Admin {
 		add_action( 'admin_post_sfls_products', array( $this, 'handle_products' ) );
 		add_action( 'admin_post_sfls_settings', array( $this, 'handle_settings' ) );
 		add_action( 'admin_post_sfls_run_reminders', array( $this, 'handle_run_reminders' ) );
+		add_action( 'admin_post_sfls_test_reminder', array( $this, 'handle_test_reminder' ) );
+		add_action( 'admin_post_sfls_export', array( $this, 'handle_export' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( SFLS_FILE ), array( $this, 'action_links' ) );
 	}
 
@@ -162,6 +164,23 @@ final class SFLS_Admin {
 		echo wp_kses_post( $action );
 		echo '<hr class="wp-header-end">';
 		$this->notice();
+		$this->no_release_notice();
+	}
+
+	/**
+	 * Warn on every Licenses screen while customers have nothing to download.
+	 */
+	private function no_release_notice(): void {
+		if ( SFLS_Releases::has_package() ) {
+			return;
+		}
+		echo '<div class="notice notice-warning is-dismissible sfls-no-release"><p><strong>' . esc_html__( 'Customers cannot download Pro yet.', 'subtleforms-license-server' ) . '</strong> ';
+		printf(
+			/* translators: %s: link to the Pro releases screen */
+			esc_html__( 'Upload a release in %s.', 'subtleforms-license-server' ),
+			'<a href="' . esc_url( admin_url( 'admin.php?page=sfls-release' ) ) . '">' . esc_html__( 'Licenses › Pro releases', 'subtleforms-license-server' ) . '</a>'
+		);
+		echo '</p></div>';
 	}
 
 	// ── Licenses list ───────────────────────────────────────────────────
@@ -176,20 +195,20 @@ final class SFLS_Admin {
 			$this->page_edit( absint( $_GET['edit'] ) );
 			return;
 		}
-		$search = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
-		$filter = isset( $_GET['status'] ) ? sanitize_key( wp_unslash( $_GET['status'] ) ) : '';
-		$paged  = max( 1, absint( $_GET['paged'] ?? 1 ) );
+		$paged = max( 1, absint( $_GET['paged'] ?? 1 ) );
 		// phpcs:enable
-		$filters = array(
-			''          => __( 'All', 'subtleforms-license-server' ),
-			'active'    => __( 'Active', 'subtleforms-license-server' ),
-			'expiring'  => __( 'Expiring soon', 'subtleforms-license-server' ),
-			'expired'   => __( 'Expired', 'subtleforms-license-server' ),
-			'suspended' => __( 'Suspended', 'subtleforms-license-server' ),
-		);
-		$filter = isset( $filters[ $filter ] ) ? $filter : '';
+		[ $search, $filter, $plan ] = self::list_filters();
+		$filters                    = self::status_filters();
 
-		[ $rows, $total ] = SFLS_Licenses::query( $search, $filter, self::PER_PAGE, ( $paged - 1 ) * self::PER_PAGE );
+		[ $rows, $total ] = SFLS_Licenses::query(
+			array(
+				'search' => $search,
+				'status' => $filter,
+				'plan'   => $plan,
+				'per'    => self::PER_PAGE,
+				'offset' => ( $paged - 1 ) * self::PER_PAGE,
+			)
+		);
 
 		$this->header( __( 'Licenses', 'subtleforms-license-server' ), '<a href="' . esc_url( admin_url( 'admin.php?page=sfls-new' ) ) . '" class="page-title-action">' . esc_html__( 'Issue license', 'subtleforms-license-server' ) . '</a>' );
 
@@ -223,6 +242,7 @@ final class SFLS_Admin {
 					'page'   => 'sfls',
 					'status' => $slug ? $slug : false,
 					's'      => $search ? $search : false,
+					'plan'   => $plan ? $plan : false,
 				),
 				admin_url( 'admin.php' )
 			);
@@ -235,7 +255,22 @@ final class SFLS_Admin {
 		if ( $filter ) {
 			echo '<input type="hidden" name="status" value="' . esc_attr( $filter ) . '">';
 		}
-		echo '<p class="search-box"><label class="screen-reader-text" for="sfls-search">' . esc_html__( 'Search licenses', 'subtleforms-license-server' ) . '</label><input type="search" id="sfls-search" name="s" value="' . esc_attr( $search ) . '" placeholder="' . esc_attr__( 'Key or email', 'subtleforms-license-server' ) . '"> <button class="button">' . esc_html__( 'Search', 'subtleforms-license-server' ) . '</button></p></form>';
+		echo '<p class="search-box"><label class="screen-reader-text" for="sfls-search">' . esc_html__( 'Search licenses', 'subtleforms-license-server' ) . '</label><input type="search" id="sfls-search" name="s" value="' . esc_attr( $search ) . '" placeholder="' . esc_attr__( 'Key, email or domain', 'subtleforms-license-server' ) . '"> <button class="button">' . esc_html__( 'Search', 'subtleforms-license-server' ) . '</button></p>';
+		echo '<div class="tablenav top"><div class="alignleft actions"><label class="screen-reader-text" for="sfls-plan-filter">' . esc_html__( 'Filter by plan', 'subtleforms-license-server' ) . '</label><select id="sfls-plan-filter" name="plan"><option value="">' . esc_html__( 'All plans', 'subtleforms-license-server' ) . '</option>';
+		foreach ( SFLS_Plans::all() as $slug => $def ) {
+			echo '<option value="' . esc_attr( $slug ) . '"' . selected( $plan, $slug, false ) . '>' . esc_html( $def['label'] ) . '</option>';
+		}
+		echo '</select> <button class="button" type="submit">' . esc_html__( 'Filter', 'subtleforms-license-server' ) . '</button>';
+		if ( $search || $filter || $plan ) {
+			echo ' <a class="button-link sfls-clear" href="' . esc_url( admin_url( 'admin.php?page=sfls' ) ) . '">' . esc_html__( 'Clear filters', 'subtleforms-license-server' ) . '</a>';
+		}
+		echo '</div><div class="alignright actions"><a class="button" href="' . esc_url( $this->export_url( $search, $filter, $plan ) ) . '">' . esc_html(
+			sprintf(
+				/* translators: %s: number of licenses */
+				_n( 'Export %s license as CSV', 'Export %s licenses as CSV', $total, 'subtleforms-license-server' ),
+				number_format_i18n( $total )
+			)
+		) . '</a></div><br class="clear"></div></form>';
 
 		echo '<table class="wp-list-table widefat fixed striped sfls-table"><thead><tr>';
 		$heads = array(
@@ -253,7 +288,7 @@ final class SFLS_Admin {
 		echo '</tr></thead><tbody>';
 
 		if ( ! $rows ) {
-			echo '<tr><td colspan="7">' . esc_html( $search || $filter ? __( 'No licenses match.', 'subtleforms-license-server' ) : __( 'No licenses yet. Issue one, or sell a product marked as a SubtleForms license.', 'subtleforms-license-server' ) ) . '</td></tr>';
+			echo '<tr><td colspan="7">' . esc_html( $search || $filter || $plan ? __( 'No licenses match.', 'subtleforms-license-server' ) : __( 'No licenses yet. Issue one, or sell a product marked as a SubtleForms license.', 'subtleforms-license-server' ) ) . '</td></tr>';
 		}
 
 		foreach ( $rows as $lic ) {
@@ -309,6 +344,62 @@ final class SFLS_Admin {
 		}
 		echo '</div></div>';
 		echo '</div>';
+	}
+
+	/**
+	 * Status filters of the list.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function status_filters(): array {
+		return array(
+			''          => __( 'All', 'subtleforms-license-server' ),
+			'active'    => __( 'Active', 'subtleforms-license-server' ),
+			'expiring'  => __( 'Expiring in 30 days', 'subtleforms-license-server' ),
+			'expired'   => __( 'Expired', 'subtleforms-license-server' ),
+			'suspended' => __( 'Suspended', 'subtleforms-license-server' ),
+		);
+	}
+
+	/**
+	 * Search, status and plan from the query string.
+	 *
+	 * @return array{0:string,1:string,2:string}
+	 */
+	private static function list_filters(): array {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only list filters.
+		$search = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
+		$status = isset( $_GET['status'] ) ? sanitize_key( wp_unslash( $_GET['status'] ) ) : '';
+		$plan   = isset( $_GET['plan'] ) ? sanitize_key( wp_unslash( $_GET['plan'] ) ) : '';
+		// phpcs:enable
+		$status = array_key_exists( $status, self::status_filters() ) ? $status : '';
+		$plan   = SFLS_Plans::get( $plan ) ? $plan : '';
+		return array( $search, $status, $plan );
+	}
+
+	/**
+	 * CSV export link for the current filters.
+	 *
+	 * @param string $search Search.
+	 * @param string $status Status filter.
+	 * @param string $plan   Plan filter.
+	 */
+	private function export_url( string $search, string $status, string $plan ): string {
+		return wp_nonce_url(
+			add_query_arg(
+				array_filter(
+					array(
+						'action' => 'sfls_export',
+						's'      => $search,
+						'status' => $status,
+						'plan'   => $plan,
+					),
+					'strlen'
+				),
+				admin_url( 'admin-post.php' )
+			),
+			'sfls_export'
+		);
 	}
 
 	/**
@@ -400,6 +491,7 @@ final class SFLS_Admin {
 			echo '<p><a class="button-link" href="' . esc_url( $this->action_url( 'reset', $id ) ) . '" onclick="return confirm(\'' . esc_js( __( 'Remove every activation from this license?', 'subtleforms-license-server' ) ) . '\');">' . esc_html__( 'Deactivate all sites', 'subtleforms-license-server' ) . '</a></p>';
 		}
 		echo '</div>';
+		$this->activity_panel( $id );
 		echo '</div>';
 
 		echo '<div class="sfls-edit-side">';
@@ -420,6 +512,42 @@ final class SFLS_Admin {
 		echo '</div>';
 
 		echo '</div></div>';
+	}
+
+	/**
+	 * Activation and deactivation log of a license.
+	 *
+	 * @param int $id License ID.
+	 */
+	private function activity_panel( int $id ): void {
+		$entries = SFLS_Licenses::log_entries( $id, 50 );
+		$events  = array(
+			'activate'   => __( 'Activated', 'subtleforms-license-server' ),
+			'deactivate' => __( 'Deactivated', 'subtleforms-license-server' ),
+		);
+		$sources = array(
+			'api'     => __( 'Plugin (API)', 'subtleforms-license-server' ),
+			'connect' => __( 'Connect account', 'subtleforms-license-server' ),
+			'account' => __( 'Customer, My Account', 'subtleforms-license-server' ),
+			'admin'   => __( 'Admin', 'subtleforms-license-server' ),
+			'cli'     => __( 'WP-CLI', 'subtleforms-license-server' ),
+		);
+		echo '<div class="sfls-panel"><h2>' . esc_html__( 'Activity', 'subtleforms-license-server' ) . '</h2>';
+		if ( ! $entries ) {
+			echo '<p class="description">' . esc_html__( 'No activations or deactivations recorded yet. Logging started with version 1.3.0.', 'subtleforms-license-server' ) . '</p></div>';
+			return;
+		}
+		$fmt = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+		echo '<table class="widefat striped sfls-acts sfls-log"><thead><tr><th>' . esc_html__( 'Time', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Event', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Site', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'IP address', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'By', 'subtleforms-license-server' ) . '</th></tr></thead><tbody>';
+		foreach ( $entries as $row ) {
+			$tone = 'activate' === $row['event'] ? 'ok' : 'neutral';
+			echo '<tr><td>' . esc_html( wp_date( $fmt, strtotime( $row['created_at'] . ' UTC' ) ) ) . '</td>';
+			echo '<td><span class="sfls-admin-pill sfls-admin-pill--' . esc_attr( $tone ) . '">' . esc_html( $events[ $row['event'] ] ?? $row['event'] ) . '</span></td>';
+			echo '<td><strong>' . esc_html( $row['domain'] ) . '</strong></td>';
+			echo '<td class="sfls-mono">' . esc_html( '' !== $row['ip'] ? $row['ip'] : '–' ) . '</td>';
+			echo '<td>' . esc_html( $sources[ $row['source'] ] ?? ( '' !== $row['source'] ? $row['source'] : '–' ) ) . '</td></tr>';
+		}
+		echo '</tbody></table></div>';
 	}
 
 	// ── Issue ───────────────────────────────────────────────────────────
@@ -486,23 +614,24 @@ final class SFLS_Admin {
 		/* translators: %s: currency code */
 		echo '<th scope="col">' . esc_html( sprintf( __( 'Lifetime price (%s)', 'subtleforms-license-server' ), $currency ) ) . ' <span class="sfls-optional">' . esc_html__( 'optional', 'subtleforms-license-server' ) . '</span></th>';
 		echo '</tr></thead><tbody>';
-		$labels = SFLS_Plans::feature_labels();
+		$mapping = SFLS_Products::mapping();
 		foreach ( SFLS_Plans::all() as $slug => $plan ) {
-			$v     = $values[ $slug ];
-			$feats = array_map( static fn( $f ) => $labels[ $f ] ?? $f, $plan['features'] );
-			echo '<tr><th scope="row"><strong>' . esc_html( $plan['label'] ) . '</strong><span class="sfls-plan-feats">' . esc_html( implode( ', ', $feats ) ) . '</span></th>';
+			$v = $values[ $slug ];
+			echo '<tr><th scope="row"><strong>' . esc_html( $plan['label'] ) . '</strong><span class="sfls-plan-feats">' . esc_html( SFLS_Plans::feature_line( $slug ) ) . '</span></th>';
 			echo '<td data-colname="' . esc_attr__( 'Sites', 'subtleforms-license-server' ) . '"><input type="number" min="0" class="small-text" name="plans[' . esc_attr( $slug ) . '][sites]" value="' . esc_attr( $v['sites'] ) . '" aria-label="' . esc_attr( $plan['label'] . ' ' . __( 'sites', 'subtleforms-license-server' ) ) . '"><span class="description">' . esc_html__( '0 = unlimited', 'subtleforms-license-server' ) . '</span></td>';
 			foreach ( array(
 				'yearly'   => __( 'Yearly price', 'subtleforms-license-server' ),
 				'renewal'  => __( 'Renewal price', 'subtleforms-license-server' ),
 				'lifetime' => __( 'Lifetime price', 'subtleforms-license-server' ),
 			) as $type => $label ) {
-				echo '<td data-colname="' . esc_attr( $label ) . '"><span class="sfls-money"><span class="sfls-money-symbol">' . esc_html( html_entity_decode( $symbol, ENT_QUOTES, 'UTF-8' ) ) . '</span><input type="text" inputmode="decimal" name="plans[' . esc_attr( $slug ) . '][' . esc_attr( $type ) . ']" value="' . esc_attr( $v[ $type ] ) . '" placeholder="' . esc_attr( 'lifetime' === $type ? __( 'not sold', 'subtleforms-license-server' ) : '0.00' ) . '" aria-label="' . esc_attr( $plan['label'] . ' ' . $label ) . '"></span></td>';
+				echo '<td data-colname="' . esc_attr( $label ) . '"><span class="sfls-money"><span class="sfls-money-symbol">' . esc_html( html_entity_decode( $symbol, ENT_QUOTES, 'UTF-8' ) ) . '</span><input type="text" inputmode="decimal" name="plans[' . esc_attr( $slug ) . '][' . esc_attr( $type ) . ']" value="' . esc_attr( $v[ $type ] ) . '" placeholder="' . esc_attr( 'lifetime' === $type ? __( 'not sold', 'subtleforms-license-server' ) : '0.00' ) . '" aria-label="' . esc_attr( $plan['label'] . ' ' . $label ) . '"></span>';
+				$this->mapping_chip( $mapping[ $slug ][ $type ] ?? array() );
+				echo '</td>';
 			}
 			echo '</tr>';
 		}
 		echo '</tbody></table>';
-		echo '<p class="description">' . esc_html__( 'Renewal products are hidden from the shop; customers reach them from the Renew button in their account. Clearing a price moves that product to draft so it is no longer sold.', 'subtleforms-license-server' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Renewal products are hidden from the shop; customers reach them from the Renew button in their account. Clearing a price moves that product to draft so it is no longer sold. Under each price you see the WooCommerce product it maps to. Saving again updates those products and never creates a second one; a product marked Missing was deleted and is created again.', 'subtleforms-license-server' ) . '</p>';
 		submit_button( __( 'Save products', 'subtleforms-license-server' ) );
 		echo '</form>';
 
@@ -531,8 +660,38 @@ final class SFLS_Admin {
 		echo '<li><code>[sfls_pricing]</code> ' . esc_html__( 'Pricing cards with Buy buttons that go straight to checkout. Add period="lifetime" to open on lifetime prices.', 'subtleforms-license-server' ) . '</li>';
 		echo '<li><code>[sfls_changelog]</code> ' . esc_html__( 'Every Pro release with its changes.', 'subtleforms-license-server' ) . '</li>';
 		echo '<li><code>[sfls_latest_version]</code> ' . esc_html__( 'The current Pro version number.', 'subtleforms-license-server' ) . '</li>';
-		echo '</ul></div>';
+		echo '</ul><p class="description">' . esc_html__( 'In the block editor, search for SubtleForms to add the same pricing, changelog and version as blocks, plus the Account link block for your header.', 'subtleforms-license-server' ) . '</p></div>';
 		echo '</div>';
+	}
+
+	/**
+	 * "#3002 · Published" under a wizard price, linking to the product.
+	 *
+	 * @param array $map Row from SFLS_Products::mapping().
+	 */
+	private function mapping_chip( array $map ): void {
+		$status = $map['status'] ?? 'none';
+		$labels = array(
+			'publish' => __( 'Published', 'subtleforms-license-server' ),
+			'draft'   => __( 'Draft', 'subtleforms-license-server' ),
+			'private' => __( 'Private', 'subtleforms-license-server' ),
+			'pending' => __( 'Pending', 'subtleforms-license-server' ),
+			'missing' => __( 'Missing', 'subtleforms-license-server' ),
+			'none'    => __( 'Not created', 'subtleforms-license-server' ),
+		);
+		$tones  = array(
+			'publish' => 'ok',
+			'missing' => 'bad',
+		);
+		echo '<span class="sfls-map">';
+		if ( ! empty( $map['id'] ) && 'missing' !== $status ) {
+			/* translators: %s: product name */
+			echo '<a class="sfls-map-link" href="' . esc_url( (string) get_edit_post_link( (int) $map['id'] ) ) . '" title="' . esc_attr( sprintf( __( 'Edit %s', 'subtleforms-license-server' ), (string) $map['name'] ) ) . '">#' . esc_html( (string) $map['id'] ) . '</a>';
+		} elseif ( ! empty( $map['id'] ) ) {
+			echo '<span class="sfls-map-link">#' . esc_html( (string) $map['id'] ) . '</span>';
+		}
+		echo '<span class="sfls-admin-pill sfls-admin-pill--' . esc_attr( $tones[ $status ] ?? 'neutral' ) . '">' . esc_html( $labels[ $status ] ?? $status ) . '</span>';
+		echo '</span>';
 	}
 
 	// ── Releases ────────────────────────────────────────────────────────
@@ -557,14 +716,20 @@ final class SFLS_Admin {
 		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-panel">';
 		wp_nonce_field( 'sfls_release' );
 		echo '<input type="hidden" name="action" value="sfls_release"><table class="form-table" role="presentation"><tbody>';
-		echo '<tr><th><label for="sfls-zip">' . esc_html__( 'Plugin zip', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-zip" type="file" name="package" accept=".zip,application/zip"> <p class="description">' . esc_html__( 'Leave empty to only update the details below.', 'subtleforms-license-server' ) . '</p></td></tr>';
+		echo '<tr><th><label for="sfls-zip">' . esc_html__( 'Plugin zip', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-zip" type="file" name="package" accept=".zip,application/zip"> <p class="description">' . esc_html(
+			sprintf(
+				/* translators: %s: path inside the zip */
+				__( 'The zip must contain %s. Version, Requires at least, Tested up to and Requires PHP are read from its plugin header, and a version lower than the current release is refused. Leave empty to only update the details below.', 'subtleforms-license-server' ),
+				SFLS_Releases::MAIN_FILE
+			)
+		) . '</p></td></tr>';
 		foreach ( array(
 			'version'      => __( 'Version', 'subtleforms-license-server' ),
 			'requires'     => __( 'Requires WordPress', 'subtleforms-license-server' ),
 			'tested'       => __( 'Tested up to', 'subtleforms-license-server' ),
 			'requires_php' => __( 'Requires PHP', 'subtleforms-license-server' ),
 		) as $field => $label ) {
-			echo '<tr><th><label for="sfls-' . esc_attr( $field ) . '">' . esc_html( $label ) . '</label></th><td><input id="sfls-' . esc_attr( $field ) . '" name="' . esc_attr( $field ) . '" value="' . esc_attr( $rel[ $field ] ) . '" class="regular-text"></td></tr>';
+			echo '<tr><th><label for="sfls-' . esc_attr( $field ) . '">' . esc_html( $label ) . '</label></th><td><input id="sfls-' . esc_attr( $field ) . '" name="' . esc_attr( $field ) . '" value="' . esc_attr( $rel[ $field ] ) . '" class="regular-text"> <span class="description">' . esc_html__( 'Read from the zip when you upload one.', 'subtleforms-license-server' ) . '</span></td></tr>';
 		}
 		echo '<tr><th><label for="sfls-changelog">' . esc_html__( 'Changelog', 'subtleforms-license-server' ) . '</label></th><td><textarea id="sfls-changelog" name="changelog" rows="8" class="large-text">' . esc_textarea( $rel['changelog'] ) . '</textarea><p class="description">' . esc_html__( 'One change per line, starting with "* ", shows as a list.', 'subtleforms-license-server' ) . '</p></td></tr>';
 		echo '</tbody></table>';
@@ -602,7 +767,31 @@ final class SFLS_Admin {
 
 		echo '<tr><th scope="row">' . esc_html__( 'After expiry', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="lapsed_reminder" value="1"' . checked( (int) $s['lapsed_reminder'], 1, false ) . '> ' . esc_html__( 'Send one more reminder the day after a license expires', 'subtleforms-license-server' ) . '</label></td></tr>';
 
-		echo '<tr><th scope="row"><label for="sfls-support">' . esc_html__( 'Support email', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-support" type="email" name="support_email" value="' . esc_attr( $s['support_email'] ) . '" class="regular-text" placeholder="' . esc_attr( (string) get_option( 'admin_email' ) ) . '"><p class="description">' . esc_html__( 'Shown to customers and used as Reply-To on reminder emails.', 'subtleforms-license-server' ) . '</p></td></tr>';
+		$support = SFLS_Settings::support_email();
+		echo '<tr><th scope="row"><label for="sfls-support">' . esc_html__( 'Support email', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-support" type="email" name="support_email" value="' . esc_attr( $s['support_email'] ) . '" class="regular-text" placeholder="' . esc_attr( '' !== SFLS_Settings::default_support_email() ? SFLS_Settings::default_support_email() : (string) get_option( 'admin_email' ) ) . '"><p class="description">' . esc_html__( 'Shown to customers and used as Reply-To on every license email (order emails with keys and reminders). When it is on this site\'s domain it is also the From address.', 'subtleforms-license-server' ) . '</p>';
+		if ( '' === (string) $s['support_email'] ) {
+			echo '<p class="sfls-field-warning">' . esc_html(
+				sprintf(
+					/* translators: %s: email address */
+					__( 'Not set, so customers see the site admin address %s. Enter an address on your own domain.', 'subtleforms-license-server' ),
+					$support
+				)
+			) . '</p>';
+		}
+		if ( SFLS_Settings::is_free_mail( $support ) ) {
+			echo '<div class="notice notice-warning inline sfls-free-mail"><p>' . esc_html(
+				sprintf(
+					/* translators: %s: email address */
+					__( '%s is a free mail address. Customers see it on receipts, reminders and the connect page, and mail this site sends from it is often marked as spam. Use an address on your own domain instead.', 'subtleforms-license-server' ),
+					$support
+				)
+			) . '</p></div>';
+		}
+		echo '</td></tr>';
+
+		echo '<tr><th scope="row">' . esc_html__( 'My Account', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="simplify_account" value="1"' . checked( (int) $s['simplify_account'], 1, false ) . '> ' . esc_html__( 'Simplify My Account for license-only stores', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Hides the Addresses and Downloads tabs for customers whose orders only contain license products. Orders, Licenses, Pro downloads, Payment methods and Account details stay.', 'subtleforms-license-server' ) . '</p></td></tr>';
+
+		echo '<tr><th scope="row">' . esc_html__( 'Checkout', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="simple_checkout" value="1"' . checked( (int) $s['simple_checkout'], 1, false ) . '> ' . esc_html__( 'Ask only for name, email and country when the cart holds only licenses', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Street, city, postcode, state, company and phone are hidden. Country stays because tax depends on it.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
 		echo '<tr><th scope="row">' . esc_html__( 'Uninstall', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="delete_data" value="1"' . checked( (bool) get_option( 'sfls_delete_data_on_uninstall' ), true, false ) . '> ' . esc_html__( 'Delete all licenses, activations and release files when the plugin is deleted', 'subtleforms-license-server' ) . '</label></td></tr>';
 
@@ -622,6 +811,16 @@ final class SFLS_Admin {
 		wp_nonce_field( 'sfls_run_reminders' );
 		echo '<input type="hidden" name="action" value="sfls_run_reminders">';
 		submit_button( __( 'Send due reminders now', 'subtleforms-license-server' ), 'secondary', 'submit', false );
+		echo '</form></div>';
+
+		$me = wp_get_current_user();
+		echo '<div class="sfls-panel"><h2>' . esc_html__( 'Test reminder', 'subtleforms-license-server' ) . '</h2><p class="description">' . esc_html__( 'Sends an example renewal reminder so you can check how it looks. No license is changed and no customer is emailed.', 'subtleforms-license-server' ) . '</p>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-test-reminder">';
+		wp_nonce_field( 'sfls_test_reminder' );
+		echo '<input type="hidden" name="action" value="sfls_test_reminder">';
+		echo '<label for="sfls-test-to">' . esc_html__( 'Send to', 'subtleforms-license-server' ) . '</label> <input id="sfls-test-to" type="email" name="to" class="regular-text" value="' . esc_attr( $me->user_email ) . '" required> ';
+		echo '<label for="sfls-test-stage" class="screen-reader-text">' . esc_html__( 'Reminder', 'subtleforms-license-server' ) . '</label><select id="sfls-test-stage" name="stage"><option value="before">' . esc_html__( 'Before expiry', 'subtleforms-license-server' ) . '</option><option value="lapsed">' . esc_html__( 'After expiry', 'subtleforms-license-server' ) . '</option></select> ';
+		submit_button( __( 'Send test reminder', 'subtleforms-license-server' ), 'secondary', 'submit', false );
 		echo '</form></div>';
 		echo '</div>';
 	}
@@ -690,12 +889,12 @@ final class SFLS_Admin {
 				$msg = __( 'License resumed.', 'subtleforms-license-server' );
 				break;
 			case 'reset':
-				SFLS_Licenses::reset_activations( $id );
+				SFLS_Licenses::reset_activations( $id, 'admin' );
 				$msg = __( 'All sites deactivated.', 'subtleforms-license-server' );
 				break;
 			case 'deactivate':
 				$domain = SFLS_Licenses::normalize_domain( sanitize_text_field( wp_unslash( $_GET['domain'] ?? '' ) ) );
-				SFLS_Licenses::remove_activation( $id, $domain );
+				SFLS_Licenses::remove_activation( $id, $domain, 'admin' );
 				/* translators: %s: domain */
 				$msg = sprintf( __( '%s deactivated.', 'subtleforms-license-server' ), $domain );
 				break;
@@ -807,10 +1006,12 @@ final class SFLS_Admin {
 		check_admin_referer( 'sfls_settings' );
 		SFLS_Settings::save(
 			array(
-				'pricing_url'     => isset( $_POST['pricing_url'] ) ? sanitize_url( wp_unslash( $_POST['pricing_url'] ) ) : '',
-				'reminder_days'   => isset( $_POST['reminder_days'] ) ? sanitize_text_field( wp_unslash( $_POST['reminder_days'] ) ) : '',
-				'lapsed_reminder' => ! empty( $_POST['lapsed_reminder'] ),
-				'support_email'   => isset( $_POST['support_email'] ) ? sanitize_email( wp_unslash( $_POST['support_email'] ) ) : '',
+				'pricing_url'      => isset( $_POST['pricing_url'] ) ? sanitize_url( wp_unslash( $_POST['pricing_url'] ) ) : '',
+				'reminder_days'    => isset( $_POST['reminder_days'] ) ? sanitize_text_field( wp_unslash( $_POST['reminder_days'] ) ) : '',
+				'lapsed_reminder'  => ! empty( $_POST['lapsed_reminder'] ),
+				'support_email'    => isset( $_POST['support_email'] ) ? sanitize_email( wp_unslash( $_POST['support_email'] ) ) : '',
+				'simplify_account' => ! empty( $_POST['simplify_account'] ),
+				'simple_checkout'  => ! empty( $_POST['simple_checkout'] ),
 			)
 		);
 		update_option( 'sfls_delete_data_on_uninstall', ! empty( $_POST['delete_data'] ), false );
@@ -833,11 +1034,73 @@ final class SFLS_Admin {
 	}
 
 	/**
+	 * Send an example reminder to the admin.
+	 */
+	public function handle_test_reminder(): void {
+		$this->guard();
+		check_admin_referer( 'sfls_test_reminder' );
+		$to    = isset( $_POST['to'] ) ? sanitize_email( wp_unslash( $_POST['to'] ) ) : '';
+		$stage = isset( $_POST['stage'] ) && 'lapsed' === $_POST['stage'] ? 'lapsed' : 'before';
+		if ( ! is_email( $to ) ) {
+			$this->flash( __( 'Enter a valid email address for the test.', 'subtleforms-license-server' ), 'error' );
+		} elseif ( SFLS_Reminders::send_test( $to, $stage ) ) {
+			/* translators: %s: email address */
+			$this->flash( sprintf( __( 'Test reminder sent to %s.', 'subtleforms-license-server' ), $to ) );
+		} else {
+			$this->flash( __( 'The test reminder could not be sent. Check that this site can send email.', 'subtleforms-license-server' ), 'error' );
+		}
+		wp_safe_redirect( admin_url( 'admin.php?page=sfls-settings' ) );
+		exit;
+	}
+
+	/**
+	 * Download the filtered license list as CSV.
+	 */
+	public function handle_export(): void {
+		$this->guard();
+		check_admin_referer( 'sfls_export' );
+		[ $search, $status, $plan ] = self::list_filters();
+		[ $rows ]                   = SFLS_Licenses::query(
+			array(
+				'search' => $search,
+				'status' => $status,
+				'plan'   => $plan,
+				'per'    => 0,
+			)
+		);
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="licenses-' . gmdate( 'Y-m-d' ) . '.csv"' );
+		header( 'X-Content-Type-Options: nosniff' );
+		echo self::csv( SFLS_Licenses::csv_rows( $rows ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CSV download; formulas are neutralised by csv_rows().
+		exit;
+	}
+
+	/**
+	 * Build CSV text (RFC 4180 quoting).
+	 *
+	 * @param array[] $rows Rows.
+	 */
+	public static function csv( array $rows ): string {
+		$out = '';
+		foreach ( $rows as $row ) {
+			$cells = array();
+			foreach ( $row as $cell ) {
+				$cell    = (string) $cell;
+				$cells[] = preg_match( '/[",\r\n]/', $cell ) ? '"' . str_replace( '"', '""', $cell ) . '"' : $cell;
+			}
+			$out .= implode( ',', $cells ) . "\r\n";
+		}
+		return $out;
+	}
+
+	/**
 	 * Publish a release.
 	 */
 	public function handle_release(): void {
 		$this->guard();
 		check_admin_referer( 'sfls_release' );
+		$back = admin_url( 'admin.php?page=sfls-release' );
 
 		$data = array(
 			'version'      => sanitize_text_field( wp_unslash( $_POST['version'] ?? '' ) ),
@@ -848,19 +1111,55 @@ final class SFLS_Admin {
 			'updated'      => gmdate( 'Y-m-d' ),
 		);
 
-		if ( ! empty( $_FILES['package']['tmp_name'] ) && ! empty( $_FILES['package']['name'] ) ) {
+		$has_zip = ! empty( $_FILES['package']['tmp_name'] ) && ! empty( $_FILES['package']['name'] );
+		$note    = '';
+		if ( $has_zip ) {
+			$tmp     = (string) $_FILES['package']['tmp_name']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Path set by PHP's upload handling, checked with is_uploaded_file().
+			$headers = is_uploaded_file( $tmp ) ? SFLS_Releases::inspect_zip( $tmp ) : new WP_Error( 'upload', __( 'The upload failed. Try again.', 'subtleforms-license-server' ) );
+			if ( is_wp_error( $headers ) ) {
+				$this->flash( $headers->get_error_message(), 'error' );
+				wp_safe_redirect( $back );
+				exit;
+			}
+			if ( '' !== $data['version'] && $data['version'] !== $headers['version'] && $data['version'] !== SFLS_Releases::current()['version'] ) {
+				/* translators: 1: version typed in the form, 2: version in the zip */
+				$note = sprintf( __( 'You entered %1$s but the zip is %2$s, so %2$s was used.', 'subtleforms-license-server' ), $data['version'], $headers['version'] );
+			}
+			foreach ( $headers as $field => $value ) {
+				if ( '' !== $value ) {
+					$data[ $field ] = $value;
+				}
+			}
+		}
+
+		$problem = SFLS_Releases::version_problem( $data['version'] );
+		if ( '' !== $problem ) {
+			$this->flash( $problem, 'error' );
+			wp_safe_redirect( $back );
+			exit;
+		}
+
+		if ( $has_zip ) {
 			$file = $this->store_upload( $data['version'] );
 			if ( is_wp_error( $file ) ) {
 				$this->flash( $file->get_error_message(), 'error' );
-				wp_safe_redirect( admin_url( 'admin.php?page=sfls-release' ) );
+				wp_safe_redirect( $back );
 				exit;
 			}
 			$data['file'] = $file;
 		}
 
 		SFLS_Releases::save( $data );
-		$this->flash( __( 'Release saved. Licensed sites will see it within 12 hours.', 'subtleforms-license-server' ) );
-		wp_safe_redirect( admin_url( 'admin.php?page=sfls-release' ) );
+		$this->flash(
+			trim(
+				sprintf(
+					/* translators: %s: version */
+					__( 'SubtleForms Pro %s saved. Licensed sites will see it within 12 hours.', 'subtleforms-license-server' ),
+					$data['version']
+				) . ' ' . $note
+			)
+		);
+		wp_safe_redirect( $back );
 		exit;
 	}
 

@@ -2,9 +2,14 @@
 /**
  * Shortcodes for the marketing site.
  *
- *   [sfls_pricing period="yearly|lifetime"]  Pricing cards from the license products.
+ *   [sfls_pricing period="yearly|lifetime" popular="pro" renewal_note="no"
+ *                 button="Buy {plan}" button_lifetime="Buy {plan}"]
+ *                                           Pricing cards from the license products.
  *   [sfls_changelog limit="0"]               Every Pro release, newest first.
- *   [sfls_latest_version]                    The current Pro version number.
+ *   [sfls_latest_version]                    The current Pro version number
+ *                                           ("Coming soon" before the first release).
+ *
+ * The same output is available as blocks (see SFLS_Blocks).
  *
  * @package SFLS
  */
@@ -41,12 +46,16 @@ final class SFLS_Shortcodes {
 	public function pricing( $atts ): string {
 		$atts = shortcode_atts(
 			array(
-				'period'  => 'yearly',
-				'popular' => 'pro',
+				'period'          => 'yearly',
+				'popular'         => 'pro',
+				'renewal_note'    => 'no',
+				'button'          => '',
+				'button_lifetime' => '',
 			),
 			$atts,
 			'sfls_pricing'
 		);
+		$atts['renewal_note'] = in_array( strtolower( (string) $atts['renewal_note'] ), array( '1', 'yes', 'true', 'on' ), true );
 
 		if ( ! SFLS_Products::woo_active() ) {
 			return '';
@@ -90,7 +99,7 @@ final class SFLS_Shortcodes {
 			}
 			echo '<div class="sfls-pricing-grid sfls-pricing-grid--' . esc_attr( $p ) . '">';
 			foreach ( $rows as $plan => $row ) {
-				$this->pricing_card( $plan, $row, $plan === $atts['popular'] );
+				$this->pricing_card( $plan, $row, $plan === $atts['popular'], $atts );
 			}
 			echo '</div>';
 		}
@@ -104,21 +113,14 @@ final class SFLS_Shortcodes {
 	 * @param string $plan    Plan slug.
 	 * @param array  $row     Product row from SFLS_Products.
 	 * @param bool   $popular Highlight.
+	 * @param array  $atts    Shortcode attributes (renewal_note, button, button_lifetime).
 	 */
-	private function pricing_card( string $plan, array $row, bool $popular ): void {
+	private function pricing_card( string $plan, array $row, bool $popular, array $atts = array() ): void {
 		$product = wc_get_product( $row['id'] );
 		if ( ! $product ) {
 			return;
 		}
-		$labels   = SFLS_Plans::feature_labels();
-		$features = array();
-		foreach ( SFLS_Plans::features( $plan ) as $slug ) {
-			$label = $labels[ $slug ] ?? ucwords( str_replace( '_', ' ', $slug ) );
-			if ( '' !== $label ) {
-				$features[] = $label;
-			}
-		}
-		$features = array_merge( $features, SFLS_Plans::common_items() );
+		$features = array_values( array_unique( array_merge( SFLS_Plans::feature_label_list( $plan, true ), array_filter( SFLS_Plans::common_items(), 'strlen' ) ) ) );
 
 		if ( 0 === $row['months'] ) {
 			$suffix = __( 'one-time', 'subtleforms-license-server' );
@@ -143,15 +145,46 @@ final class SFLS_Shortcodes {
 			echo '<del class="sfls-plan-was">' . wp_kses_post( wc_price( $regular ) ) . '</del> ';
 		}
 		echo '<span class="sfls-plan-amount">' . wp_kses_post( wc_price( $price ) ) . '</span> <span class="sfls-plan-period">' . esc_html( $suffix ) . '</span></p>';
-		echo '<a class="sfls-btn sfls-btn--' . ( $popular ? 'primary' : 'secondary' ) . ' sfls-btn--block" href="' . esc_url( SFLS_Products::buy_url( $row['id'] ) ) . '" rel="nofollow">';
+		if ( ! empty( $atts['renewal_note'] ) ) {
+			$note = $this->renewal_note( $plan, $row );
+			if ( '' !== $note ) {
+				echo '<p class="sfls-plan-renewal">' . esc_html( $note ) . '</p>';
+			}
+		}
+		$template = (string) ( 0 === $row['months'] ? ( $atts['button_lifetime'] ?? '' ) : ( $atts['button'] ?? '' ) );
 		/* translators: %s: plan name */
-		echo esc_html( sprintf( __( 'Buy %s', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) ) ) . '</a>';
+		$label = '' !== trim( $template ) ? str_replace( '{plan}', SFLS_Plans::label( $plan ), $template ) : sprintf( __( 'Buy %s', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) );
+		echo '<a class="sfls-btn sfls-btn--' . ( $popular ? 'primary' : 'secondary' ) . ' sfls-btn--block" href="' . esc_url( SFLS_Products::buy_url( $row['id'] ) ) . '" rel="nofollow">';
+		echo esc_html( $label ) . '</a>';
 		echo '<ul class="sfls-plan-features">';
 		foreach ( $features as $feature ) {
 			echo '<li>' . esc_html( $feature ) . '</li>';
 		}
 		echo '</ul>';
 		echo '</div>';
+	}
+
+	/**
+	 * "Renews at $39 a year" for yearly cards, "Pay once, updates for life"
+	 * for lifetime cards.
+	 *
+	 * @param string $plan Plan slug.
+	 * @param array  $row  Product row.
+	 */
+	private function renewal_note( string $plan, array $row ): string {
+		if ( 0 === $row['months'] ) {
+			return __( 'Pay once. Updates and support for life.', 'subtleforms-license-server' );
+		}
+		$renewal = SFLS_Products::find( $plan, 'renewal' );
+		$product = $renewal ? wc_get_product( $renewal['id'] ) : null;
+		if ( ! $product || '' === (string) $product->get_price() ) {
+			return __( 'Renews yearly. Cancel any time.', 'subtleforms-license-server' );
+		}
+		return sprintf(
+			/* translators: %s: renewal price */
+			__( 'Renews at %s a year. Cancel any time.', 'subtleforms-license-server' ),
+			html_entity_decode( wp_strip_all_tags( wc_price( (float) wc_get_price_to_display( $product ) ) ), ENT_QUOTES, 'UTF-8' )
+		);
 	}
 
 	/**
@@ -193,6 +226,6 @@ final class SFLS_Shortcodes {
 	 * [sfls_latest_version]
 	 */
 	public function latest_version(): string {
-		return esc_html( SFLS_Releases::current()['version'] );
+		return esc_html( SFLS_Account::latest_version_label() );
 	}
 }

@@ -330,3 +330,84 @@
 		font-weight: 600;
 	}
 }
+
+/* ── 1.3.0 ─────────────────────────────────────────────────────────────── */
+
+/* Products wizard: product mapping chip under each price. */
+.sfls-map {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 6px;
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.sfls-map-link {
+	color: var(--sf-color-text-muted, #646970);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	text-decoration: none;
+}
+
+a.sfls-map-link:hover,
+a.sfls-map-link:focus {
+	color: var(--sf-color-accent, #3858e9);
+	text-decoration: underline;
+}
+
+.sfls-map .sfls-admin-pill {
+	font-size: 11px;
+}
+
+/* Licenses list: plan filter row and export. */
+.sfls-admin .tablenav.top {
+	clear: both;
+	height: auto;
+	margin: 8px 0 6px;
+}
+
+.sfls-admin .tablenav.top .actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0;
+}
+
+.sfls-admin .sfls-clear {
+	margin-left: 4px;
+}
+
+/* Settings. */
+.sfls-field-warning {
+	margin: 6px 0 0;
+	color: var(--sf-color-warning, #8a4d00);
+}
+
+.sfls-panel .notice.inline {
+	margin: 10px 0 0;
+}
+
+.sfls-test-reminder {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.sfls-test-reminder .regular-text {
+	width: 22em;
+	max-width: 100%;
+}
+
+/* License detail: activity log. */
+.sfls-log td {
+	vertical-align: middle;
+}
+
+@media (max-width: 782px) {
+	.sfls-admin .tablenav.top .actions {
+		float: none;
+		flex-wrap: wrap;
+		margin-bottom: 8px;
+	}
+}

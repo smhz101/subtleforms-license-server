@@ -1,0 +1,25 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "sfls/account-link",
+	"version": "1.3.0",
+	"title": "Account link",
+	"category": "widgets",
+	"icon": "admin-users",
+	"description": "Sign in for visitors, My licenses with the customer's avatar once they are signed in.",
+	"keywords": [ "account", "sign in", "login", "licenses", "header", "subtleforms" ],
+	"textdomain": "subtleforms-license-server",
+	"attributes": {
+		"signInLabel": { "type": "string", "default": "" },
+		"accountLabel": { "type": "string", "default": "" },
+		"showAvatar": { "type": "boolean", "default": true }
+	},
+	"supports": {
+		"html": false,
+		"color": { "text": true, "background": false, "link": true },
+		"typography": { "fontSize": true },
+		"spacing": { "margin": true }
+	},
+	"editorScript": "sfls-blocks-editor",
+	"style": "file:./style.css"
+}

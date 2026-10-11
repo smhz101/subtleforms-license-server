@@ -2,7 +2,9 @@
 /**
  * WooCommerce products that sell SubtleForms licenses.
  *
- * A license product is a simple virtual product with this meta:
+ * A license product is a simple virtual product with this meta (whether it is
+ * also downloadable makes no difference: license-only orders complete on
+ * payment either way, see SFLS_Woo::payment_complete_status()):
  *   _sfls_enabled  yes
  *   _sfls_plan     starter | pro | agency
  *   _sfls_sites    site limit ('' = plan default, 0 = unlimited)
@@ -220,11 +222,17 @@ final class SFLS_Products {
 	 * @return array{created:int,updated:int}
 	 */
 	public static function save_wizard( array $rows ): array {
-		$map    = self::map();
 		$result = array(
 			'created' => 0,
 			'updated' => 0,
 		);
+		// A double-clicked Save must not create the products twice.
+		if ( get_transient( 'sfls_wizard_lock' ) ) {
+			return $result;
+		}
+		set_transient( 'sfls_wizard_lock', 1, 30 );
+		self::flush();
+		$map = self::map();
 
 		foreach ( SFLS_Plans::all() as $plan => $def ) {
 			$row   = (array) ( $rows[ $plan ] ?? array() );
@@ -251,8 +259,12 @@ final class SFLS_Products {
 			foreach ( $specs as $type => $spec ) {
 				$price = self::clean_price( (string) ( $row[ $type ] ?? '' ) );
 				$id    = (int) ( $map[ $plan ][ $type ] ?? 0 );
-				$id    = $id ? $id : self::existing_id( $plan, $type );
 				$prod  = $id ? wc_get_product( $id ) : null;
+				if ( ! $prod || 'trash' === $prod->get_status() ) {
+					// Mapped product gone: adopt a live one for this plan and type before creating.
+					$id   = self::existing_id( $plan, $type );
+					$prod = $id ? wc_get_product( $id ) : null;
+				}
 
 				if ( '' === $price && ! $prod ) {
 					continue; // Nothing to create.
@@ -260,13 +272,15 @@ final class SFLS_Products {
 				if ( ! $prod || 'trash' === $prod->get_status() ) {
 					$prod = new WC_Product_Simple();
 					$prod->set_name( $spec['name'] );
+					$prod->set_downloadable( false );
 					++$result['created'];
 				} else {
 					++$result['updated'];
 				}
 
+				// Existing products keep their downloadable flag: nothing depends
+				// on it, and shop owners may have set it on purpose.
 				$prod->set_virtual( true );
-				$prod->set_downloadable( false );
 				$prod->set_sold_individually( true );
 				$prod->set_tax_status( $prod->get_tax_status() ? $prod->get_tax_status() : 'taxable' );
 				$prod->set_catalog_visibility( 'renewal' === $type ? 'hidden' : 'visible' );
@@ -298,7 +312,42 @@ final class SFLS_Products {
 
 		update_option( self::OPTION, $map, false );
 		self::flush();
+		delete_transient( 'sfls_wizard_lock' );
 		return $result;
+	}
+
+	/**
+	 * Which product each wizard price maps to, for the status chips:
+	 * plan => type => { id, name, status } where status is a post status,
+	 * "missing" (mapped product deleted or trashed) or "none".
+	 *
+	 * @return array<string,array<string,array{id:int,name:string,status:string}>>
+	 */
+	public static function mapping(): array {
+		$map = self::map();
+		$out = array();
+		foreach ( array_keys( SFLS_Plans::all() ) as $plan ) {
+			foreach ( self::TYPES as $type ) {
+				$id     = (int) ( $map[ $plan ][ $type ] ?? 0 );
+				$mapped = $id > 0;
+				$id     = $id ? $id : self::existing_id( $plan, $type );
+				$prod   = $id ? wc_get_product( $id ) : null;
+				if ( $prod && 'trash' !== $prod->get_status() ) {
+					$status = $prod->get_status();
+					$name   = $prod->get_name();
+				} else {
+					$status = $mapped ? 'missing' : 'none';
+					$name   = '';
+					$id     = $mapped ? $id : 0;
+				}
+				$out[ $plan ][ $type ] = array(
+					'id'     => $id,
+					'name'   => $name,
+					'status' => $status,
+				);
+			}
+		}
+		return $out;
 	}
 
 	/**
