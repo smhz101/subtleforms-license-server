@@ -25,6 +25,10 @@ final class SFLS_Settings {
 			'support_email'    => '',
 			'simplify_account' => 1,
 			'simple_checkout'  => 1,
+			// 1.4.0: who takes the money for new licenses, and Paddle notices.
+			'sell_with'        => 'woocommerce',
+			'renewal_notice'   => '14,3',
+			'trial_notice'     => 3,
 		);
 	}
 
@@ -51,19 +55,75 @@ final class SFLS_Settings {
 	 * @param array $input Raw values (already unslashed).
 	 */
 	public static function save( array $input ): void {
-		$days = array_unique( array_filter( array_map( 'absint', explode( ',', (string) ( $input['reminder_days'] ?? '' ) ) ) ) );
-		rsort( $days );
 		update_option(
 			self::OPTION,
-			array(
-				'pricing_url'      => esc_url_raw( (string) ( $input['pricing_url'] ?? '' ) ),
-				'reminder_days'    => implode( ',', array_slice( $days, 0, 10 ) ),
-				'lapsed_reminder'  => empty( $input['lapsed_reminder'] ) ? 0 : 1,
-				'support_email'    => sanitize_email( (string) ( $input['support_email'] ?? '' ) ),
-				'simplify_account' => empty( $input['simplify_account'] ) ? 0 : 1,
-				'simple_checkout'  => empty( $input['simple_checkout'] ) ? 0 : 1,
+			array_merge(
+				self::all(),
+				array(
+					'pricing_url'      => esc_url_raw( (string) ( $input['pricing_url'] ?? '' ) ),
+					'reminder_days'    => self::day_list( (string) ( $input['reminder_days'] ?? '' ) ),
+					'lapsed_reminder'  => empty( $input['lapsed_reminder'] ) ? 0 : 1,
+					'support_email'    => sanitize_email( (string) ( $input['support_email'] ?? '' ) ),
+					'simplify_account' => empty( $input['simplify_account'] ) ? 0 : 1,
+					'simple_checkout'  => empty( $input['simple_checkout'] ) ? 0 : 1,
+				)
 			)
 		);
+	}
+
+	/**
+	 * Store the selling and notice settings of the Paddle tab.
+	 *
+	 * @param array $input Raw values (already unslashed).
+	 */
+	public static function save_selling( array $input ): void {
+		update_option(
+			self::OPTION,
+			array_merge(
+				self::all(),
+				array(
+					'sell_with'      => 'paddle' === ( $input['sell_with'] ?? '' ) ? 'paddle' : 'woocommerce',
+					'renewal_notice' => self::day_list( (string) ( $input['renewal_notice'] ?? '' ) ),
+					'trial_notice'   => min( 30, absint( $input['trial_notice'] ?? 3 ) ),
+				)
+			)
+		);
+	}
+
+	/**
+	 * "30, 7,x,7" → "30,7": unique positive days, largest first, at most 10.
+	 *
+	 * @param string $raw Comma separated days.
+	 */
+	public static function day_list( string $raw ): string {
+		$days = array_unique( array_filter( array_map( 'absint', explode( ',', $raw ) ) ) );
+		rsort( $days );
+		return implode( ',', array_slice( $days, 0, 10 ) );
+	}
+
+	/**
+	 * Who sells new licenses: paddle or woocommerce.
+	 */
+	public static function sell_with(): string {
+		return 'paddle' === self::get( 'sell_with' ) ? 'paddle' : 'woocommerce';
+	}
+
+	/**
+	 * Days before a Paddle renewal to notify the customer, largest first.
+	 *
+	 * @return int[]
+	 */
+	public static function renewal_notice_days(): array {
+		$days = array_unique( array_filter( array_map( 'absint', explode( ',', (string) self::get( 'renewal_notice' ) ) ) ) );
+		rsort( $days );
+		return array_values( $days );
+	}
+
+	/**
+	 * Days before a free trial ends to notify the customer (0 = off).
+	 */
+	public static function trial_notice_days(): int {
+		return absint( self::get( 'trial_notice' ) );
 	}
 
 	/**

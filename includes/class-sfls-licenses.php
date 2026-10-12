@@ -15,6 +15,11 @@ final class SFLS_Licenses {
 	const GRACE_DAYS = 14;
 
 	/**
+	 * Billing columns (schema 4) that create() accepts as they are.
+	 */
+	const BILLING_COLUMNS = array( 'billing_status', 'trial', 'trial_started_at', 'trial_ends_at', 'renews_at', 'cancels_at', 'billing_amount', 'billing_currency', 'paddle_customer_id', 'paddle_subscription_id', 'paddle_price_id', 'paddle_transaction_id', 'checkout_token_hash', 'billing_synced_at' );
+
+	/**
 	 * New key: SFP-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX (128 random bits).
 	 */
 	public static function generate_key(): string {
@@ -25,7 +30,9 @@ final class SFLS_Licenses {
 	/**
 	 * Create a license.
 	 *
-	 * @param array $args plan, sites_allowed, customer_email, user_id, order_id, product_id, months, notes.
+	 * @param array $args plan, sites_allowed, customer_email, user_id, order_id, product_id, months, notes,
+	 *                    and optionally billing (paddle | woocommerce | manual), expires_at (GMT datetime,
+	 *                    overrides months) and any billing column (see SFLS_DB).
 	 * @return array The stored license.
 	 */
 	public static function create( array $args ): array {
@@ -56,7 +63,16 @@ final class SFLS_Licenses {
 			'expires_at'     => $months > 0 ? gmdate( 'Y-m-d H:i:s', strtotime( "+{$months} months" ) ) : null,
 			'created_at'     => $now,
 			'updated_at'     => $now,
+			'billing'        => in_array( $args['billing'] ?? '', array( 'paddle', 'woocommerce', 'manual' ), true ) ? $args['billing'] : ( ! empty( $args['order_id'] ) ? 'woocommerce' : 'manual' ),
 		);
+		if ( array_key_exists( 'expires_at', $args ) ) {
+			$row['expires_at'] = $args['expires_at'];
+		}
+		foreach ( self::BILLING_COLUMNS as $column ) {
+			if ( array_key_exists( $column, $args ) ) {
+				$row[ $column ] = $args[ $column ];
+			}
+		}
 
 		$wpdb->insert( SFLS_DB::licenses(), $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$row['id'] = (int) $wpdb->insert_id;
@@ -75,6 +91,36 @@ final class SFLS_Licenses {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE license_key = %s", strtoupper( trim( $key ) ) ), ARRAY_A );
+		return $row ? $row : null;
+	}
+
+	/**
+	 * Find the license of a Paddle subscription.
+	 *
+	 * @param string $subscription_id Paddle subscription ID (sub_...).
+	 */
+	public static function find_by_subscription( string $subscription_id ): ?array {
+		global $wpdb;
+		if ( '' === $subscription_id ) {
+			return null;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE paddle_subscription_id = %s ORDER BY id ASC LIMIT 1", $subscription_id ), ARRAY_A );
+		return $row ? $row : null;
+	}
+
+	/**
+	 * Find the license created by a Paddle checkout transaction.
+	 *
+	 * @param string $transaction_id Paddle transaction ID (txn_...).
+	 */
+	public static function find_by_transaction( string $transaction_id ): ?array {
+		global $wpdb;
+		if ( '' === $transaction_id ) {
+			return null;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE paddle_transaction_id = %s ORDER BY id ASC LIMIT 1", $transaction_id ), ARRAY_A );
 		return $row ? $row : null;
 	}
 
@@ -262,6 +308,13 @@ final class SFLS_Licenses {
 		}
 
 		$existing = self::activation( (int) $lic['id'], $domain );
+		if ( ! $existing && ! empty( $lic['trial'] ) && ! self::is_local_domain( $domain ) && SFLS_Trials::site_used_by_other( $domain, (int) $lic['id'] ) ) {
+			return new WP_Error(
+				'trial_site_used',
+				__( 'This site already had a SubtleForms Pro free trial. Buy a license to use Pro here, or start the trial on a site that has not had one.', 'subtleforms-license-server' ),
+				array( 'status' => 403 )
+			);
+		}
 		if ( ! $existing && ! self::is_local_domain( $domain ) && ! self::has_free_slot( $lic ) ) {
 			$limit = (int) $lic['sites_allowed'];
 			return new WP_Error(
@@ -280,6 +333,9 @@ final class SFLS_Licenses {
 		} else {
 			self::add_activation( (int) $lic['id'], $domain, $version );
 			self::log( (int) $lic['id'], $domain, 'activate', $source );
+			if ( ! empty( $lic['trial'] ) && ! self::is_local_domain( $domain ) ) {
+				SFLS_Trials::record_site( (int) $lic['id'], $domain );
+			}
 			do_action( 'sfls_domain_activated', $lic, $domain, $version );
 		}
 
@@ -480,7 +536,8 @@ final class SFLS_Licenses {
 				'grace_period_ends_at' => null,
 			);
 		}
-		$grace_end = $expires + self::GRACE_DAYS * DAY_IN_SECONDS;
+		// A free trial that ended without a payment has no grace period.
+		$grace_end = ! empty( $lic['trial'] ) ? $expires : $expires + self::GRACE_DAYS * DAY_IN_SECONDS;
 		if ( $grace_end > time() ) {
 			return array(
 				'status'               => 'grace_period',
@@ -570,7 +627,70 @@ final class SFLS_Licenses {
 			'sites_used'           => self::used_slots( (int) $lic['id'] ),
 			'check_again_in'       => 12 * HOUR_IN_SECONDS,
 			'is_local'             => '' !== $domain && self::is_local_domain( $domain ),
+			// Billing (1.4.0). During a free trial the license stays valid with
+			// status "valid", so older Pro versions keep working.
+			'billing'              => self::billing_source( $lic ),
+			'billing_status'       => 'paddle' === self::billing_source( $lic ) && '' !== (string) ( $lic['billing_status'] ?? '' ) ? (string) $lic['billing_status'] : null,
+			'trial'                => ! empty( $lic['trial'] ),
+			'trial_ends_at'        => self::iso( $lic['trial_ends_at'] ?? null ),
+			'renews_at'            => self::iso( $lic['renews_at'] ?? null ),
+			'cancels_at'           => self::iso( $lic['cancels_at'] ?? null ),
+			'renewal_amount'       => self::renewal_amount( $lic ),
+			'manage_url'           => self::manage_url(),
 		);
+	}
+
+	/**
+	 * Where the license is billed: paddle, woocommerce or manual.
+	 *
+	 * @param array $lic License.
+	 */
+	public static function billing_source( array $lic ): string {
+		$billing = (string) ( $lic['billing'] ?? '' );
+		if ( in_array( $billing, array( 'paddle', 'woocommerce', 'manual' ), true ) ) {
+			return $billing;
+		}
+		return (int) ( $lic['order_id'] ?? 0 ) > 0 ? 'woocommerce' : 'manual';
+	}
+
+	/**
+	 * Whether a license renews through a Paddle subscription.
+	 *
+	 * @param array $lic License.
+	 */
+	public static function is_paddle( array $lic ): bool {
+		return 'paddle' === self::billing_source( $lic ) && '' !== (string) ( $lic['paddle_subscription_id'] ?? '' );
+	}
+
+	/**
+	 * GMT datetime column as ISO 8601, or null.
+	 *
+	 * @param string|null $value GMT datetime.
+	 */
+	public static function iso( $value ): ?string {
+		return empty( $value ) ? null : gmdate( 'c', strtotime( $value . ' UTC' ) );
+	}
+
+	/**
+	 * Formatted next charge ("$79.00"), or null when unknown.
+	 *
+	 * @param array $lic License.
+	 */
+	public static function renewal_amount( array $lic ): ?string {
+		if ( ! self::is_paddle( $lic ) || '' === (string) ( $lic['billing_amount'] ?? '' ) || '' === (string) ( $lic['billing_currency'] ?? '' ) || ! empty( $lic['cancels_at'] ) ) {
+			return null;
+		}
+		return SFLS_Paddle::format_amount( (string) $lic['billing_amount'], (string) $lic['billing_currency'] );
+	}
+
+	/**
+	 * My Account › Licenses on this site (where customers manage billing).
+	 */
+	public static function manage_url(): string {
+		if ( function_exists( 'wc_get_account_endpoint_url' ) && function_exists( 'wc_get_page_id' ) && wc_get_page_id( 'myaccount' ) > 0 ) {
+			return wc_get_account_endpoint_url( 'licenses' );
+		}
+		return home_url( '/my-account/licenses/' );
 	}
 
 	// ── Admin queries ───────────────────────────────────────────────────
@@ -714,5 +834,24 @@ final class SFLS_Licenses {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at > %s AND expires_at <= %s ORDER BY expires_at ASC LIMIT 500", $from, $to ), ARRAY_A );
+	}
+
+	/**
+	 * Paddle licenses whose trial ends, or whose subscription renews, in a
+	 * window, and that are not set to cancel.
+	 *
+	 * @param string $column trial_ends_at | renews_at.
+	 * @param string $from   GMT datetime (exclusive).
+	 * @param string $to     GMT datetime (inclusive).
+	 * @return array[]
+	 */
+	public static function paddle_due( string $column, string $from, string $to ): array {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( 'trial_ends_at' === $column ) {
+			return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE status = 'active' AND billing = 'paddle' AND trial = 1 AND billing_status = 'trialing' AND cancels_at IS NULL AND trial_ends_at IS NOT NULL AND trial_ends_at > %s AND trial_ends_at <= %s ORDER BY trial_ends_at ASC LIMIT 500", $from, $to ), ARRAY_A );
+		}
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE status = 'active' AND billing = 'paddle' AND trial = 0 AND billing_status IN ( 'active', 'past_due' ) AND cancels_at IS NULL AND renews_at IS NOT NULL AND renews_at > %s AND renews_at <= %s ORDER BY renews_at ASC LIMIT 500", $from, $to ), ARRAY_A );
+		// phpcs:enable
 	}
 }

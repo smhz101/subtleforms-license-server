@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '3';
+	const SCHEMA_VERSION = '4';
 
 	/**
 	 * Licenses table name.
@@ -47,6 +47,22 @@ final class SFLS_DB {
 	}
 
 	/**
+	 * Trial claims table name (who already had a free trial).
+	 */
+	public static function trial_claims(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_trial_claims';
+	}
+
+	/**
+	 * Processed Paddle webhook events table name.
+	 */
+	public static function paddle_events(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_paddle_events';
+	}
+
+	/**
 	 * Create or upgrade the tables and the private release folder.
 	 */
 	public static function install(): void {
@@ -58,6 +74,8 @@ final class SFLS_DB {
 		$acts     = self::activations();
 		$log      = self::activation_log();
 		$tokens   = self::download_tokens();
+		$claims   = self::trial_claims();
+		$events   = self::paddle_events();
 
 		dbDelta(
 			"CREATE TABLE {$licenses} (
@@ -75,11 +93,28 @@ final class SFLS_DB {
   expires_at datetime NULL,
   created_at datetime NOT NULL,
   updated_at datetime NOT NULL,
+  billing varchar(20) NOT NULL DEFAULT '',
+  billing_status varchar(20) NOT NULL DEFAULT '',
+  trial tinyint(1) NOT NULL DEFAULT 0,
+  trial_started_at datetime NULL,
+  trial_ends_at datetime NULL,
+  renews_at datetime NULL,
+  cancels_at datetime NULL,
+  billing_amount varchar(32) NOT NULL DEFAULT '',
+  billing_currency varchar(3) NOT NULL DEFAULT '',
+  paddle_customer_id varchar(64) NOT NULL DEFAULT '',
+  paddle_subscription_id varchar(64) NOT NULL DEFAULT '',
+  paddle_price_id varchar(64) NOT NULL DEFAULT '',
+  paddle_transaction_id varchar(64) NOT NULL DEFAULT '',
+  checkout_token_hash varchar(64) NOT NULL DEFAULT '',
+  billing_synced_at datetime NULL,
   PRIMARY KEY  (id),
   UNIQUE KEY license_key (license_key),
   KEY customer_email (customer_email),
   KEY order_id (order_id),
-  KEY user_id (user_id)
+  KEY user_id (user_id),
+  KEY paddle_subscription_id (paddle_subscription_id),
+  KEY paddle_transaction_id (paddle_transaction_id)
 ) {$charset};"
 		);
 
@@ -124,6 +159,37 @@ final class SFLS_DB {
 ) {$charset};"
 		);
 
+		// Schema 4 (1.4.0): free trials already used, by email, company domain or site.
+		dbDelta(
+			"CREATE TABLE {$claims} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  kind varchar(10) NOT NULL,
+  value varchar(190) NOT NULL,
+  license_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY kind_value (kind,value),
+  KEY license_id (license_id)
+) {$charset};"
+		);
+
+		// Schema 4 (1.4.0): Paddle webhook events already handled (idempotency).
+		dbDelta(
+			"CREATE TABLE {$events} (
+  event_id varchar(64) NOT NULL,
+  event_type varchar(64) NOT NULL DEFAULT '',
+  occurred_at datetime NULL,
+  received_at datetime NOT NULL,
+  status varchar(20) NOT NULL DEFAULT '',
+  license_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  note text NULL,
+  PRIMARY KEY  (event_id),
+  KEY received_at (received_at)
+) {$charset};"
+		);
+
+		self::backfill_billing();
+
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
 
 		// Private folder for release packages.
@@ -137,6 +203,18 @@ final class SFLS_DB {
 		if ( ! file_exists( $dir . '/index.php' ) ) {
 			file_put_contents( $dir . '/index.php', "<?php\n// Silence.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		}
+	}
+
+	/**
+	 * Schema 4: licenses issued before 1.4.0 get their billing source:
+	 * woocommerce when an order issued them, manual otherwise.
+	 */
+	private static function backfill_billing(): void {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( "UPDATE {$wpdb->prefix}sfls_licenses SET billing = 'woocommerce' WHERE billing = '' AND order_id > 0" );
+		$wpdb->query( "UPDATE {$wpdb->prefix}sfls_licenses SET billing = 'manual' WHERE billing = ''" );
+		// phpcs:enable
 	}
 
 	/**

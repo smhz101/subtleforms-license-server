@@ -105,13 +105,18 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 		foreach ( $this->posts as $id ) {
 			wp_delete_post( $id, true );
 		}
-		$like = '%@' . $wpdb->esc_like( self::DOMAIN );
+		$like = '%' . $wpdb->esc_like( self::DOMAIN );
 		$ids  = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}sfls_licenses WHERE customer_email LIKE %s", $like ) );
 		foreach ( $ids as $id ) {
+			$wpdb->delete( $wpdb->prefix . 'sfls_trial_claims', array( 'license_id' => (int) $id ) );
 			SFLS_Licenses::delete( (int) $id );
 		}
+		// Trial claims, webhook events and accounts the Paddle tests created.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_trial_claims WHERE value LIKE %s OR value LIKE %s OR value LIKE %s", $like, '%sflstest%', '%sfls-site-test%' ) );
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}sfls_paddle_events WHERE event_id LIKE 'evt\_test\_%'" );
 		require_once ABSPATH . 'wp-admin/includes/user.php';
-		foreach ( $this->users as $id ) {
+		$auto = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->users} WHERE user_email LIKE %s OR user_email LIKE %s", $like, '%sflstest%' ) );
+		foreach ( array_unique( array_merge( $this->users, array_map( 'intval', $auto ) ) ) as $id ) {
 			wp_delete_user( $id );
 		}
 		foreach ( $this->options as $name => $value ) {

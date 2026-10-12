@@ -411,3 +411,48 @@ a.sfls-map-link:focus {
 		margin-bottom: 8px;
 	}
 }
+
+/* Paddle (1.4.0). */
+.sfls-tabs {
+	margin: 8px 0 4px;
+}
+
+.sfls-button-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0 0 12px;
+}
+
+.sfls-button-row form {
+	margin: 0;
+}
+
+.sfls-paddle-plans select,
+.sfls-paddle-plans input.regular-text {
+	width: 100%;
+	max-width: 26em;
+}
+
+.sfls-admin-pill--info {
+	background: #eef1fd;
+	color: #2145e6;
+}
+
+.sfls-admin-pill--chip {
+	margin-left: 4px;
+}
+
+.sfls-paddle-create .submit,
+.sfls-paddle-create form > .button {
+	margin-bottom: 8px;
+}
+
+.sfls-choice-list label {
+	display: inline-block;
+	margin-top: 4px;
+}
+
+.sfls-choice-list .description {
+	margin: 2px 0 12px 24px;
+}

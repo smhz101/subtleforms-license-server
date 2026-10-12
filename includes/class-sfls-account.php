@@ -40,6 +40,7 @@ final class SFLS_Account {
 		add_action( 'woocommerce_account_dashboard', array( $this, 'dashboard' ) );
 		add_action( 'template_redirect', array( $this, 'handle_deactivate' ) );
 		add_action( 'template_redirect', array( $this, 'handle_download' ) );
+		add_action( 'template_redirect', array( $this, 'handle_billing' ) );
 	}
 
 	/**
@@ -268,11 +269,15 @@ final class SFLS_Account {
 		$renew    = SFLS_Products::renew_url( $lic );
 		$upgrades = 'suspended' === $state['status'] ? array() : SFLS_Products::upgrade_options( $lic );
 		$date_fmt = get_option( 'date_format' );
+		$paddle   = SFLS_Licenses::is_paddle( $lic );
 
 		echo '<article class="sfls-card sfls-license" id="license-' . esc_attr( (string) $lic['id'] ) . '">';
 
 		echo '<header class="sfls-license-head"><div class="sfls-license-title"><h3>' . esc_html( SFLS_Plans::label( $lic['plan'] ) ) . '</h3>';
 		echo wp_kses_post( SFLS_Connect::pill( $state['status'] ) );
+		if ( $paddle && ! empty( $lic['trial'] ) && $state['valid'] ) {
+			echo '<span class="sfls-tag sfls-tag--trial">' . esc_html__( 'Free trial', 'subtleforms-license-server' ) . '</span>';
+		}
 		echo '</div><div class="sfls-license-actions">';
 		if ( $state['valid'] && SFLS_Releases::has_package() ) {
 			echo '<a class="sfls-btn sfls-btn--primary sfls-btn--sm" href="' . esc_url( self::download_url() ) . '">';
@@ -301,9 +306,35 @@ final class SFLS_Account {
 			}
 			echo '</a>';
 		}
+		if ( $paddle && $state['valid'] ) {
+			foreach ( self::paddle_upgrades( $lic ) as $plan ) {
+				echo '<form method="post" class="sfls-inline-form" action="' . esc_url( wc_get_account_endpoint_url( self::EP_LICENSES ) ) . '">';
+				self::billing_fields( $lic, 'change_plan' );
+				echo '<input type="hidden" name="plan" value="' . esc_attr( $plan ) . '">';
+				/* translators: 1: plan name, 2: sites */
+				$confirm = sprintf( __( 'Upgrade to %1$s (%2$s)? You pay the prorated difference for the rest of this billing year now, and the new limits apply right away. Same key.', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ), strtolower( SFLS_Plans::sites_label( (int) ( SFLS_Plans::get( $plan )['sites'] ?? 1 ) ) ) );
+				if ( ! empty( $lic['trial'] ) ) {
+					/* translators: %s: plan name */
+					$confirm = sprintf( __( 'Switch your trial to %s? Nothing is charged now. When the trial ends you are billed for the new plan.', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) );
+				}
+				echo '<button type="submit" class="sfls-btn sfls-btn--secondary sfls-btn--sm" data-sfls-confirm="' . esc_attr( $confirm ) . '">';
+				self::print_icon( 'up' );
+				/* translators: %s: plan name */
+				echo esc_html( sprintf( __( 'Upgrade to %s', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) ) ) . '</button></form>';
+			}
+		}
 		echo '</div></header>';
 
-		if ( 'grace_period' === $state['status'] ) {
+		if ( $paddle ) {
+			$this->billing_panel( $lic, $state );
+		}
+
+		if ( $paddle ) {
+			// The billing panel explains a live subscription; only say when it is over.
+			if ( ! $state['valid'] ) {
+				echo '<div class="sfls-alert sfls-alert--error">' . esc_html__( 'This subscription has ended. Pick a plan to turn Pro back on.', 'subtleforms-license-server' ) . ' <a href="' . esc_url( SFLS_Settings::pricing_url() ) . '">' . esc_html__( 'See plans', 'subtleforms-license-server' ) . '</a></div>';
+			}
+		} elseif ( 'grace_period' === $state['status'] ) {
 			echo '<div class="sfls-alert sfls-alert--warn">' . esc_html__( 'This license has expired. Pro keeps working for a short grace period. Renew now to keep updates and support.', 'subtleforms-license-server' ) . '</div>';
 		} elseif ( 'expired' === $state['status'] ) {
 			echo '<div class="sfls-alert sfls-alert--error">' . esc_html__( 'This license has expired. Renew it to turn Pro features and updates back on.', 'subtleforms-license-server' ) . '</div>';
@@ -318,7 +349,12 @@ final class SFLS_Account {
 
 		$limit = (int) $lic['sites_allowed'];
 		echo '<dl class="sfls-stats">';
-		echo '<div><dt>' . esc_html( empty( $lic['expires_at'] ) ? __( 'Term', 'subtleforms-license-server' ) : ( $state['valid'] && 'valid' === $state['status'] ? __( 'Renews', 'subtleforms-license-server' ) : __( 'Expired', 'subtleforms-license-server' ) ) ) . '</dt><dd>' . esc_html( SFLS_Licenses::expiry_label( $lic ) ) . '</dd></div>';
+		if ( $paddle ) {
+			[ $term_label, $term_value ] = self::paddle_term( $lic, $state );
+			echo '<div><dt>' . esc_html( $term_label ) . '</dt><dd>' . esc_html( $term_value ) . '</dd></div>';
+		} else {
+			echo '<div><dt>' . esc_html( empty( $lic['expires_at'] ) ? __( 'Term', 'subtleforms-license-server' ) : ( $state['valid'] && 'valid' === $state['status'] ? __( 'Renews', 'subtleforms-license-server' ) : __( 'Expired', 'subtleforms-license-server' ) ) ) . '</dt><dd>' . esc_html( SFLS_Licenses::expiry_label( $lic ) ) . '</dd></div>';
+		}
 		echo '<div><dt>' . esc_html__( 'Sites', 'subtleforms-license-server' ) . '</dt><dd>' . esc_html( SFLS_Licenses::used_slots( (int) $lic['id'] ) . ' / ' . ( $limit > 0 ? number_format_i18n( $limit ) : __( 'Unlimited', 'subtleforms-license-server' ) ) ) . '</dd></div>';
 		echo '<div><dt>' . esc_html__( 'Purchased', 'subtleforms-license-server' ) . '</dt><dd>' . esc_html( wp_date( $date_fmt, strtotime( $lic['created_at'] . ' UTC' ) ) );
 		if ( (int) $lic['order_id'] && function_exists( 'wc_get_order' ) ) {
@@ -373,6 +409,191 @@ final class SFLS_Account {
 		}
 		echo '</div>';
 		echo '</article>';
+	}
+
+	// ── Paddle billing ──────────────────────────────────────────────────
+
+	/**
+	 * Hidden fields of a billing action form.
+	 *
+	 * @param array  $lic    License.
+	 * @param string $action payment | cancel | resume | change_plan.
+	 */
+	private static function billing_fields( array $lic, string $action ): void {
+		wp_nonce_field( 'sfls_billing_' . $lic['id'], '_sfls_billing_nonce', false );
+		echo '<input type="hidden" name="sfls_billing" value="' . esc_attr( $action ) . '"><input type="hidden" name="license_id" value="' . esc_attr( (string) $lic['id'] ) . '">';
+	}
+
+	/**
+	 * Plans a Paddle license can move up to.
+	 *
+	 * @param array $lic License.
+	 * @return string[]
+	 */
+	public static function paddle_upgrades( array $lic ): array {
+		if ( ! in_array( $lic['billing_status'], array( 'active', 'trialing' ), true ) || ! SFLS_Paddle::has_api_key() ) {
+			return array();
+		}
+		return array_values( array_filter( SFLS_Plans::higher( (string) $lic['plan'] ), static fn( $plan ) => '' !== SFLS_Paddle::plan( $plan )['price_id'] ) );
+	}
+
+	/**
+	 * First stat of a Paddle license card: "Trial ends", "Renews", "Ends".
+	 *
+	 * @param array $lic   License.
+	 * @param array $state State.
+	 * @return array{0:string,1:string}
+	 */
+	private static function paddle_term( array $lic, array $state ): array {
+		$fmt  = get_option( 'date_format' );
+		$date = static fn( $gmt ) => wp_date( $fmt, strtotime( $gmt . ' UTC' ) );
+		if ( ! $state['valid'] ) {
+			return array( __( 'Ended', 'subtleforms-license-server' ), SFLS_Licenses::expiry_label( $lic ) );
+		}
+		if ( ! empty( $lic['cancels_at'] ) ) {
+			return array( __( 'Ends', 'subtleforms-license-server' ), $date( $lic['cancels_at'] ) );
+		}
+		if ( ! empty( $lic['trial'] ) && ! empty( $lic['trial_ends_at'] ) ) {
+			return array( __( 'Trial ends', 'subtleforms-license-server' ), $date( $lic['trial_ends_at'] ) );
+		}
+		if ( ! empty( $lic['renews_at'] ) ) {
+			return array( __( 'Renews', 'subtleforms-license-server' ), $date( $lic['renews_at'] ) );
+		}
+		return array( __( 'Paid until', 'subtleforms-license-server' ), SFLS_Licenses::expiry_label( $lic ) );
+	}
+
+	/**
+	 * Billing state and buttons of a Paddle license.
+	 *
+	 * @param array $lic   License.
+	 * @param array $state State.
+	 */
+	private function billing_panel( array $lic, array $state ): void {
+		$line = SFLS_Billing::state_line( $lic );
+		if ( ! $line || ! $state['valid'] ) {
+			return;
+		}
+		$status = (string) $lic['billing_status'];
+		$live   = in_array( $status, array( 'active', 'trialing', 'past_due' ), true );
+		$action = wc_get_account_endpoint_url( self::EP_LICENSES );
+
+		echo '<div class="sfls-billing sfls-billing--' . esc_attr( $line[0] ) . '" data-billing-status="' . esc_attr( $status ) . '">';
+		echo '<div class="sfls-billing-text"><strong>' . esc_html( $line[1] ) . '</strong>';
+		if ( ! empty( $lic['trial'] ) ) {
+			$full = (int) ( SFLS_Plans::get( (string) $lic['plan'] )['sites'] ?? 1 );
+			echo '<span>' . esc_html(
+				sprintf(
+					/* translators: %s: sites of the full plan, e.g. "5 sites" */
+					__( 'Trial covers 1 site. After the first payment it covers %s.', 'subtleforms-license-server' ),
+					strtolower( SFLS_Plans::sites_label( $full ) )
+				)
+			) . '</span>';
+		}
+		echo '</div><div class="sfls-billing-actions">';
+		if ( $live && SFLS_Paddle::has_api_key() ) {
+			echo '<form method="post" class="sfls-inline-form" action="' . esc_url( $action ) . '">';
+			self::billing_fields( $lic, 'payment' );
+			echo '<button type="submit" class="sfls-btn sfls-btn--' . ( 'past_due' === $status ? 'primary' : 'secondary' ) . ' sfls-btn--sm">' . esc_html__( 'Update payment method', 'subtleforms-license-server' ) . '</button></form>';
+			echo '<form method="post" class="sfls-inline-form" action="' . esc_url( $action ) . '">';
+			if ( ! empty( $lic['cancels_at'] ) ) {
+				self::billing_fields( $lic, 'resume' );
+				echo '<button type="submit" class="sfls-btn sfls-btn--primary sfls-btn--sm">' . esc_html__( 'Resume', 'subtleforms-license-server' ) . '</button>';
+			} else {
+				self::billing_fields( $lic, 'cancel' );
+				$confirm = ! empty( $lic['trial'] )
+					? __( 'Cancel auto-renew? Pro keeps working until the trial ends and you will not be charged.', 'subtleforms-license-server' )
+					: __( 'Cancel auto-renew? Pro keeps working until the end of the period you paid for. You can resume before then.', 'subtleforms-license-server' );
+				echo '<button type="submit" class="sfls-btn sfls-btn--ghost sfls-btn--sm" data-sfls-confirm="' . esc_attr( $confirm ) . '">' . esc_html__( 'Cancel auto-renew', 'subtleforms-license-server' ) . '</button>';
+			}
+			echo '</form>';
+		}
+		echo '</div></div>';
+	}
+
+	/**
+	 * Billing buttons on My Account › Licenses: Update payment method (Paddle
+	 * customer portal), Cancel auto-renew, Resume and Upgrade.
+	 */
+	public function handle_billing(): void {
+		if ( empty( $_POST['sfls_billing'] ) || ! is_user_logged_in() ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Checked below.
+			return;
+		}
+		$id    = absint( $_POST['license_id'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Checked next.
+		$nonce = sanitize_text_field( wp_unslash( $_POST['_sfls_billing_nonce'] ?? '' ) );
+		$back  = wc_get_account_endpoint_url( self::EP_LICENSES );
+		if ( ! wp_verify_nonce( $nonce, 'sfls_billing_' . $id ) ) {
+			wc_add_notice( __( 'Your session expired. Try again.', 'subtleforms-license-server' ), 'error' );
+			wp_safe_redirect( $back );
+			exit;
+		}
+		$lic = SFLS_Licenses::find( $id );
+		if ( ! $lic || ! SFLS_Licenses::user_owns( $lic, wp_get_current_user() ) || ! SFLS_Licenses::is_paddle( $lic ) ) {
+			wc_add_notice( __( 'That license was not found in your account.', 'subtleforms-license-server' ), 'error' );
+			wp_safe_redirect( $back );
+			exit;
+		}
+		$do     = sanitize_key( wp_unslash( $_POST['sfls_billing'] ) );
+		$back  .= '#license-' . $id;
+		$result = null;
+		$fmt    = get_option( 'date_format' );
+
+		switch ( $do ) {
+			case 'payment':
+			case 'overview':
+				$url = SFLS_Billing::portal_url( $lic, $do );
+				if ( is_wp_error( $url ) ) {
+					$result = $url;
+					break;
+				}
+				$host  = (string) wp_parse_url( $url, PHP_URL_HOST );
+				$allow = static function ( $hosts ) use ( $host ) {
+					if ( str_ends_with( $host, '.paddle.com' ) ) {
+						$hosts[] = $host;
+					}
+					return $hosts;
+				};
+				add_filter( 'allowed_redirect_hosts', $allow );
+				wp_safe_redirect( $url, 303, 'SubtleForms' );
+				remove_filter( 'allowed_redirect_hosts', $allow );
+				exit;
+			case 'cancel':
+				$result = SFLS_Billing::cancel_auto_renew( $lic );
+				if ( ! is_wp_error( $result ) ) {
+					$until = ! empty( $result['cancels_at'] ) ? wp_date( $fmt, strtotime( $result['cancels_at'] . ' UTC' ) ) : SFLS_Licenses::expiry_label( $result );
+					/* translators: %s: date */
+					wc_add_notice( sprintf( __( 'Auto-renew is off. Pro keeps working until %s, and you can resume before then.', 'subtleforms-license-server' ), $until ) );
+				}
+				break;
+			case 'resume':
+				$result = SFLS_Billing::resume( $lic );
+				if ( ! is_wp_error( $result ) ) {
+					wc_add_notice( __( 'Auto-renew is back on. Nothing else changes.', 'subtleforms-license-server' ) );
+				}
+				break;
+			case 'change_plan':
+				$plan = sanitize_key( wp_unslash( $_POST['plan'] ?? '' ) );
+				if ( ! in_array( $plan, self::paddle_upgrades( $lic ), true ) ) {
+					$result = new WP_Error( 'sfls_plan', __( 'That plan is not available as an upgrade.', 'subtleforms-license-server' ) );
+					break;
+				}
+				$result = SFLS_Billing::change_plan( $lic, $plan );
+				if ( ! is_wp_error( $result ) ) {
+					wc_add_notice(
+						sprintf(
+							/* translators: 1: plan, 2: sites */
+							__( 'Upgraded to %1$s. Same key, now %2$s.', 'subtleforms-license-server' ),
+							SFLS_Plans::label( $plan ),
+							strtolower( SFLS_Plans::sites_label( (int) $result['sites_allowed'] ) )
+						)
+					);
+				}
+				break;
+		}
+		if ( is_wp_error( $result ) ) {
+			wc_add_notice( $result->get_error_message(), 'error' );
+		}
+		wp_safe_redirect( $back );
+		exit;
 	}
 
 	/**

@@ -368,6 +368,18 @@ final class SFLS_Connect {
 	}
 
 	/**
+	 * A standalone page in the same shell as /connect-site/ (used by
+	 * /license-welcome/).
+	 *
+	 * @param string   $title Document title.
+	 * @param callable $body  Prints the card content.
+	 */
+	public static function standalone_page( string $title, callable $body ): void {
+		SFLS_Assets::register_handles();
+		( new self() )->shell( $title, $body );
+	}
+
+	/**
 	 * Standalone page shell.
 	 *
 	 * @param string   $title Document title.

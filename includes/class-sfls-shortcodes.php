@@ -8,6 +8,11 @@
  *   [sfls_changelog limit="0"]               Every Pro release, newest first.
  *   [sfls_latest_version]                    The current Pro version number
  *                                           ("Coming soon" before the first release).
+ *   [sfls_license_welcome]                   Landing page after a Paddle checkout
+ *                                           (see SFLS_Checkout_Paddle).
+ *
+ * When Licenses › Settings › Paddle sells with Paddle, [sfls_pricing] shows
+ * yearly Paddle subscriptions with free trials instead of WooCommerce products.
  *
  * The same output is available as blocks (see SFLS_Blocks).
  *
@@ -56,6 +61,11 @@ final class SFLS_Shortcodes {
 			'sfls_pricing'
 		);
 		$atts['renewal_note'] = in_array( strtolower( (string) $atts['renewal_note'] ), array( '1', 'yes', 'true', 'on' ), true );
+
+		// Selling with Paddle: yearly subscriptions with optional free trials.
+		if ( SFLS_Paddle::selling() ) {
+			return SFLS_Checkout_Paddle::pricing_html( $atts );
+		}
 
 		if ( ! SFLS_Products::woo_active() ) {
 			return '';

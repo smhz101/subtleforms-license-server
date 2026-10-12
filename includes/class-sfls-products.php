@@ -162,7 +162,7 @@ final class SFLS_Products {
 	 * @param array $lic License.
 	 */
 	public static function renew_url( array $lic ): string {
-		if ( empty( $lic['expires_at'] ) || ! self::woo_active() ) {
+		if ( empty( $lic['expires_at'] ) || ! self::woo_active() || SFLS_Licenses::is_paddle( $lic ) ) {
 			return '';
 		}
 		$product = self::find( $lic['plan'], 'renewal' ) ?? self::find( $lic['plan'], 'yearly' );
@@ -182,7 +182,7 @@ final class SFLS_Products {
 	 * @return array<string,array>
 	 */
 	public static function upgrade_options( array $lic ): array {
-		if ( ! self::woo_active() ) {
+		if ( ! self::woo_active() || SFLS_Licenses::is_paddle( $lic ) ) {
 			return array();
 		}
 		$prefer = empty( $lic['expires_at'] ) ? 'lifetime' : 'yearly';

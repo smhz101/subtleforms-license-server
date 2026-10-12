@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.3.0
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,8 +20,23 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pricing, changelog, latest version and account link blocks (and shortcodes) for the marketing site.
 * Renewal reminder emails, renew and prorated upgrades from the account.
 * Rate-limited license API with an activation log and single-use download links.
+* Optional Paddle Billing: yearly subscriptions that renew automatically, 7 or 14 day free trials with one trial per customer, and billing emails.
 
 == Changelog ==
+
+= 1.4.0 - 2026-10-12 =
+* New: licenses can be sold with Paddle Billing. Licenses › Settings › Paddle has a "Sell licenses with: Paddle or WooCommerce" choice, the sandbox or live environment, the API key, client-side token and webhook secret, a Test connection button, the webhook URL to paste into Paddle, and a Sync products helper to map each plan to its Paddle prices. WooCommerce stays for My Account, and licenses sold through WooCommerce keep working.
+* New: free trials of 7 or 14 days per plan. The customer pays nothing today, Paddle collects the card and charges when the trial ends. A trial license covers 1 site and gets the plan's full site limit when the first payment goes through.
+* New: one free trial per email address, per company email domain (only the exact address on Gmail, Outlook, Yahoo, Hotmail, iCloud, Proton and other free mail) and per site. The pricing cards check this before the checkout opens, and the webhook checks it again: a second trial that slips through is canceled in Paddle before any charge and the customer gets an email.
+* New: every Paddle plan renews automatically each year. Customers get emails before the trial ends (3 days), before each renewal (14 and 3 days, configurable), when a payment goes through, when a payment fails (with a link to update the card), when auto-renew is turned off and when the license ends. Every email can be sent as a test from Licenses › Settings.
+* New: the pricing block and shortcode open the Paddle overlay checkout. Plans with a trial show "Start 14-day free trial" and "Then $79/year, cancel anytime". Customers who already had a trial see "Buy now" and the reason.
+* New: /license-welcome/ (or a page with the [sfls_license_welcome] shortcode) waits for the license after a Paddle checkout, then shows the key, Download Pro, the install steps and the trial end date.
+* New: My Account › Licenses shows the billing state of Paddle licenses (Trial ends on, Renews on, Cancels on, Past due) with Update payment method, Cancel auto-renew, Resume and Upgrade buttons. Upgrades charge the prorated difference at once, keep the key and raise the limits right away.
+* New: webhook endpoint POST /wp-json/sfls/v1/paddle/webhook checks the Paddle-Signature header, refuses old timestamps, handles every event once and skips events that arrive out of order. The last events are listed in Licenses › Settings › Paddle.
+* New: Licenses › Products can create the Paddle products and yearly prices, with or without a trial, from the WooCommerce yearly prices.
+* New: license responses include trial, trial_ends_at, renews_at, cancels_at, billing, billing_status, renewal_amount and manage_url. During a trial the license is valid with status "valid", so older Pro versions keep working.
+* New: the license editor shows the billing source, the Paddle subscription and the trials a license used, with Allow another trial. The licenses list marks trials, past due and canceling subscriptions.
+* Changed: renewal reminders for manual renewals are no longer sent for Paddle licenses, which renew by themselves.
 
 = 1.3.0 - 2026-10-11 =
 * Fixed: paid license orders now complete on their own. When every item in an order is a license product, payment moves it straight to Completed, whether or not the products are marked downloadable. Paid orders that also contain other items issue their keys at Processing. An order never issues keys twice.
