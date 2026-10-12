@@ -32,7 +32,7 @@ class SFLS_Gateway_Paddle extends WC_Payment_Gateway {
 	public function __construct() {
 		$this->id                 = SFLS_Woo_Paddle::GATEWAY;
 		$this->method_title       = __( 'Paddle', 'subtleforms-license-server' );
-		$this->method_description = __( 'Customers check out in WooCommerce and pay in a secure Paddle window by card, PayPal, Apple Pay or Google Pay. Paddle is the merchant of record and adds sales tax or VAT. Used for SubtleForms license products only.', 'subtleforms-license-server' );
+		$this->method_description = __( 'Customers check out in WooCommerce and pay in the secure Paddle payment form, shown right on the checkout page, by card, PayPal, Apple Pay or Google Pay. Paddle is the merchant of record and adds sales tax or VAT. Used for SubtleForms license products only.', 'subtleforms-license-server' );
 		$this->has_fields         = false;
 		$this->supports           = array( 'products', 'refunds' );
 
@@ -80,7 +80,7 @@ class SFLS_Gateway_Paddle extends WC_Payment_Gateway {
 				'title'       => __( 'Description', 'subtleforms-license-server' ),
 				'type'        => 'textarea',
 				'description' => __( 'Shown under the payment method at checkout.', 'subtleforms-license-server' ),
-				'default'     => __( 'You pay in a secure Paddle window, and Paddle emails your receipt.', 'subtleforms-license-server' ),
+				'default'     => __( 'After Place order, the secure Paddle payment form opens here. Paddle emails your receipt.', 'subtleforms-license-server' ),
 				'desc_tip'    => true,
 			),
 		);
@@ -137,7 +137,8 @@ class SFLS_Gateway_Paddle extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Place order: create the Paddle transaction and go to the payment page.
+	 * Place order: create the Paddle transaction; the checkout then shows the
+	 * Paddle payment form inline.
 	 *
 	 * @param int $order_id Order.
 	 * @return array

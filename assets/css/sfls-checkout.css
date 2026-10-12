@@ -58,3 +58,76 @@
 	font-size: .875em;
 	opacity: .8;
 }
+
+/* Paddle payment form, inline (Checkout block, classic checkout, order-pay). */
+.sfls-paddle-inline[hidden] {
+	display: none !important;
+}
+.sfls-paddle-inline {
+	margin-top: 16px;
+	pointer-events: auto;
+	opacity: 1;
+}
+.sfls-paddle-inline--classic {
+	margin: 16px 0 0;
+}
+.sfls-paddle-inline__lead {
+	margin: 0 0 4px;
+	font-weight: 600;
+}
+.sfls-paddle-inline__status {
+	margin: 0 0 8px;
+	font-size: .875em;
+	opacity: .75;
+}
+.sfls-paddle-inline__status:empty {
+	display: none;
+}
+.sfls-paddle-inline__status[data-tone="bad"] {
+	color: #b32d2e;
+	opacity: 1;
+}
+.sfls-paddle-inline__status[data-tone="ok"] {
+	color: #00703c;
+	opacity: 1;
+}
+.sfls-paddle-inline__frame {
+	min-height: 120px;
+}
+.sfls-paddle-inline.is-loaded .sfls-paddle-inline__frame {
+	min-height: 0;
+}
+.sfls-paddle-inline__cancel {
+	margin-top: 8px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	font-size: .875em;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
+/* While the Paddle form is open: Paddle's own Pay button replaces Place
+   order, and the details above are locked (Change details unlocks them). */
+body.sfls-paddle-paying .wc-block-components-checkout-place-order-button,
+body.sfls-paddle-paying .wc-block-checkout__actions,
+body.sfls-paddle-paying #place_order {
+	display: none !important;
+}
+body.sfls-paddle-paying .wc-block-checkout__contact-fields,
+body.sfls-paddle-paying .wc-block-checkout__billing-fields,
+body.sfls-paddle-paying .wc-block-checkout__shipping-fields,
+body.sfls-paddle-paying .wc-block-checkout__order-notes,
+body.sfls-paddle-paying form.checkout #customer_details,
+body.sfls-paddle-paying #payment .wc_payment_methods {
+	opacity: .55;
+	pointer-events: none;
+}
+/* The payment step stays fully visible even if the checkout marks it busy. */
+body.sfls-paddle-paying .wc-block-checkout__payment-method,
+body.sfls-paddle-paying .wc-block-checkout__payment-method .wc-block-components-checkout-step__container {
+	opacity: 1 !important;
+}

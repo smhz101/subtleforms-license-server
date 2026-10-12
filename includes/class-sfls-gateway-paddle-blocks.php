@@ -4,8 +4,8 @@
  *
  * The block script (assets/js/sfls-gateway-blocks.js) registers the payment
  * method with its label, description and the tax note. Placing the order
- * runs SFLS_Gateway_Paddle::process_payment() through the Store API, which
- * answers with the payment page that opens the Paddle overlay.
+ * runs SFLS_Gateway_Paddle::process_payment() through the Store API, and the
+ * script opens the Paddle payment form inline with the new transaction.
  *
  * @package SFLS
  */
@@ -47,11 +47,12 @@ final class SFLS_Gateway_Paddle_Blocks extends AbstractPaymentMethodType {
 	 * @return string[]
 	 */
 	public function get_payment_method_script_handles() {
+		SFLS_Woo_Paddle::register_assets();
 		if ( ! wp_script_is( 'sfls-gateway-blocks', 'registered' ) ) {
 			wp_register_script(
 				'sfls-gateway-blocks',
 				SFLS_URL . 'assets/js/sfls-gateway-blocks.js',
-				array( 'wc-blocks-registry', 'wc-settings', 'wp-element', 'wp-html-entities' ),
+				array( 'wc-blocks-registry', 'wc-settings', 'wp-element', 'wp-html-entities', 'sfls-paddle-inline' ),
 				SFLS_VERSION,
 				true
 			);
@@ -71,6 +72,7 @@ final class SFLS_Gateway_Paddle_Blocks extends AbstractPaymentMethodType {
 			'description' => $gateway ? $gateway->get_description() : '',
 			'taxNote'     => SFLS_Woo_Paddle::tax_note(),
 			'methods'     => __( 'Card · PayPal · Apple Pay · Google Pay', 'subtleforms-license-server' ),
+			'cancelled'   => __( 'Payment not finished, so nothing was charged. Check your details and place the order again.', 'subtleforms-license-server' ),
 			'supports'    => $gateway ? array_values( array_filter( $gateway->supports, array( $gateway, 'supports' ) ) ) : array( 'products' ),
 		);
 	}

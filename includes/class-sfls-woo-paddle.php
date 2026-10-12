@@ -6,8 +6,9 @@
  * The customer uses the normal WooCommerce cart and checkout. "Pay with
  * Paddle" (SFLS_Gateway_Paddle) is the payment method for license-only carts:
  * on Place order the order is created Pending, a Paddle transaction is created
- * from it through the API, and the order's payment page opens the Paddle
- * overlay with that transaction. The signed Paddle webhook completes the
+ * from it through the API, and the Paddle payment form opens inline on the
+ * checkout page, right under the payment method (the order's payment page
+ * shows the same form for orders paid later). The signed Paddle webhook completes the
  * order (SFLS_Woo_Paddle_Orders), which issues the license once and links it
  * to the Paddle subscription, so renewals, trials, cancel, resume, the
  * customer portal and upgrades all run through Paddle Billing.
@@ -21,7 +22,7 @@
  *   - no WooCommerce tax on license products, because Paddle is the merchant
  *     of record and adds sales tax or VAT;
  *   - building the Paddle transaction from an order;
- *   - the payment page (order-pay) that opens the overlay.
+ *   - the inline Paddle payment form on the checkout and order-pay pages.
  *
  * @package SFLS
  */
@@ -72,6 +73,7 @@ final class SFLS_Woo_Paddle {
 		add_action( 'woocommerce_receipt_' . self::GATEWAY, array( $this, 'receipt_page' ) );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'cancel_open_transaction' ) );
 		add_action( 'wp_enqueue_scripts', array( self::class, 'register_assets' ), 6 );
+		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_checkout' ), 20 );
 	}
 
 	/**
@@ -112,16 +114,60 @@ final class SFLS_Woo_Paddle {
 	}
 
 	/**
-	 * Register the payment page script.
+	 * Register the inline payment script.
 	 */
 	public static function register_assets(): void {
 		SFLS_Checkout_Paddle::register_assets();
-		if ( ! wp_script_is( 'sfls-paddle-pay', 'registered' ) ) {
-			wp_register_script( 'sfls-paddle-pay', SFLS_URL . 'assets/js/sfls-paddle-pay.js', array( 'sfls-paddle-js' ), SFLS_VERSION, true );
+		if ( ! wp_script_is( 'sfls-paddle-inline', 'registered' ) ) {
+			wp_register_script( 'sfls-paddle-inline', SFLS_URL . 'assets/js/sfls-paddle-inline.js', array( 'sfls-paddle-js' ), SFLS_VERSION, true );
 		}
 		if ( ! wp_script_is( 'sfls-order-status', 'registered' ) ) {
 			wp_register_script( 'sfls-order-status', SFLS_URL . 'assets/js/sfls-order-status.js', array(), SFLS_VERSION, true );
 		}
+	}
+
+	/**
+	 * Settings for assets/js/sfls-paddle-inline.js.
+	 *
+	 * @param array $pay Order to pay right away on the order-pay page
+	 *                   ({ transactionId, successUrl, trial }), or empty.
+	 */
+	public static function inline_config( array $pay = array() ): array {
+		$config = SFLS_Paddle::config();
+		return array(
+			'token'       => (string) $config['client_token'],
+			'environment' => (string) $config['env'],
+			'locale'      => substr( determine_locale(), 0, 2 ),
+			'pay'         => $pay,
+			'i18n'        => array(
+				'lead'      => __( 'Pay securely with Paddle by card, PayPal, Apple Pay or Google Pay.', 'subtleforms-license-server' ),
+				'leadTrial' => __( 'Add a card for your free trial. Nothing is charged today.', 'subtleforms-license-server' ),
+				'loading'   => __( 'Loading the secure payment form…', 'subtleforms-license-server' ),
+				'change'    => __( 'Change details', 'subtleforms-license-server' ),
+				'cancelled' => __( 'Payment not finished, so nothing was charged. Check your details and place the order again.', 'subtleforms-license-server' ),
+				'error'     => __( 'The payment form ran into a problem. Please try again.', 'subtleforms-license-server' ),
+				'noPaddle'  => __( 'The Paddle payment form could not load. Check your connection or turn off content blockers, then try again.', 'subtleforms-license-server' ),
+				'payPage'   => __( 'Pay on the order page', 'subtleforms-license-server' ),
+				'done'      => __( 'Payment received. Taking you to your license…', 'subtleforms-license-server' ),
+			),
+		);
+	}
+
+	/**
+	 * Load the inline payment form script on the checkout page (classic and
+	 * block). Paddle.js on this page also opens Paddle's emailed payment
+	 * links (?_ptxn=…), since the default payment link points here.
+	 */
+	public function enqueue_checkout(): void {
+		if ( ! function_exists( 'is_checkout' ) || ! is_checkout() || is_order_received_page() || is_checkout_pay_page() ) {
+			return;
+		}
+		if ( ! SFLS_Paddle::woo_selling() ) {
+			return;
+		}
+		self::register_assets();
+		wp_enqueue_script( 'sfls-paddle-inline' );
+		wp_localize_script( 'sfls-paddle-inline', 'sflsPaddleInline', self::inline_config() );
 	}
 
 	/**
@@ -816,18 +862,26 @@ final class SFLS_Woo_Paddle {
 				'live' === SFLS_Paddle::config()['env'] ? __( 'live', 'subtleforms-license-server' ) : __( 'sandbox', 'subtleforms-license-server' )
 			)
 		);
+		$pay_url = $order->get_checkout_payment_url( true );
 		return array(
-			'result'   => 'success',
-			'redirect' => $order->get_checkout_payment_url( true ),
+			'result'              => 'success',
+			// Classic checkout (AJAX) stays on the page and shows the inline form; the
+			// Checkout block does the same in onCheckoutSuccess. The payment page is
+			// the fallback when the inline form cannot run.
+			'redirect'            => wp_doing_ajax() ? '#sfls-paddle' : $pay_url,
+			'sfls_paddle_txn'     => (string) $txn['id'],
+			'sfls_paddle_success' => $order->get_checkout_order_received_url(),
+			'sfls_paddle_pay_url' => $pay_url,
+			'sfls_paddle_trial'   => 'trial' === $line['kind'] ? 'yes' : 'no',
 		);
 	}
 
 	// ── Payment page ────────────────────────────────────────────────────
 
 	/**
-	 * The payment page (order-pay receipt): opens the Paddle overlay for the
-	 * order's transaction. Closing it leaves the order pending, and the page
-	 * offers to open it again.
+	 * The payment page (order-pay receipt): the Paddle payment form, inline,
+	 * for the order's transaction. Used for orders paid later (My Account ›
+	 * Orders › Pay) and as the fallback when the checkout cannot show the form.
 	 *
 	 * @param int $order_id Order.
 	 */
@@ -845,49 +899,28 @@ final class SFLS_Woo_Paddle {
 		if ( '' === $txn ) {
 			return;
 		}
+		$line  = self::order_line( $order );
+		$trial = ! is_wp_error( $line ) && 'trial' === $line['kind'];
+
 		self::register_assets();
-		$config = SFLS_Paddle::config();
-		wp_enqueue_script( 'sfls-paddle-pay' );
+		wp_enqueue_script( 'sfls-paddle-inline' );
 		wp_localize_script(
-			'sfls-paddle-pay',
-			'sflsPaddlePay',
-			array(
-				'token'         => $config['client_token'],
-				'environment'   => $config['env'],
-				'transactionId' => $txn,
-				'successUrl'    => $order->get_checkout_order_received_url(),
-				'locale'        => substr( determine_locale(), 0, 2 ),
-				'i18n'          => array(
-					'opening'  => __( 'Opening the secure Paddle checkout…', 'subtleforms-license-server' ),
-					'closed'   => __( 'The payment window was closed and nothing was charged. Your order is saved, so you can pay whenever you are ready.', 'subtleforms-license-server' ),
-					'noPaddle' => __( 'The Paddle checkout could not load. Check your connection or turn off content blockers, then try again.', 'subtleforms-license-server' ),
-					'done'     => __( 'Payment received. Taking you to your license…', 'subtleforms-license-server' ),
-				),
+			'sfls-paddle-inline',
+			'sflsPaddleInline',
+			self::inline_config(
+				array(
+					'transactionId' => $txn,
+					'successUrl'    => $order->get_checkout_order_received_url(),
+					'trial'         => $trial ? 'yes' : 'no',
+				)
 			)
 		);
 
-		$line   = self::order_line( $order );
-		$trial  = ! is_wp_error( $line ) && 'trial' === $line['kind'];
-		$amount = html_entity_decode( wp_strip_all_tags( wc_price( (float) $order->get_total(), array( 'currency' => $order->get_currency() ) ) ), ENT_QUOTES, 'UTF-8' );
-
-		echo '<div class="sfls sfls-paddle-pay" data-sfls-paddle-pay>';
+		echo '<div class="sfls sfls-paddle-pay">';
 		echo '<h2 class="sfls-paddle-pay-title">' . esc_html__( 'Complete your payment', 'subtleforms-license-server' ) . '</h2>';
-		echo '<p class="sfls-paddle-pay-lead">' . esc_html(
-			$trial
-				? __( 'A secure Paddle window opens to save your card. Nothing is charged today; your trial starts right away.', 'subtleforms-license-server' )
-				: __( 'A secure Paddle window opens to take the payment by card, PayPal, Apple Pay or Google Pay.', 'subtleforms-license-server' )
-		) . '</p>';
-		echo '<p class="sfls-paddle-pay-status" role="status" aria-live="polite"></p>';
-		echo '<div class="sfls-actions"><button type="button" class="sfls-btn sfls-btn--primary" data-sfls-paddle-open>';
-		echo esc_html(
-			$trial
-				? __( 'Start free trial', 'subtleforms-license-server' )
-				/* translators: %s: amount */
-				: sprintf( __( 'Pay %s', 'subtleforms-license-server' ), $amount )
-		);
-		echo '</button>';
-		echo '<a class="sfls-btn sfls-btn--ghost" href="' . esc_url( wc_get_checkout_url() ) . '">' . esc_html__( 'Back to checkout', 'subtleforms-license-server' ) . '</a></div>';
+		echo '<div class="sfls-paddle-inline" data-sfls-paddle-pay-inline></div>';
 		echo '<p class="sfls-muted sfls-paddle-pay-tax">' . esc_html( self::tax_note() ) . '</p>';
+		echo '<p><a href="' . esc_url( wc_get_checkout_url() ) . '">' . esc_html__( 'Back to checkout', 'subtleforms-license-server' ) . '</a></p>';
 		echo '</div>';
 	}
 

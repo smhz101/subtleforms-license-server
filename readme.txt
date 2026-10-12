@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.5.0
+Stable tag: 1.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -23,6 +23,12 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, 7 or 14 day free trials with one trial per customer, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.5.1 - 2026-10-12 =
+* Changed: Pay with Paddle now shows the Paddle payment form inline, right under the payment method on the checkout page, instead of sending the customer to a separate payment page with a popup. The form opens with the customer's email and country already filled in, so the customer only adds a card or picks PayPal, Apple Pay or Google Pay. Works in the Checkout block and the classic checkout.
+* Changed: while the form is open, Paddle's Pay button replaces Place order and the details above are locked. "Change details" closes the form without charging anything, and placing the order again reuses the same order.
+* Changed: the order payment page (My Account › Orders › Pay) shows the same inline form instead of the overlay.
+* New: Paddle.js loads on the checkout page, so Paddle's emailed payment links (?_ptxn=…) open there when the checkout page is the Paddle default payment link.
 
 = 1.5.0 - 2026-10-12 =
 * New: Pay with Paddle is a WooCommerce payment gateway. Customers use the WooCommerce cart and checkout, and pay in the Paddle overlay by card, PayPal, Apple Pay or Google Pay. It works in the classic checkout and the Checkout block, and is offered only for carts that hold a SubtleForms license.

@@ -209,7 +209,7 @@ class SFLS_Paddle_Woo_Gateway_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * The payment page opens the overlay with the transaction.
+	 * The order payment page shows the inline Paddle form for the transaction (1.5.1).
 	 */
 	public function test_payment_page(): void {
 		$this->cart_plan( 'pro' );
@@ -220,12 +220,10 @@ class SFLS_Paddle_Woo_Gateway_Test extends SFLS_Test_Case {
 		( new SFLS_Woo_Paddle() )->receipt_page( $order->get_id() );
 		$html = (string) ob_get_clean();
 		$this->assertStringContainsString( 'Complete your payment', $html );
-		$this->assertStringContainsString( 'data-sfls-paddle-open', $html );
-		$this->assertStringContainsString( 'Pay $79.00', $html );
-		$this->assertTrue( wp_script_is( 'sfls-paddle-pay', 'enqueued' ) );
-		$data = (string) wp_scripts()->get_data( 'sfls-paddle-pay', 'data' );
+		$this->assertStringContainsString( 'data-sfls-paddle-pay-inline', $html );
+		$this->assertTrue( wp_script_is( 'sfls-paddle-inline', 'enqueued' ) );
+		$data = (string) wp_scripts()->get_data( 'sfls-paddle-inline', 'data' );
 		$this->assertStringContainsString( (string) $order->get_meta( '_sfls_paddle_txn_id' ), $data );
-		$this->assertStringContainsString( 'order-received', $data );
 		$this->assertStringContainsString( 'test_clienttoken', $data );
 	}
 
