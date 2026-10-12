@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,9 +20,26 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pricing, changelog, latest version and account link blocks (and shortcodes) for the marketing site.
 * Renewal reminder emails, renew and prorated upgrades from the account.
 * Rate-limited license API with an activation log and single-use download links.
-* Optional Paddle Billing: yearly subscriptions that renew automatically, 7 or 14 day free trials with one trial per customer, and billing emails.
+* Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, 7 or 14 day free trials with one trial per customer, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.5.0 - 2026-10-12 =
+* New: Pay with Paddle is a WooCommerce payment gateway. Customers use the WooCommerce cart and checkout, and pay in the Paddle overlay by card, PayPal, Apple Pay or Google Pay. It works in the classic checkout and the Checkout block, and is offered only for carts that hold a SubtleForms license.
+* New: Licenses › Settings › Paddle › Sell licenses with now offers "WooCommerce checkout with Paddle payments (recommended)", "WooCommerce with other gateways" and "Paddle overlay (legacy)". Shops that sold with Paddle in 1.4.0 move to the recommended mode once, and the gateway is switched on.
+* New: Place order creates the order as Pending and a Paddle transaction from it, with the plan's price (or its trial price), the customer's email and country, the order details in custom data, and WooCommerce coupons as a discount on the first payment only. A Paddle price that does not match the cart is refused before the customer pays.
+* New: the order's payment page opens the Paddle overlay. Closing it keeps the order pending, and the customer can pay later from the same page or from My Account.
+* New: the Paddle webhook completes the order after checking the order key, currency and amount, adds Paddle's sales tax or VAT as a fee line so the order total matches the payment, and issues the license once. The license follows the Paddle subscription, so trials, automatic renewals, reminders, past due, cancel, resume and the customer portal work as before.
+* New: the order received page shows "Confirming your payment" until Paddle confirms, asks Paddle directly every few seconds, and then shows the license key.
+* New: free trials are $0 orders with a "Free for 14 days, then $79/year" line. Paddle still collects the card. One trial per email, company domain and site is checked at checkout, with a link to buy without the trial.
+* New: every Paddle renewal is recorded as a completed WooCommerce order linked to the first order, so reports and the customer's Orders list show each payment. Renewals extend the existing license and never issue a new key. A failed renewal adds a note to the first order and sends the past due email.
+* New: refunds from WooCommerce are sent to Paddle as full or partial refunds, and refunds or chargebacks made in Paddle are recorded as WooCommerce refunds once approved. Nothing is refunded twice. A fully refunded first order cancels its Paddle subscription.
+* New: upgrades paid with Paddle update the existing subscription with a prorated charge on the saved card, keep the key, and are recorded as an order with Paddle's amount. During a trial the upgrade costs nothing until the trial ends.
+* New: lifetime licenses and upgrades of licenses not billed by Paddle are one-time Paddle charges. Renewing a license sold through WooCommerce turns it into a yearly Paddle subscription.
+* New: license products carry no WooCommerce tax while Paddle takes the payment, and the checkout says that Paddle calculates sales tax or VAT.
+* New: the pricing block's Buy and Start trial buttons go to the WooCommerce cart in the recommended mode.
+* New: the plugin declares compatibility with WooCommerce order storage (HPOS) and the Cart and Checkout blocks.
+* Changed: the webhook also handles adjustment.created and adjustment.updated. Add them to the Paddle notification destination.
 
 = 1.4.0 - 2026-10-12 =
 * New: licenses can be sold with Paddle Billing. Licenses › Settings › Paddle has a "Sell licenses with: Paddle or WooCommerce" choice, the sandbox or live environment, the API key, client-side token and webhook secret, a Test connection button, the webhook URL to paste into Paddle, and a Sync products helper to map each plan to its Paddle prices. WooCommerce stays for My Account, and licenses sold through WooCommerce keep working.

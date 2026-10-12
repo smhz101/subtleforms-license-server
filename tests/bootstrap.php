@@ -53,3 +53,4 @@ require_once ABSPATH . 'wp-admin/includes/admin.php';
 
 require_once __DIR__ . '/class-sfls-test-case.php';
 require_once __DIR__ . '/class-sfls-paddle-helpers.php';
+require_once __DIR__ . '/class-sfls-woo-paddle-helpers.php';

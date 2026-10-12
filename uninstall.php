@@ -35,6 +35,8 @@ foreach ( array(
 	'sfls_products',
 	'sfls_paddle',
 	'sfls_paddle_rejected',
+	'sfls_migrated_150',
+	'woocommerce_sfls_paddle_settings',
 	'sfls_delete_data_on_uninstall',
 ) as $sfls_option ) {
 	delete_option( $sfls_option );

@@ -156,10 +156,27 @@ final class SFLS_Paddle {
 	}
 
 	/**
-	 * Whether new licenses are sold through Paddle right now.
+	 * Whether new licenses are sold through the legacy Paddle overlay (no
+	 * WooCommerce order) right now.
 	 */
 	public static function selling(): bool {
 		return 'paddle' === SFLS_Settings::sell_with() && self::configured();
+	}
+
+	/**
+	 * Whether licenses are sold through the WooCommerce checkout and paid with
+	 * the Paddle gateway right now (the recommended mode).
+	 */
+	public static function woo_selling(): bool {
+		return 'woo_paddle' === SFLS_Settings::sell_with() && self::configured() && SFLS_Products::woo_active();
+	}
+
+	/**
+	 * Whether the pricing cards show Paddle plans (with trials), in either
+	 * Paddle mode.
+	 */
+	public static function any_selling(): bool {
+		return self::selling() || self::woo_selling();
 	}
 
 	/**
@@ -493,5 +510,147 @@ final class SFLS_Paddle {
 			'year'  => 365,
 		);
 		return (int) $trial['frequency'] * ( $per[ $trial['interval'] ?? 'day' ] ?? 1 );
+	}
+
+	// ── Checkout API (WooCommerce gateway) ──────────────────────────────
+
+	/**
+	 * Create a transaction.
+	 *
+	 * @param array $body Request body (items, customer_id, address_id, discount, custom_data, ...).
+	 * @return array|WP_Error Transaction.
+	 */
+	public static function create_transaction( array $body ) {
+		return self::request( 'POST', '/transactions', $body );
+	}
+
+	/**
+	 * A transaction.
+	 *
+	 * @param string $id Transaction ID.
+	 * @return array|WP_Error
+	 */
+	public static function get_transaction( string $id ) {
+		return self::request( 'GET', '/transactions/' . rawurlencode( $id ) );
+	}
+
+	/**
+	 * Cancel a draft or ready transaction, so it can no longer be paid.
+	 *
+	 * @param string $id Transaction ID.
+	 * @return array|WP_Error
+	 */
+	public static function cancel_transaction( string $id ) {
+		return self::request( 'PATCH', '/transactions/' . rawurlencode( $id ), array( 'status' => 'canceled' ) );
+	}
+
+	/**
+	 * Transactions of a subscription, newest first.
+	 *
+	 * @param string $subscription_id Subscription ID.
+	 * @return array[]|WP_Error
+	 */
+	public static function subscription_transactions( string $subscription_id ) {
+		$result = self::request(
+			'GET',
+			'/transactions',
+			null,
+			array(
+				'subscription_id' => $subscription_id,
+				'per_page'        => '30',
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		unset( $result['_meta'] );
+		return array_values( array_filter( $result, 'is_array' ) );
+	}
+
+	/**
+	 * The Paddle customer for an email address: found by exact email, or
+	 * created.
+	 *
+	 * @param string $email Email.
+	 * @param string $name  Name.
+	 * @return string|WP_Error Customer ID.
+	 */
+	public static function customer_for( string $email, string $name = '' ) {
+		$found = self::request( 'GET', '/customers', null, array( 'email' => $email ) );
+		if ( is_wp_error( $found ) ) {
+			return $found;
+		}
+		unset( $found['_meta'] );
+		foreach ( $found as $row ) {
+			if ( is_array( $row ) && ! empty( $row['id'] ) && 0 === strcasecmp( (string) ( $row['email'] ?? '' ), $email ) ) {
+				return (string) $row['id'];
+			}
+		}
+		$created = self::request(
+			'POST',
+			'/customers',
+			array_filter(
+				array(
+					'email'       => $email,
+					'name'        => '' !== trim( $name ) ? trim( $name ) : null,
+					'custom_data' => array( 'source' => 'subtleforms-license-server' ),
+				)
+			)
+		);
+		if ( is_wp_error( $created ) ) {
+			// Created by a parallel request since the lookup: Paddle names the existing customer.
+			if ( preg_match( '/ctm_[a-z0-9]+/', $created->get_error_message(), $m ) ) {
+				return $m[0];
+			}
+			return $created;
+		}
+		return (string) ( $created['id'] ?? '' );
+	}
+
+	/**
+	 * Add an address (country and postcode) to a customer.
+	 *
+	 * @param string $customer_id Customer ID.
+	 * @param string $country     ISO 3166-1 alpha-2.
+	 * @param string $postcode    Postcode ('' when unknown).
+	 * @return string|WP_Error Address ID.
+	 */
+	public static function create_address( string $customer_id, string $country, string $postcode = '' ) {
+		$body = array( 'country_code' => strtoupper( $country ) );
+		if ( '' !== $postcode ) {
+			$body['postal_code'] = $postcode;
+		}
+		$result = self::request( 'POST', '/customers/' . rawurlencode( $customer_id ) . '/addresses', $body );
+		return is_wp_error( $result ) ? $result : (string) ( $result['id'] ?? '' );
+	}
+
+	/**
+	 * Create an adjustment (a refund).
+	 *
+	 * @param array $body action, transaction_id, reason, type, items.
+	 * @return array|WP_Error Adjustment.
+	 */
+	public static function create_adjustment( array $body ) {
+		return self::request( 'POST', '/adjustments', $body );
+	}
+
+	/**
+	 * Preview a subscription change without applying it.
+	 *
+	 * @param string $id   Subscription ID.
+	 * @param array  $body Same body as update_subscription().
+	 * @return array|WP_Error { immediate_transaction, next_transaction, update_summary, ... }
+	 */
+	public static function preview_subscription_update( string $id, array $body ) {
+		return self::request( 'PATCH', '/subscriptions/' . rawurlencode( $id ) . '/preview', $body );
+	}
+
+	/**
+	 * Amount before tax of a transaction's totals (total minus tax), in minor units.
+	 *
+	 * @param array $totals details.totals.
+	 */
+	public static function net_of( array $totals ): int {
+		return (int) ( $totals['total'] ?? 0 ) - (int) ( $totals['tax'] ?? 0 );
 	}
 }

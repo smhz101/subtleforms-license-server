@@ -140,6 +140,16 @@ final class SFLS_Delivery {
 		$html    .= '<h2 class="sfls-delivery-title" id="sfls-delivery-title-' . esc_attr( (string) $order->get_id() ) . '">' . esc_html( _n( 'Your SubtleForms Pro license', 'Your SubtleForms Pro licenses', max( 1, count( $licenses ) ), 'subtleforms-license-server' ) ) . '</h2>';
 
 		if ( ! $licenses ) {
+			if ( self::awaiting_paddle( $order ) ) {
+				$received = function_exists( 'is_order_received_page' ) && is_order_received_page();
+				if ( $received || ! $order->has_status( 'pending' ) ) {
+					return $html . self::waiting_html( $order ) . '</section>';
+				}
+				// My Account › Orders: the customer closed the Paddle window without paying.
+				$html .= '<p class="sfls-muted">' . esc_html__( 'This order is waiting for payment. Your license key appears here once it is paid.', 'subtleforms-license-server' ) . '</p>';
+				$html .= '<div class="sfls-actions"><a class="sfls-btn sfls-btn--primary" href="' . esc_url( $order->get_checkout_payment_url() ) . '">' . esc_html__( 'Pay now', 'subtleforms-license-server' ) . '</a></div></section>';
+				return $html;
+			}
 			$html .= '<p class="sfls-muted">' . esc_html__( 'Your license key appears here as soon as your payment is confirmed. We also email it to you.', 'subtleforms-license-server' ) . '</p></section>';
 			return $html;
 		}
@@ -164,6 +174,55 @@ final class SFLS_Delivery {
 	}
 
 	/**
+	 * Whether an order paid with Paddle is waiting for Paddle to confirm the
+	 * payment (the customer can be back before the webhook).
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	public static function awaiting_paddle( WC_Order $order ): bool {
+		return SFLS_Woo_Paddle::GATEWAY === $order->get_payment_method()
+			&& '' !== (string) $order->get_meta( '_sfls_paddle_txn_id' )
+			&& $order->has_status( array( 'pending', 'completed', 'processing' ) );
+	}
+
+	/**
+	 * "Confirming your payment" with a spinner; sfls-order-status.js polls
+	 * GET /sfls/v1/paddle/checkout?order&key and swaps in the key.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	private static function waiting_html( WC_Order $order ): string {
+		SFLS_Woo_Paddle::register_assets();
+		wp_enqueue_script( 'sfls-order-status' );
+		wp_localize_script(
+			'sfls-order-status',
+			'sflsOrderStatus',
+			array(
+				'endpoint' => rest_url( SFLS_REST::NS . '/paddle/checkout' ),
+				'interval' => 2000,
+				'attempts' => 60,
+				'slow'     => __( 'Paddle is still confirming your payment. Your license key will be emailed to you within a few minutes and will appear in My Account › Licenses.', 'subtleforms-license-server' ),
+			)
+		);
+		$html  = '<div class="sfls-delivery-waiting" data-sfls-order-status data-order="' . esc_attr( (string) $order->get_id() ) . '" data-key="' . esc_attr( $order->get_order_key() ) . '" data-total="' . esc_attr( (string) $order->get_total() ) . '">';
+		$html .= '<div class="sfls-welcome-spinner" aria-hidden="true"></div>';
+		$html .= '<p class="sfls-delivery-waiting-title"><strong>' . esc_html__( 'Confirming your payment', 'subtleforms-license-server' ) . '</strong></p>';
+		$html .= '<p class="sfls-muted" role="status">' . esc_html__( 'Paddle is confirming your payment. Your license key appears here in a few seconds. You can keep this page open.', 'subtleforms-license-server' ) . '</p>';
+		return $html . '</div>';
+	}
+
+	/**
+	 * Inner HTML of the panel for the order status endpoint (escaped).
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	public static function panel_body( WC_Order $order ): string {
+		$html = self::panel_html( $order );
+		$html = (string) preg_replace( '#^<section[^>]*>|</section>$#', '', $html );
+		return wp_kses( $html, self::kses() );
+	}
+
+	/**
 	 * Allowed tags for the panel.
 	 */
 	private static function kses(): array {
@@ -178,6 +237,18 @@ final class SFLS_Delivery {
 			'class'           => true,
 			'aria-labelledby' => true,
 		);
+		$allowed['div']     = array_merge(
+			(array) ( $allowed['div'] ?? array() ),
+			array(
+				'class'                  => true,
+				'aria-hidden'            => true,
+				'data-sfls-order-status' => true,
+				'data-order'             => true,
+				'data-key'               => true,
+				'data-total'             => true,
+			)
+		);
+		$allowed['p']       = array_merge( (array) ( $allowed['p'] ?? array() ), array( 'role' => true ) );
 		return $allowed;
 	}
 

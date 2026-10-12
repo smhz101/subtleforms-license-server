@@ -248,6 +248,13 @@ final class SFLS_Billing {
 		$lic = SFLS_Licenses::find_by_subscription( $sub_id );
 
 		if ( ! $lic ) {
+			// Paid at the WooCommerce checkout: the order issues and links the license.
+			if ( class_exists( 'SFLS_Woo_Paddle_Orders' ) ) {
+				$woo = SFLS_Woo_Paddle_Orders::subscription_event( $sub, $ctx + array( 'transaction_id' => $transaction ) );
+				if ( null !== $woo ) {
+					return $woo;
+				}
+			}
 			return self::create_from_subscription( $sub, $transaction, $occurred );
 		}
 

@@ -1352,3 +1352,121 @@
 		width: 100%;
 	}
 }
+
+/* ── Paddle through the WooCommerce checkout (1.5.0) ─────────────────── */
+
+.sfls.sfls-paddle-pay {
+	max-width: 640px;
+	margin: 24px 0 32px;
+	padding: 24px;
+	border: 1px solid var(--sfls-border);
+	border-radius: var(--sfls-radius);
+	background: var(--sfls-surface);
+	color: var(--sfls-text);
+}
+
+.sfls .sfls-paddle-pay-title {
+	margin: 0 0 8px;
+	font-size: 20px;
+	line-height: 1.3;
+	font-weight: 600;
+}
+
+.sfls .sfls-paddle-pay-lead {
+	margin: 0 0 12px;
+	font-size: 15px;
+	line-height: 1.5;
+}
+
+.sfls .sfls-paddle-pay-status {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.sfls .sfls-paddle-pay-status:empty {
+	display: none;
+}
+
+.sfls .sfls-paddle-pay-status[data-tone="warn"],
+.sfls .sfls-paddle-pay-status[data-tone="bad"],
+.sfls .sfls-paddle-pay-status[data-tone="ok"] {
+	padding: 10px 12px;
+	border-radius: var(--sfls-radius-sm);
+}
+
+.sfls .sfls-paddle-pay-status[data-tone="warn"] {
+	background: var(--sfls-warn-soft);
+	color: var(--sfls-warn);
+}
+
+.sfls .sfls-paddle-pay-status[data-tone="bad"] {
+	background: var(--sfls-bad-soft);
+	color: var(--sfls-bad);
+}
+
+.sfls .sfls-paddle-pay-status[data-tone="ok"] {
+	background: var(--sfls-ok-soft);
+	color: var(--sfls-ok);
+}
+
+.sfls.sfls-paddle-pay .sfls-actions {
+	justify-content: flex-start;
+	margin-top: 16px;
+}
+
+.sfls .sfls-paddle-pay-tax {
+	margin: 16px 0 0;
+	font-size: 13px;
+}
+
+.sfls .sfls-delivery-waiting {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 14px;
+}
+
+.sfls .sfls-delivery-waiting .sfls-welcome-spinner {
+	flex: 0 0 auto;
+	width: 24px;
+	height: 24px;
+	margin: 0;
+}
+
+.sfls .sfls-delivery-waiting-title {
+	margin: 0;
+	font-size: 16px;
+	color: var(--sfls-text);
+}
+
+.sfls .sfls-delivery-waiting [role="status"] {
+	flex: 1 1 100%;
+	margin: 4px 0 0;
+	font-size: 14px;
+}
+
+.sfls .sfls-plan .sfls-plan-buy-now {
+	display: block;
+	margin: 8px 0 0;
+	font-size: 13px;
+	text-align: center;
+	color: var(--sfls-muted);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.sfls .sfls-plan .sfls-plan-buy-now:hover,
+.sfls .sfls-plan .sfls-plan-buy-now:focus-visible {
+	color: var(--sfls-accent);
+}
+
+@media (max-width: 600px) {
+	.sfls.sfls-paddle-pay {
+		padding: 16px;
+	}
+
+	.sfls.sfls-paddle-pay .sfls-actions {
+		flex-direction: column;
+	}
+}

@@ -182,12 +182,21 @@ final class SFLS_Products {
 	 * @return array<string,array>
 	 */
 	public static function upgrade_options( array $lic ): array {
-		if ( ! self::woo_active() || SFLS_Licenses::is_paddle( $lic ) ) {
+		if ( ! self::woo_active() ) {
+			return array();
+		}
+		$paddle = SFLS_Licenses::is_paddle( $lic );
+		// Paddle subscriptions upgrade at the WooCommerce checkout only when it
+		// takes Paddle payments; otherwise My Account changes the plan directly.
+		if ( $paddle && ( ! SFLS_Paddle::woo_selling() || ! in_array( (string) $lic['billing_status'], array( 'active', 'trialing' ), true ) ) ) {
 			return array();
 		}
 		$prefer = empty( $lic['expires_at'] ) ? 'lifetime' : 'yearly';
 		$out    = array();
 		foreach ( SFLS_Plans::higher( $lic['plan'] ) as $plan ) {
+			if ( $paddle && '' === SFLS_Paddle::plan( $plan )['price_id'] ) {
+				continue;
+			}
 			$row = self::find( $plan, $prefer ) ?? self::find( $plan, 'yearly' );
 			if ( $row ) {
 				$out[ $plan ] = $row;

@@ -32,3 +32,29 @@
 .sfls-checkout-notices {
 	margin: 0 0 24px;
 }
+
+/* Pay with Paddle (block and classic checkout). */
+.sfls-paddle-label {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 2px 10px;
+}
+.sfls-paddle-label-methods {
+	font-size: .8125em;
+	opacity: .7;
+}
+.sfls-paddle-method p {
+	margin: 0 0 8px;
+}
+.sfls-paddle-method p:last-child {
+	margin-bottom: 0;
+}
+.sfls-paddle-tax-note {
+	font-size: .875em;
+	opacity: .75;
+}
+.sfls-paddle-tax-row td {
+	font-size: .875em;
+	opacity: .8;
+}

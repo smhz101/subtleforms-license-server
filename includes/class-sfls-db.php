@@ -226,6 +226,10 @@ final class SFLS_DB {
 			self::install();
 		}
 		if ( get_option( 'sfls_version' ) !== SFLS_VERSION ) {
+			$previous = (string) get_option( 'sfls_version', '' );
+			if ( '' !== $previous && version_compare( $previous, '1.5.0', '<' ) ) {
+				SFLS_Settings::migrate_150();
+			}
 			update_option( 'sfls_version', SFLS_VERSION );
 			update_option( 'sfls_flush_rewrite', 1 );
 			SFLS_Settings::maybe_default_support_email();

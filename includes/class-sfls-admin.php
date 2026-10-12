@@ -1034,19 +1034,30 @@ final class SFLS_Admin {
 			$missing[] = __( 'a price for at least one plan', 'subtleforms-license-server' );
 		}
 
-		if ( 'paddle' === SFLS_Settings::sell_with() && $missing ) {
-			echo '<div class="notice notice-warning inline"><p><strong>' . esc_html__( 'Paddle is selected but not ready, so the pricing page still sells through WooCommerce.', 'subtleforms-license-server' ) . '</strong> ' . esc_html(
+		$mode    = SFLS_Settings::sell_with();
+		$gateway = (array) get_option( 'woocommerce_sfls_paddle_settings', array() );
+		$gw_link = ' <a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=checkout&section=sfls_paddle' ) ) . '">' . esc_html__( 'Pay with Paddle gateway settings', 'subtleforms-license-server' ) . '</a>';
+		if ( in_array( $mode, array( 'paddle', 'woo_paddle' ), true ) && $missing ) {
+			echo '<div class="notice notice-warning inline"><p><strong>' . esc_html__( 'Paddle is selected but not ready, so licenses are still sold through WooCommerce with your other payment methods.', 'subtleforms-license-server' ) . '</strong> ' . esc_html(
 				sprintf(
 					/* translators: %s: list of missing settings */
 					__( 'Missing: %s.', 'subtleforms-license-server' ),
 					wp_sprintf_l( '%l', $missing )
 				)
 			) . '</p></div>';
+		} elseif ( SFLS_Paddle::woo_selling() && 'no' === ( $gateway['enabled'] ?? 'yes' ) ) {
+			echo '<div class="notice notice-warning inline"><p><strong>' . esc_html__( 'The Pay with Paddle payment method is turned off in WooCommerce, so license carts cannot be paid with Paddle.', 'subtleforms-license-server' ) . '</strong>' . wp_kses_post( $gw_link ) . '</p></div>';
+		} elseif ( SFLS_Paddle::woo_selling() ) {
+			echo '<div class="notice notice-success inline"><p>' . esc_html(
+				'live' === $config['env']
+					? __( 'Selling through the WooCommerce checkout with Paddle payments (live). Pricing buttons go to the cart, and license-only carts are paid with Paddle.', 'subtleforms-license-server' )
+					: __( 'Selling through the WooCommerce checkout with Paddle payments in the sandbox. No real money is taken. Switch the environment to Live when your tests pass.', 'subtleforms-license-server' )
+			) . wp_kses_post( $gw_link ) . '</p></div>';
 		} elseif ( SFLS_Paddle::selling() ) {
 			echo '<div class="notice notice-success inline"><p>' . esc_html(
 				'live' === $config['env']
-					? __( 'Selling with Paddle (live). Buy buttons, trials, upgrades and renewals go through Paddle.', 'subtleforms-license-server' )
-					: __( 'Selling with Paddle in the sandbox. No real money is taken. Switch the environment to Live when your tests pass.', 'subtleforms-license-server' )
+					? __( 'Selling with the legacy Paddle overlay (live). Purchases do not create WooCommerce orders.', 'subtleforms-license-server' )
+					: __( 'Selling with the legacy Paddle overlay in the sandbox. No real money is taken.', 'subtleforms-license-server' )
 			) . '</p></div>';
 		}
 
@@ -1055,8 +1066,23 @@ final class SFLS_Admin {
 		wp_nonce_field( 'sfls_paddle_settings' );
 		echo '<input type="hidden" name="action" value="sfls_paddle_settings"><h2>' . esc_html__( 'Selling', 'subtleforms-license-server' ) . '</h2><table class="form-table" role="presentation"><tbody>';
 		echo '<tr><th scope="row">' . esc_html__( 'Sell licenses with', 'subtleforms-license-server' ) . '</th><td><fieldset class="sfls-choice-list"><legend class="screen-reader-text">' . esc_html__( 'Sell licenses with', 'subtleforms-license-server' ) . '</legend>';
-		echo '<label><input type="radio" name="sell_with" value="paddle"' . checked( SFLS_Settings::sell_with(), 'paddle', false ) . '> <strong>' . esc_html__( 'Paddle', 'subtleforms-license-server' ) . '</strong></label><p class="description">' . esc_html__( 'Yearly subscriptions that renew automatically, with optional 7 or 14 day free trials. Paddle is the merchant of record and handles tax and receipts. Pricing, upgrades and renewals use Paddle.', 'subtleforms-license-server' ) . '</p>';
-		echo '<label><input type="radio" name="sell_with" value="woocommerce"' . checked( SFLS_Settings::sell_with(), 'woocommerce', false ) . '> <strong>' . esc_html__( 'WooCommerce', 'subtleforms-license-server' ) . '</strong></label><p class="description">' . esc_html__( 'The license products from Licenses › Products, paid once per year with manual renewals. Licenses sold this way keep working either way, and My Account stays on WooCommerce.', 'subtleforms-license-server' ) . '</p>';
+		$modes = array(
+			'woo_paddle'  => array(
+				__( 'WooCommerce checkout with Paddle payments (recommended)', 'subtleforms-license-server' ),
+				__( 'Customers use the WooCommerce cart and checkout, and pay with Pay with Paddle: card, PayPal, Apple Pay or Google Pay. Every purchase, renewal and refund is a WooCommerce order. Paddle is the merchant of record, adds sales tax or VAT, and renews yearly subscriptions automatically, with optional 7 or 14 day free trials.', 'subtleforms-license-server' ),
+			),
+			'woocommerce' => array(
+				__( 'WooCommerce with other gateways', 'subtleforms-license-server' ),
+				__( 'The license products from Licenses › Products, paid with your other WooCommerce payment methods once per year, with manual renewals and WooCommerce tax.', 'subtleforms-license-server' ),
+			),
+			'paddle'      => array(
+				__( 'Paddle overlay (legacy)', 'subtleforms-license-server' ),
+				__( 'The 1.4 flow: pricing buttons open the Paddle overlay directly and the license is issued without a WooCommerce order. Kept for existing setups.', 'subtleforms-license-server' ),
+			),
+		);
+		foreach ( $modes as $value => [ $label, $help ] ) {
+			echo '<label><input type="radio" name="sell_with" value="' . esc_attr( $value ) . '"' . checked( $mode, $value, false ) . '> <strong>' . esc_html( $label ) . '</strong></label><p class="description">' . esc_html( $help ) . '</p>';
+		}
 		echo '</fieldset></td></tr>';
 		echo '<tr><th scope="row"><label for="sfls-trial-notice">' . esc_html__( 'Trial ending email', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-trial-notice" type="number" min="0" max="30" class="small-text" name="trial_notice" value="' . esc_attr( (string) (int) $s['trial_notice'] ) . '"> ' . esc_html__( 'days before the trial ends', 'subtleforms-license-server' ) . '<p class="description">' . esc_html__( 'Tells the customer the amount, the date and how to cancel. 0 turns it off.', 'subtleforms-license-server' ) . '</p></td></tr>';
 		echo '<tr><th scope="row"><label for="sfls-renewal-notice">' . esc_html__( 'Renewal emails', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-renewal-notice" type="text" class="regular-text" name="renewal_notice" value="' . esc_attr( (string) $s['renewal_notice'] ) . '" placeholder="14,3"><p class="description">' . esc_html__( 'Days before each yearly renewal, separated by commas.', 'subtleforms-license-server' ) . '</p></td></tr>';
@@ -1064,10 +1090,10 @@ final class SFLS_Admin {
 
 		echo '<h2>' . esc_html__( 'Connection', 'subtleforms-license-server' ) . '</h2><table class="form-table" role="presentation"><tbody>';
 		echo '<tr><th scope="row"><label for="sfls-paddle-env">' . esc_html__( 'Environment', 'subtleforms-license-server' ) . '</label></th><td><select id="sfls-paddle-env" name="env"><option value="sandbox"' . selected( $config['env'], 'sandbox', false ) . '>' . esc_html__( 'Sandbox (test payments)', 'subtleforms-license-server' ) . '</option><option value="live"' . selected( $config['env'], 'live', false ) . '>' . esc_html__( 'Live', 'subtleforms-license-server' ) . '</option></select><p class="description">' . esc_html__( 'Sandbox and live accounts have different keys, tokens, prices and webhook secrets.', 'subtleforms-license-server' ) . '</p></td></tr>';
-		echo '<tr><th scope="row"><label for="sfls-paddle-key">' . esc_html__( 'API key', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-key" type="password" autocomplete="new-password" class="regular-text" name="api_key" value="" placeholder="' . esc_attr( '' !== $config['api_key'] ? '••••••••' . substr( $config['api_key'], -4 ) : 'pdl_sdbx_apikey_…' ) . '"><p class="description">' . esc_html( '' !== $config['api_key'] ? self::secret_hint( $config['api_key'] ) : __( 'Paddle › Developer tools › Authentication › API keys. Permissions: subscription read and write, customer read, customer portal session write, transaction read, product and price read and write.', 'subtleforms-license-server' ) ) . '</p></td></tr>';
+		echo '<tr><th scope="row"><label for="sfls-paddle-key">' . esc_html__( 'API key', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-key" type="password" autocomplete="new-password" class="regular-text" name="api_key" value="" placeholder="' . esc_attr( '' !== $config['api_key'] ? '••••••••' . substr( $config['api_key'], -4 ) : 'pdl_sdbx_apikey_…' ) . '"><p class="description">' . esc_html( '' !== $config['api_key'] ? self::secret_hint( $config['api_key'] ) : __( 'Paddle › Developer tools › Authentication › API keys. Permissions: subscription read and write, customer read and write, address write, customer portal session write, transaction read and write, adjustment write, product and price read and write.', 'subtleforms-license-server' ) ) . '</p></td></tr>';
 		echo '<tr><th scope="row"><label for="sfls-paddle-token">' . esc_html__( 'Client-side token', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-token" type="text" class="regular-text sfls-mono" name="client_token" value="' . esc_attr( $config['client_token'] ) . '" placeholder="test_…"><p class="description">' . esc_html__( 'Paddle › Developer tools › Authentication › Client-side tokens. Used by the checkout in the browser.', 'subtleforms-license-server' ) . '</p></td></tr>';
 		echo '<tr><th scope="row"><label for="sfls-paddle-secret">' . esc_html__( 'Webhook secret', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-secret" type="password" autocomplete="new-password" class="regular-text" name="webhook_secret" value="" placeholder="' . esc_attr( '' !== $config['webhook_secret'] ? '••••••••' . substr( $config['webhook_secret'], -4 ) : 'pdl_ntfset_…' ) . '"><p class="description">' . esc_html( '' !== $config['webhook_secret'] ? self::secret_hint( $config['webhook_secret'] ) : __( 'The secret key of the notification destination below.', 'subtleforms-license-server' ) ) . '</p></td></tr>';
-		echo '<tr><th scope="row"><label for="sfls-paddle-url">' . esc_html__( 'Webhook URL', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-url" type="text" readonly class="large-text sfls-mono" value="' . esc_attr( SFLS_Paddle::webhook_url() ) . '" onfocus="this.select();"><p class="description">' . esc_html__( 'In Paddle › Developer tools › Notifications, add a destination with this URL, type Webhook, and subscribe to: subscription.created, subscription.trialing, subscription.activated, subscription.updated, subscription.past_due, subscription.paused, subscription.resumed, subscription.canceled, transaction.completed, transaction.payment_failed.', 'subtleforms-license-server' ) . '</p></td></tr>';
+		echo '<tr><th scope="row"><label for="sfls-paddle-url">' . esc_html__( 'Webhook URL', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-url" type="text" readonly class="large-text sfls-mono" value="' . esc_attr( SFLS_Paddle::webhook_url() ) . '" onfocus="this.select();"><p class="description">' . esc_html__( 'In Paddle › Developer tools › Notifications, add a destination with this URL, type Webhook, and subscribe to: subscription.created, subscription.trialing, subscription.activated, subscription.updated, subscription.past_due, subscription.paused, subscription.resumed, subscription.canceled, transaction.completed, transaction.payment_failed, adjustment.created, adjustment.updated.', 'subtleforms-license-server' ) . '</p></td></tr>';
 		echo '</tbody></table>';
 		submit_button( __( 'Save Paddle settings', 'subtleforms-license-server' ) );
 		echo '</form>';
@@ -1090,6 +1116,9 @@ final class SFLS_Admin {
 		wp_nonce_field( 'sfls_paddle_map' );
 		echo '<input type="hidden" name="action" value="sfls_paddle_map"><h2>' . esc_html__( 'Plans', 'subtleforms-license-server' ) . '</h2>';
 		echo '<p class="description">' . esc_html__( 'Each plan needs a yearly price without a trial (for Buy now and upgrades). Add a second yearly price with a 7 or 14 day trial that requires a payment method to offer a free trial. Prices without a product in the list can be pasted as pri_ IDs.', 'subtleforms-license-server' ) . '</p>';
+		if ( 'woo_paddle' === SFLS_Settings::sell_with() ) {
+			echo '<p class="description">' . esc_html__( 'With the WooCommerce checkout, keep each yearly license product in Licenses › Products at the same price as its Paddle price. Paddle charges the Paddle price, and Place order is refused when the two differ.', 'subtleforms-license-server' ) . '</p>';
+		}
 		if ( null === $prices && '' !== $config['api_key'] ) {
 			echo '<p class="description">' . esc_html__( 'Click Sync products to pick prices from a list.', 'subtleforms-license-server' ) . '</p>';
 		}

@@ -26,7 +26,9 @@ final class SFLS_Settings {
 			'simplify_account' => 1,
 			'simple_checkout'  => 1,
 			// 1.4.0: who takes the money for new licenses, and Paddle notices.
-			'sell_with'        => 'woocommerce',
+			// 1.5.0: woo_paddle (WooCommerce checkout, Paddle payments),
+			// woocommerce (other gateways) or paddle (legacy overlay).
+			'sell_with'        => 'woo_paddle',
 			'renewal_notice'   => '14,3',
 			'trial_notice'     => 3,
 		);
@@ -82,7 +84,7 @@ final class SFLS_Settings {
 			array_merge(
 				self::all(),
 				array(
-					'sell_with'      => 'paddle' === ( $input['sell_with'] ?? '' ) ? 'paddle' : 'woocommerce',
+					'sell_with'      => self::clean_sell_with( (string) ( $input['sell_with'] ?? '' ) ),
 					'renewal_notice' => self::day_list( (string) ( $input['renewal_notice'] ?? '' ) ),
 					'trial_notice'   => min( 30, absint( $input['trial_notice'] ?? 3 ) ),
 				)
@@ -102,10 +104,49 @@ final class SFLS_Settings {
 	}
 
 	/**
-	 * Who sells new licenses: paddle or woocommerce.
+	 * Selling modes.
+	 *
+	 *   woo_paddle   WooCommerce cart and checkout, paid with the Paddle gateway (recommended).
+	 *   woocommerce  WooCommerce cart and checkout with the shop's other gateways.
+	 *   paddle       Legacy: pricing cards open the Paddle overlay directly, no WooCommerce order.
+	 */
+	const SELL_MODES = array( 'woo_paddle', 'woocommerce', 'paddle' );
+
+	/**
+	 * A valid selling mode ('woocommerce' for anything unknown).
+	 *
+	 * @param string $value Raw value.
+	 */
+	public static function clean_sell_with( string $value ): string {
+		return in_array( $value, self::SELL_MODES, true ) ? $value : 'woocommerce';
+	}
+
+	/**
+	 * Who sells new licenses: woo_paddle, woocommerce or paddle (legacy overlay).
 	 */
 	public static function sell_with(): string {
-		return 'paddle' === self::get( 'sell_with' ) ? 'paddle' : 'woocommerce';
+		return self::clean_sell_with( (string) self::get( 'sell_with' ) );
+	}
+
+	/**
+	 * 1.5.0 migration: a shop that sold through the Paddle overlay in 1.4.0
+	 * moves to the WooCommerce checkout with Paddle payments, and the Paddle
+	 * gateway is switched on. Runs once.
+	 */
+	public static function migrate_150(): void {
+		if ( get_option( 'sfls_migrated_150' ) ) {
+			return;
+		}
+		update_option( 'sfls_migrated_150', 1, false );
+		$stored = (array) get_option( self::OPTION, array() );
+		if ( 'paddle' !== ( $stored['sell_with'] ?? '' ) ) {
+			return;
+		}
+		$stored['sell_with'] = 'woo_paddle';
+		update_option( self::OPTION, $stored );
+		$gateway            = (array) get_option( 'woocommerce_sfls_paddle_settings', array() );
+		$gateway['enabled'] = 'yes';
+		update_option( 'woocommerce_sfls_paddle_settings', $gateway );
 	}
 
 	/**

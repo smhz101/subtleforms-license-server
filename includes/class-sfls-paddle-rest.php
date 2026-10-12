@@ -266,11 +266,15 @@ final class SFLS_Paddle_REST {
 				)
 			);
 		}
+		$woo = function_exists( 'wc_get_order' );
 		if ( 'transaction.completed' === $type ) {
-			return SFLS_Billing::transaction_completed( $data );
+			return $woo ? SFLS_Woo_Paddle_Orders::transaction_completed( $data ) : SFLS_Billing::transaction_completed( $data );
 		}
 		if ( 'transaction.payment_failed' === $type ) {
-			return SFLS_Billing::payment_failed( $data );
+			return $woo ? SFLS_Woo_Paddle_Orders::payment_failed( $data ) : SFLS_Billing::payment_failed( $data );
+		}
+		if ( $woo && in_array( $type, array( 'adjustment.created', 'adjustment.updated' ), true ) ) {
+			return SFLS_Woo_Paddle_Orders::adjustment( $data );
 		}
 		return array(
 			'action'  => 'ignored',
@@ -316,7 +320,7 @@ final class SFLS_Paddle_REST {
 		$email = $user->ID ? $user->user_email : sanitize_email( (string) $req->get_param( 'email' ) );
 		$site  = sanitize_text_field( (string) $req->get_param( 'site' ) );
 
-		if ( ! SFLS_Paddle::selling() || ! SFLS_Plans::get( $plan ) ) {
+		if ( ! SFLS_Paddle::any_selling() || ! SFLS_Plans::get( $plan ) ) {
 			return new WP_REST_Response(
 				array(
 					'eligible' => false,
@@ -357,6 +361,9 @@ final class SFLS_Paddle_REST {
 		if ( $limited ) {
 			return $limited;
 		}
+		if ( $req->get_param( 'order' ) && function_exists( 'wc_get_order' ) ) {
+			return self::order_status( absint( $req->get_param( 'order' ) ), sanitize_text_field( (string) $req->get_param( 'key' ) ) );
+		}
 		$txn   = sanitize_text_field( (string) $req->get_param( 'txn' ) );
 		$token = sanitize_text_field( (string) $req->get_param( 'token' ) );
 		$lic   = preg_match( '/^txn_[a-z0-9]+$/', $txn ) ? SFLS_Licenses::find_by_transaction( $txn ) : null;
@@ -377,6 +384,40 @@ final class SFLS_Paddle_REST {
 			);
 		}
 		return rest_ensure_response( array( 'ready' => true ) + self::license_summary( $lic ) );
+	}
+
+	/**
+	 * The WooCommerce order received page asks whether the Paddle payment of
+	 * an order is confirmed (?order=ID&key=wc_order_...). If the webhook has
+	 * not arrived yet, Paddle is asked directly every few seconds.
+	 *
+	 * @param int    $order_id Order.
+	 * @param string $key      Order key.
+	 * @return WP_REST_Response
+	 */
+	private static function order_status( int $order_id, string $key ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order || '' === $key || ! hash_equals( $order->get_order_key(), $key ) ) {
+			return new WP_REST_Response( array( 'ready' => false ), 404 );
+		}
+		SFLS_Woo_Paddle_Orders::poll( $order );
+		$order    = wc_get_order( $order_id );
+		$licenses = SFLS_Woo::order_licenses( $order_id );
+		if ( ! $licenses ) {
+			return rest_ensure_response(
+				array(
+					'ready'  => false,
+					'status' => $order->get_status(),
+				)
+			);
+		}
+		return rest_ensure_response(
+			array(
+				'ready' => true,
+				'html'  => SFLS_Delivery::panel_body( $order ),
+				'total' => (string) $order->get_total(),
+			) + self::license_summary( $licenses[0] )
+		);
 	}
 
 	/**

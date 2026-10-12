@@ -90,6 +90,21 @@ final class SFLS_Upgrades {
 			return $quote; // Expired or in grace: full price, new term.
 		}
 
+		// A Paddle subscription: nothing is charged during a trial (the new
+		// plan is billed when it ends), otherwise the difference for the rest
+		// of the billing year, which Paddle charges with prorated_immediately.
+		if ( SFLS_Licenses::is_paddle( $lic ) && 'lifetime' !== $type ) {
+			if ( 'trialing' === $lic['billing_status'] ) {
+				$quote['charge']      = 0.0;
+				$quote['credit']      = $full;
+				$quote['keep_expiry'] = true;
+				return $quote;
+			}
+			if ( ! empty( $lic['renews_at'] ) ) {
+				$lic['expires_at'] = $lic['renews_at'];
+			}
+		}
+
 		if ( empty( $lic['expires_at'] ) ) {
 			if ( 'lifetime' === $type ) {
 				$current = self::plan_price( (string) $lic['plan'], 'lifetime' );

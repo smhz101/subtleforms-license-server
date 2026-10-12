@@ -2,6 +2,11 @@
 /**
  * Selling with Paddle on the marketing site.
  *
+ * In the recommended mode (WooCommerce checkout with Paddle payments) the
+ * pricing cards link to the WooCommerce cart instead ("Start 14-day free
+ * trial" adds the plan with sfls_trial=1); the overlay checkout below is the
+ * legacy "Paddle overlay" mode.
+ *
  * - Pricing cards (the sfls/pricing block and [sfls_pricing]) open the Paddle
  *   overlay checkout. A plan with a trial shows "Start 14-day free trial" and
  *   "Then $79/year, cancel anytime"; the button first checks the trial rules
@@ -164,11 +169,29 @@ final class SFLS_Checkout_Paddle {
 	 * @param array $atts popular, button (label template).
 	 */
 	public static function pricing_html( array $atts ): string {
+		$woo   = SFLS_Paddle::woo_selling();
 		$plans = array_filter( SFLS_Paddle::plans(), static fn( $row ) => '' !== $row['price_id'] );
-		if ( ! $plans ) {
-			return current_user_can( 'manage_options' ) ? '<div class="sfls sfls-notice-box">' . esc_html__( 'Map your plans to Paddle prices in Licenses › Settings › Paddle.', 'subtleforms-license-server' ) . '</div>' : '';
+		if ( $woo ) {
+			// The cart needs the plan's yearly WooCommerce product.
+			foreach ( array_keys( $plans ) as $plan ) {
+				$product = SFLS_Products::find( $plan, 'yearly' );
+				if ( $product ) {
+					$plans[ $plan ]['wc_product_id'] = (int) $product['id'];
+				} else {
+					unset( $plans[ $plan ] );
+				}
+			}
 		}
-		self::enqueue_checkout();
+		if ( ! $plans ) {
+			return current_user_can( 'manage_options' ) ? '<div class="sfls sfls-notice-box">' . esc_html(
+				$woo
+					? __( 'Map your plans to Paddle prices in Licenses › Settings › Paddle, and create the yearly license products in Licenses › Products.', 'subtleforms-license-server' )
+					: __( 'Map your plans to Paddle prices in Licenses › Settings › Paddle.', 'subtleforms-license-server' )
+			) . '</div>' : '';
+		}
+		if ( ! $woo ) {
+			self::enqueue_checkout();
+		}
 		SFLS_Assets::register_handles();
 		wp_enqueue_style( 'sfls-front' );
 
@@ -216,13 +239,20 @@ final class SFLS_Checkout_Paddle {
 			echo '<p class="sfls-plan-price"><span class="sfls-plan-amount">' . esc_html( $price['amount'] ) . '</span> <span class="sfls-plan-period">' . esc_html__( '/year', 'subtleforms-license-server' ) . '</span></p>';
 		}
 
-		echo '<button type="button" class="sfls-btn sfls-btn--' . ( $popular ? 'primary' : 'secondary' ) . ' sfls-btn--block sfls-paddle-buy"'
-			. ' data-mode="' . esc_attr( $mode ) . '"'
-			. ' data-plan="' . esc_attr( $plan ) . '"'
-			. ' data-price="' . esc_attr( $row['price_id'] ) . '"'
-			. ' data-trial-price="' . esc_attr( $trial ? $row['trial_price_id'] : '' ) . '"'
-			. ' data-buy-label="' . esc_attr( __( 'Buy now', 'subtleforms-license-server' ) ) . '">'
-			. esc_html( 'trial' === $mode ? $trial_label : ( $trial ? __( 'Buy now', 'subtleforms-license-server' ) : $buy ) ) . '</button>';
+		if ( ! empty( $row['wc_product_id'] ) ) {
+			// WooCommerce checkout with Paddle payments: links to the cart.
+			$buy_url = SFLS_Products::buy_url( (int) $row['wc_product_id'] );
+			echo '<a class="sfls-btn sfls-btn--' . ( $popular ? 'primary' : 'secondary' ) . ' sfls-btn--block" href="' . esc_url( 'trial' === $mode ? add_query_arg( 'sfls_trial', '1', $buy_url ) : $buy_url ) . '" rel="nofollow" data-mode="' . esc_attr( $mode ) . '">'
+				. esc_html( 'trial' === $mode ? $trial_label : ( $trial ? __( 'Buy now', 'subtleforms-license-server' ) : $buy ) ) . '</a>';
+		} else {
+			echo '<button type="button" class="sfls-btn sfls-btn--' . ( $popular ? 'primary' : 'secondary' ) . ' sfls-btn--block sfls-paddle-buy"'
+				. ' data-mode="' . esc_attr( $mode ) . '"'
+				. ' data-plan="' . esc_attr( $plan ) . '"'
+				. ' data-price="' . esc_attr( $row['price_id'] ) . '"'
+				. ' data-trial-price="' . esc_attr( $trial ? $row['trial_price_id'] : '' ) . '"'
+				. ' data-buy-label="' . esc_attr( __( 'Buy now', 'subtleforms-license-server' ) ) . '">'
+				. esc_html( 'trial' === $mode ? $trial_label : ( $trial ? __( 'Buy now', 'subtleforms-license-server' ) : $buy ) ) . '</button>';
+		}
 
 		if ( $trial ) {
 			$then = '' !== $price['plain']
@@ -233,10 +263,13 @@ final class SFLS_Checkout_Paddle {
 		} else {
 			echo '<p class="sfls-plan-trial-note">' . esc_html__( 'Billed yearly, cancel anytime', 'subtleforms-license-server' ) . '</p>';
 		}
+		if ( ! empty( $row['wc_product_id'] ) && 'trial' === $mode ) {
+			echo '<a class="sfls-plan-buy-now" href="' . esc_url( SFLS_Products::buy_url( (int) $row['wc_product_id'] ) ) . '" rel="nofollow">' . esc_html__( 'or buy now without a trial', 'subtleforms-license-server' ) . '</a>';
+		}
 		$reason = $trial && ! $eligible ? trim( $eligibility['message'] . ' ' . __( 'You can buy the plan right away instead.', 'subtleforms-license-server' ) ) : '';
 		echo '<p class="sfls-plan-reason" role="status"' . ( '' === $reason ? ' hidden' : '' ) . '>' . esc_html( $reason ) . '</p>';
 
-		if ( $trial ) {
+		if ( $trial && empty( $row['wc_product_id'] ) ) {
 			$field = wp_unique_id( 'sfls-trial-email-' );
 			echo '<form class="sfls-trial-email" hidden novalidate>';
 			echo '<label for="' . esc_attr( $field ) . '">' . esc_html__( 'Your email', 'subtleforms-license-server' ) . '</label>';

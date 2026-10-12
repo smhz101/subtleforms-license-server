@@ -431,7 +431,9 @@ final class SFLS_Account {
 	 * @return string[]
 	 */
 	public static function paddle_upgrades( array $lic ): array {
-		if ( ! in_array( $lic['billing_status'], array( 'active', 'trialing' ), true ) || ! SFLS_Paddle::has_api_key() ) {
+		// With the WooCommerce checkout taking Paddle payments, upgrades go
+		// through the cart (SFLS_Products::upgrade_options()) so each one is an order.
+		if ( SFLS_Paddle::woo_selling() || ! in_array( $lic['billing_status'], array( 'active', 'trialing' ), true ) || ! SFLS_Paddle::has_api_key() ) {
 			return array();
 		}
 		return array_values( array_filter( SFLS_Plans::higher( (string) $lic['plan'] ), static fn( $plan ) => '' !== SFLS_Paddle::plan( $plan )['price_id'] ) );

@@ -3,7 +3,7 @@
  * Plugin Name:       SubtleForms License Server
  * Plugin URI:        https://subtleforms.com
  * Description:       Issues and validates SubtleForms Pro license keys, sells them through WooCommerce, connects customer sites, runs the customer members area and serves Pro updates. Install on subtleforms.com only.
- * Version:           1.4.0
+ * Version:           1.5.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            SubtleForms
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SFLS_VERSION', '1.4.0' );
+define( 'SFLS_VERSION', '1.5.0' );
 define( 'SFLS_FILE', __FILE__ );
 define( 'SFLS_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SFLS_URL', plugin_dir_url( __FILE__ ) );
@@ -43,6 +43,8 @@ require_once SFLS_DIR . 'includes/class-sfls-billing.php';
 require_once SFLS_DIR . 'includes/class-sfls-billing-emails.php';
 require_once SFLS_DIR . 'includes/class-sfls-paddle-rest.php';
 require_once SFLS_DIR . 'includes/class-sfls-checkout-paddle.php';
+require_once SFLS_DIR . 'includes/class-sfls-woo-paddle.php';
+require_once SFLS_DIR . 'includes/class-sfls-woo-paddle-orders.php';
 require_once SFLS_DIR . 'includes/class-sfls-admin.php';
 
 register_activation_hook(
@@ -50,6 +52,10 @@ register_activation_hook(
 	static function () {
 		SFLS_DB::install();
 		SFLS_Settings::maybe_default_support_email();
+		$previous = (string) get_option( 'sfls_version', '' );
+		if ( '' !== $previous && version_compare( $previous, '1.5.0', '<' ) ) {
+			SFLS_Settings::migrate_150();
+		}
 		update_option( 'sfls_version', SFLS_VERSION );
 		update_option( 'sfls_flush_rewrite', 1 );
 		SFLS_Reminders::schedule();
@@ -62,6 +68,17 @@ register_deactivation_hook(
 		SFLS_Reminders::unschedule();
 		delete_option( 'sfls_flush_rewrite' );
 		flush_rewrite_rules();
+	}
+);
+
+// Works with WooCommerce order storage (HPOS) and the Cart and Checkout blocks.
+add_action(
+	'before_woocommerce_init',
+	static function () {
+		if ( class_exists( '\Automattic\WooCommerce\Utilities\FeaturesUtil' ) ) {
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', SFLS_FILE, true );
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', SFLS_FILE, true );
+		}
 	}
 );
 
@@ -82,6 +99,8 @@ add_action(
 		( new SFLS_Blocks() )->register();
 		( new SFLS_Paddle_REST() )->register();
 		( new SFLS_Checkout_Paddle() )->register();
+		( new SFLS_Woo_Paddle() )->register();
+		( new SFLS_Woo_Paddle_Orders() )->register();
 		if ( is_admin() ) {
 			( new SFLS_Admin() )->register();
 		}

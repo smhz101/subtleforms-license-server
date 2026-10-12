@@ -11,8 +11,10 @@
  *   [sfls_license_welcome]                   Landing page after a Paddle checkout
  *                                           (see SFLS_Checkout_Paddle).
  *
- * When Licenses › Settings › Paddle sells with Paddle, [sfls_pricing] shows
- * yearly Paddle subscriptions with free trials instead of WooCommerce products.
+ * When Licenses › Settings › Paddle sells with Paddle (WooCommerce checkout
+ * with Paddle payments, or the legacy overlay), [sfls_pricing] shows yearly
+ * Paddle subscriptions with free trials. In the WooCommerce mode the Buy and
+ * Start trial buttons put the plan in the cart and open the checkout.
  *
  * The same output is available as blocks (see SFLS_Blocks).
  *
@@ -63,7 +65,8 @@ final class SFLS_Shortcodes {
 		$atts['renewal_note'] = in_array( strtolower( (string) $atts['renewal_note'] ), array( '1', 'yes', 'true', 'on' ), true );
 
 		// Selling with Paddle: yearly subscriptions with optional free trials.
-		if ( SFLS_Paddle::selling() ) {
+		// With the WooCommerce checkout and Paddle payments, the buttons go to the cart.
+		if ( SFLS_Paddle::any_selling() ) {
 			return SFLS_Checkout_Paddle::pricing_html( $atts );
 		}
 
