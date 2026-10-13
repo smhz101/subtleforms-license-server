@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.5.1
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,9 +20,26 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pricing, changelog, latest version and account link blocks (and shortcodes) for the marketing site.
 * Renewal reminder emails, renew and prorated upgrades from the account.
 * Rate-limited license API with an activation log and single-use download links.
+* Pro release management: every uploaded version is kept and stays downloadable, with stable and beta channels, drafts, yank and pin, download counts and per-version signed links.
+* Git and CI/CD: a token-authenticated release API for CI, a GitHub release webhook, and WP-CLI release commands.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, 7 or 14 day free trials with one trial per customer, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.6.0 - 2026-10-14 =
+* New: Pro releases are stored in their own database table, with no limit on how many versions are kept. Each version has a channel (stable or beta), a status (draft, published or yanked), its size, SHA-256 checksum, requirements, changelog, source (upload, CI API, GitHub or WP-CLI), Git tag and commit, private notes and a download count. The releases from 1.5 are copied over automatically on the first request after updating.
+* New: zip files are never deleted unless you delete that release. Uploading a version again replaces its package only when you tick "Replace the package", and the old zip is kept until the release is deleted.
+* New: Licenses › Pro releases lists every version with its channel, status, date, size, short checksum, downloads, the sites running it and its Git tag or commit (linked to GitHub when a repository is set). Row actions: Download zip, Publish, Unpublish to draft, Yank with a reason, Make this the latest and Unpin, Edit and Delete.
+* New: the update API offers the highest published stable version. Drafts and yanked versions are never offered, so yanking a bad version makes the previous one the latest again. "Make this the latest" pins an older version until you unpin it. Sites can ask for the beta channel with channel=beta on update/check and update/package. Pro sends nothing today, so it stays on stable.
+* New: My Account › Pro downloads shows the latest release and an "Older versions" list with every published version, its changelog and a download button. Each button creates a fresh signed link for that license and version that works once within 15 minutes. A license that expired or was suspended keeps the versions released while it was valid.
+* New: GET /wp-json/sfls/v1/update/versions lists the versions a license may download, and update/package accepts a version. Signed download links now include the version; links handed out by 1.5 still work for the current release.
+* New: the [sfls_downloads] shortcode and the SubtleForms Pro downloads block show the same download list on any page.
+* New: Licenses › Settings › Releases has deploy tokens for CI (shown once, stored as a hash, with last use and revoke), the release API endpoint with an "Auto publish CI releases" option, and the GitHub connection (repository, token, webhook secret, asset name pattern, auto publish, Test connection and Import a release by tag).
+* New: release API for CI at /wp-json/sfls/v1/releases with a deploy token: upload a zip or a package_url on GitHub, list, show, publish, yank and delete. Sending the same version and checksum again returns the existing release, and a different package for a published version needs replace=true. It requires https outside local sites and blocks an IP after repeated failed tokens.
+* New: GitHub webhook at /wp-json/sfls/v1/github/webhook. It checks the signature, answers ping, and imports the zip attached to a published GitHub release after checking that the tag matches the plugin version. Pre-releases go to the beta channel. The last 20 deliveries are listed with a Retry button.
+* New: WP-CLI commands wp sfls release list, add, publish, yank, latest and delete, and wp sfls release token create, list and revoke.
+* New: docs/CI.md explains both ways to publish from CI, and the SubtleForms Pro repository has a GitHub Actions workflow that builds the zip on every v* tag and publishes it here.
+* Changed: a version lower than the latest release is no longer refused. It is listed as an older version and never becomes the latest by itself.
 
 = 1.5.1 - 2026-10-12 =
 * Changed: Pay with Paddle now shows the Paddle payment form inline, right under the payment method on the checkout page, instead of sending the customer to a separate payment page with a popup. The form opens with the customer's email and country already filled in, so the customer only adds a card or picks PayPal, Apple Pay or Google Pay. Works in the Checkout block and the classic checkout.

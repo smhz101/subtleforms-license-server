@@ -48,6 +48,7 @@ Plans and the features each unlocks are defined in `includes/class-sfls-plans.ph
 | SubtleForms Pro pricing (`sfls/pricing`) | `[sfls_pricing]` | Pricing cards from the license products: price, "/year" or "one-time", sites, features, and a Buy button that goes straight to checkout. When lifetime products exist a Yearly/Lifetime toggle appears. Block settings: highlighted plan, show renewal note, yearly or lifetime first, button labels (`{plan}` is replaced by the plan name). Shortcode attributes: `period="yearly"` or `"lifetime"`, `popular="pro"`, `renewal_note="yes"`, `button="Get {plan}"`, `button_lifetime="Own {plan}"`. |
 | SubtleForms Pro changelog (`sfls/changelog`) | `[sfls_changelog]` | Every Pro release, newest first, with date and changes. `limit="3"` (block: Releases to show) shows only the latest three. |
 | SubtleForms Pro latest version (`sfls/latest-version`) | `[sfls_latest_version]` | The current Pro version number, or "Coming soon" before the first release. The block has an optional text before the version. |
+| SubtleForms Pro downloads (`sfls/downloads`) | `[sfls_downloads]` | For signed-in customers: the latest release and every older version with its changelog and a download button (the same list as My Account › Pro downloads). Visitors see a sign-in link. |
 | Account link (`sfls/account-link`) | | "Sign in" (links to My Account) for visitors, the customer's avatar and "My licenses" (links to My Account › Licenses) once signed in. Both labels and the avatar can be changed. If you use a full-page cache, make sure it does not serve cached pages to signed-in users (most do this by default). |
 
 The blocks are server-rendered (`blocks/*/block.json`); the editor script `assets/js/sfls-blocks-editor.js` is plain JavaScript on the `wp.*` globals, so there is no build step.
@@ -72,7 +73,7 @@ Local and staging hosts (`localhost`, `*.local`, `*.test`, `staging.*`, `dev.*`,
 * **Dashboard**: a SubtleForms Pro summary with active licenses, next renewal date and the latest Pro version with a download link.
 * **Licenses** (`/my-account/licenses/`): one card per license with plan, status, the full key with a Copy button, expiry, sites used, the connected sites with last seen and a Deactivate button, and Download Pro, Renew and Upgrade (with today's prorated price), plus a three-step "How to install Pro" panel.
 * Customers whose orders only contain licenses do not see the Addresses and Downloads tabs (Licenses › Settings › Simplify My Account).
-* **Pro downloads** (`/my-account/pro-downloads/`): the latest release with its changelog and a download button, plus older versions. Zips are streamed only to signed-in customers with a valid license; the storage path is never exposed.
+* **Pro downloads** (`/my-account/pro-downloads/`): the latest release with its changelog, size and SHA-256 and a download button, plus every older published version with its own changelog. Each button sends the customer to a signed, single-use link for their license and that version; licenses that are no longer valid keep the versions released while they were. The storage path is never exposed.
 
 ## 6. Connecting a site (used by SubtleForms Pro)
 
@@ -118,11 +119,16 @@ wp sfls list
 wp sfls remind --dry-run
 ```
 
-## 9. Ship a Pro update
+## 9. Ship a Pro update (1.6.0 release management)
 
-**Licenses › Pro releases**: upload the new `subtleforms-pro-x.y.z.zip`, add the changelog (one change per line starting with `* `), and publish. The zip must contain `subtleforms-pro/subtleforms-pro.php`; Version, Requires at least, Tested up to (or readme.txt) and Requires PHP are read from it, and a version lower than the current release is refused (the same version may be re-uploaded to replace its package). Licensed sites see it in **Dashboard › Updates** within 12 hours, and customers can download it from **My Account › Pro downloads**. Earlier releases stay listed and downloadable.
+Every version is a row in `wp_sfls_releases` with a channel (stable or beta), a status (draft, published or yanked), its zip in `uploads/sfls-private/`, size, SHA-256, requirements, changelog, source (upload, api, github, cli), Git tag and commit, private notes and a download counter. Nothing is capped and a zip is only deleted when its release is deleted.
 
-Update downloads: `/update/check` returns `package` = `/update/package?license_key&site_url`. That address checks the license and the site and redirects to a signed `/update/download` link that expires after 15 minutes and works once (used tokens are kept in `wp_sfls_download_tokens`). WordPress follows the redirect when it installs the update, so a cached update check never hands out a dead link.
+* **Licenses › Pro releases**: upload `subtleforms-pro-x.y.z.zip` (headers are read from the zip; choose the channel, publish now or save a draft, add the changelog with one `* ` line per change). Uploading an existing version with a different zip needs the **Replace the package** box. The table lists every version with channel, status, date, size, short SHA-256, downloads, the sites that last checked in with it, and the source with its tag and commit (linked to GitHub when a repository is set). Row actions: Download zip, Publish, Unpublish to draft, Yank (with a reason), Make this the latest / Unpin, Edit, Delete.
+* **Latest**: the update API offers the highest published stable version, or the pinned one. Drafts and yanked versions are never offered, so yanking rolls back to the previous version. Sites may opt in to betas with `channel=beta` on `/update/check` and `/update/package` (Pro sends nothing, so it stays on stable).
+* **Customers**: My Account › Pro downloads (and the `[sfls_downloads]` shortcode / SubtleForms Pro downloads block) shows the latest release and every older published version with its changelog. Each button creates a signed, single-use link for that license and version. Licenses that expired or were suspended keep the versions released while they were valid (`released_at <= expires_at`), not newer ones.
+* **Git and CI**: Licenses › Settings › Releases has deploy tokens, the release API and the GitHub webhook connection. See [docs/CI.md](docs/CI.md) for both CI paths, the GitHub Actions workflow in the Pro repository and WP-CLI (`wp sfls release …`).
+
+Update downloads: `/update/check` returns `package` = `/update/package?license_key&site_url[&channel]`. That address checks the license and the site and redirects to a signed `/update/download` link for that version that expires after 15 minutes and works once (used tokens are kept in `wp_sfls_download_tokens`). WordPress follows the redirect when it installs the update, so a cached update check never hands out a dead link. Links signed by 1.5 (without a version) still download the current release.
 
 ## Selling with Paddle (1.5.0: WooCommerce checkout, Paddle payments)
 
@@ -214,9 +220,14 @@ With **Paddle overlay (legacy)** selected, the pricing cards open the Paddle ove
 | POST | `/license/validate` | `license_key`, `site_url` |
 | POST | `/license/deactivate` | `license_key`, `site_url` |
 | GET | `/license/status` | `license_key`, `site_url` |
-| GET | `/update/check` | `license_key`, `site_url`, `version` |
-| GET | `/update/download` | signed link from `/update/check` |
-| GET | `/update/package` | `license_key`, `site_url` (302 to a fresh signed download) |
+| GET | `/update/check` | `license_key`, `site_url`, `version`, optional `channel=beta` |
+| GET | `/update/download` | signed link from `/update/package` (`version` since 1.6.0) |
+| GET | `/update/package` | `license_key`, `site_url`, optional `channel`, optional `version` (302 to a fresh signed download) |
+| GET | `/update/versions` | `license_key`, `site_url`, optional `channel=beta`: `{ status, valid, activated, channel, versions: [ { version, channel, latest, released_at, requires, tested, requires_php, size, sha256, changelog, package } ] }`, the versions this license may download |
+| GET, POST | `/releases` | deploy token (`Authorization: Bearer`): list, or create from multipart `package` or `package_url` (see docs/CI.md) |
+| GET, DELETE | `/releases/<version>` | deploy token |
+| POST | `/releases/<version>/publish`, `/releases/<version>/yank` | deploy token |
+| POST | `/github/webhook` | GitHub `release` and `ping` events, signed with `X-Hub-Signature-256` |
 | POST | `/connect/exchange` | `code`, `site_url` |
 | POST | `/paddle/webhook` | Paddle notification, signed with `Paddle-Signature` |
 | POST | `/paddle/eligibility` | `email`, `plan`, optional `site`: `{ eligible, reason, message, trial_days }` |
@@ -238,12 +249,15 @@ SFLS_WP_PATH=/path/to/wordpress /path/to/phpunit -c phpunit.xml
 
 The Paddle tests (`PaddleSignatureTest`, `PaddleWebhookTest`, `TrialEligibilityTest`, `PaddleBillingTest`, and since 1.5.0 `PaddleWooGatewayTest` for the WooCommerce gateway) never reach Paddle: the API is answered through the `pre_http_request` filter and every call is recorded so the tests can assert it.
 
+The 1.6.0 release tests (`ReleaseManagementTest`, `ReleaseApiTest`, `GitHubWebhookTest`, `ReleaseCliTest`) set the site's releases aside while they run and put them back afterwards. GitHub is answered through `pre_http_request` as well. `ReleaseCliTest` runs the real `wp` command; set `SFLS_WP_CLI` to the path of `wp-cli.phar` (default `/tmp/claude-0/wp-cli.phar`) or it is skipped.
+
 PHPUnit 9.6 is enough (for example the one in the SubtleForms free plugin's `vendor/bin`).
 
 ## Database
 
 | Version | Change |
 |---|---|
+| 1.6.0 (schema 5) | New table `wp_sfls_releases` (id, version unique, channel, status, file, size, sha256, requires, tested, requires_php, changelog, source, git_ref, git_commit, notes, yank_reason, replaced_files, downloads, released_at, created_at, updated_at). On the first request after updating, the releases in the options `sfls_release` and `sfls_release_history` are copied into it as published stable releases (released_at from their date, size and sha256 from the files), and `sfls_releases_migrated` is set. The two options are left in place and only read as a fallback until that copy ran; nothing writes them any more. New table `wp_sfls_github_deliveries` (delivery_id, event, action, tag, result, message, release_version, payload, received_at, processed_at; the last 200 are kept). New options `sfls_release_pin`, `sfls_release_settings` (auto_publish), `sfls_deploy_tokens` (name, hash, scopes, created, last used, revoked; never the token) and `sfls_github` (repo, token, webhook secret, asset_pattern, auto_publish), none autoloaded. |
 | 1.5.0 (schema 4, no table change) | `sfls_settings.sell_with` gains `woo_paddle` (the new default) next to `woocommerce` and `paddle` (legacy overlay); a 1.4.0 shop on `paddle` moves to `woo_paddle` once (option `sfls_migrated_150`) and `woocommerce_sfls_paddle_settings.enabled` is set to yes. New gateway option `woocommerce_sfls_paddle_settings` (enabled, title, description). Orders paid with Paddle get `_sfls_paddle_txn_id`, `_sfls_paddle_paid_txn`, `_sfls_paddle_kind`, `_sfls_paddle_customer_id`, `_sfls_paddle_subscription_id`, `_sfls_paddle_env`, `_sfls_paddle_adjustments` and `_sfls_paddle_notes`; renewal orders `_sfls_paddle_renewal` and `_sfls_parent_order`; upgrade orders `_sfls_paddle_upgrade_pending` until Paddle confirms; trial lines `_sfls_trial` (days) and a visible *Free trial* meta; refunds `_sfls_paddle_adjustment_id`; users `_sfls_paddle_customer_id` and `_sfls_paddle_customer_email`; coupons may carry `_sfls_paddle_discount_id`. Runs on the first request after updating (or on activation). |
 | 1.4.0 (schema 4) | `wp_sfls_licenses` gains `billing` (paddle, woocommerce or manual; existing rows are set to woocommerce when they have an order, manual otherwise), `billing_status`, `trial`, `trial_started_at`, `trial_ends_at`, `renews_at`, `cancels_at`, `billing_amount`, `billing_currency`, `paddle_customer_id`, `paddle_subscription_id` (indexed), `paddle_price_id`, `paddle_transaction_id` (indexed), `checkout_token_hash` and `billing_synced_at`. New table `wp_sfls_trial_claims` (kind email, domain or site; value; license_id; created_at). New table `wp_sfls_paddle_events` (event_id, event_type, occurred_at, received_at, status, license_id, note). New options `sfls_paddle` (Paddle keys and plan mapping, not autoloaded) and `sfls_paddle_rejected`; `sfls_settings` gains `sell_with` (woocommerce), `renewal_notice` (14,3) and `trial_notice` (3). Applied by dbDelta on activation or on the first request after updating; the `/license-welcome/` rewrite rule is flushed on the version change. |
 | 1.3.0 (schema 3) | New table `wp_sfls_activation_log` (license_id, domain, event, source, ip, created_at). New table `wp_sfls_download_tokens` (token, used_at). `sfls_settings` gains `simplify_account` and `simple_checkout` (both on), and `support_email` defaults to support@ your domain when empty. Orders get `_sfls_issued`; upgrade lines get `_sfls_upgrade_credit` and `_sfls_upgrade_keep_expiry`. The tables are created on activation or on the first request after updating. |
