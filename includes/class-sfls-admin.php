@@ -25,7 +25,6 @@ final class SFLS_Admin {
 		add_action( 'admin_post_sfls_create', array( $this, 'handle_create' ) );
 		add_action( 'admin_post_sfls_action', array( $this, 'handle_action' ) );
 		add_action( 'admin_post_sfls_save', array( $this, 'handle_save' ) );
-		add_action( 'admin_post_sfls_release', array( $this, 'handle_release' ) );
 		add_action( 'admin_post_sfls_products', array( $this, 'handle_products' ) );
 		add_action( 'admin_post_sfls_settings', array( $this, 'handle_settings' ) );
 		add_action( 'admin_post_sfls_run_reminders', array( $this, 'handle_run_reminders' ) );
@@ -37,6 +36,18 @@ final class SFLS_Admin {
 		add_action( 'admin_post_sfls_paddle_map', array( $this, 'handle_paddle_map' ) );
 		add_action( 'admin_post_sfls_paddle_create', array( $this, 'handle_paddle_create' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( SFLS_FILE ), array( $this, 'action_links' ) );
+		$this->releases()->register();
+	}
+
+	/**
+	 * Release management screens (1.6.0).
+	 */
+	public function releases(): SFLS_Admin_Releases {
+		static $releases = null;
+		if ( null === $releases ) {
+			$releases = new SFLS_Admin_Releases( $this );
+		}
+		return $releases;
 	}
 
 	/**
@@ -78,7 +89,7 @@ final class SFLS_Admin {
 	/**
 	 * Stop unless the user may manage licenses.
 	 */
-	private function guard(): void {
+	public function guard(): void {
 		if ( ! current_user_can( self::CAP ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to manage licenses.', 'subtleforms-license-server' ), '', array( 'response' => 403 ) );
 		}
@@ -90,7 +101,7 @@ final class SFLS_Admin {
 	 * @param string $message Message.
 	 * @param string $type    success | error | warning.
 	 */
-	private function flash( string $message, string $type = 'success' ): void {
+	public function flash( string $message, string $type = 'success' ): void {
 		set_transient(
 			'sfls_notice_' . get_current_user_id(),
 			array(
@@ -187,7 +198,7 @@ final class SFLS_Admin {
 	 * @param string $title  Title.
 	 * @param string $action Optional page-title-action HTML (escaped).
 	 */
-	private function header( string $title, string $action = '' ): void {
+	public function header( string $title, string $action = '' ): void {
 		echo '<div class="wrap sfls-admin"><h1 class="wp-heading-inline">' . esc_html( $title ) . '</h1>';
 		echo wp_kses_post( $action );
 		echo '<hr class="wp-header-end">';
@@ -839,54 +850,10 @@ final class SFLS_Admin {
 	// ── Releases ────────────────────────────────────────────────────────
 
 	/**
-	 * Pro releases.
+	 * Pro releases (see SFLS_Admin_Releases).
 	 */
 	public function page_release(): void {
-		$this->guard();
-		$rel = SFLS_Releases::current();
-		$this->header( __( 'Pro releases', 'subtleforms-license-server' ) );
-		echo '<p class="sfls-lead">' . esc_html__( 'Upload a new SubtleForms Pro zip and every site with an active license is offered the update in Dashboard › Updates. Customers can also download it from My Account › Pro downloads.', 'subtleforms-license-server' ) . '</p>';
-		if ( $rel['version'] ) {
-			echo '<p><strong>' . esc_html( sprintf( /* translators: %s: version */ __( 'Current release: %s', 'subtleforms-license-server' ), $rel['version'] ) ) . '</strong> ';
-			if ( SFLS_Releases::has_package() ) {
-				echo esc_html( size_format( (int) filesize( SFLS_Releases::package_path() ) ) );
-			} else {
-				echo '<span class="sfls-danger-text">' . esc_html__( 'package missing', 'subtleforms-license-server' ) . '</span>';
-			}
-			echo '</p>';
-		}
-		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-panel">';
-		wp_nonce_field( 'sfls_release' );
-		echo '<input type="hidden" name="action" value="sfls_release"><table class="form-table" role="presentation"><tbody>';
-		echo '<tr><th><label for="sfls-zip">' . esc_html__( 'Plugin zip', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-zip" type="file" name="package" accept=".zip,application/zip"> <p class="description">' . esc_html(
-			sprintf(
-				/* translators: %s: path inside the zip */
-				__( 'The zip must contain %s. Version, Requires at least, Tested up to and Requires PHP are read from its plugin header, and a version lower than the current release is refused. Leave empty to only update the details below.', 'subtleforms-license-server' ),
-				SFLS_Releases::MAIN_FILE
-			)
-		) . '</p></td></tr>';
-		foreach ( array(
-			'version'      => __( 'Version', 'subtleforms-license-server' ),
-			'requires'     => __( 'Requires WordPress', 'subtleforms-license-server' ),
-			'tested'       => __( 'Tested up to', 'subtleforms-license-server' ),
-			'requires_php' => __( 'Requires PHP', 'subtleforms-license-server' ),
-		) as $field => $label ) {
-			echo '<tr><th><label for="sfls-' . esc_attr( $field ) . '">' . esc_html( $label ) . '</label></th><td><input id="sfls-' . esc_attr( $field ) . '" name="' . esc_attr( $field ) . '" value="' . esc_attr( $rel[ $field ] ) . '" class="regular-text"> <span class="description">' . esc_html__( 'Read from the zip when you upload one.', 'subtleforms-license-server' ) . '</span></td></tr>';
-		}
-		echo '<tr><th><label for="sfls-changelog">' . esc_html__( 'Changelog', 'subtleforms-license-server' ) . '</label></th><td><textarea id="sfls-changelog" name="changelog" rows="8" class="large-text">' . esc_textarea( $rel['changelog'] ) . '</textarea><p class="description">' . esc_html__( 'One change per line, starting with "* ", shows as a list.', 'subtleforms-license-server' ) . '</p></td></tr>';
-		echo '</tbody></table>';
-		submit_button( __( 'Publish release', 'subtleforms-license-server' ) );
-		echo '</form>';
-
-		$history = SFLS_Releases::history();
-		if ( $history ) {
-			echo '<h2>' . esc_html__( 'Earlier releases', 'subtleforms-license-server' ) . '</h2><table class="widefat striped sfls-table"><thead><tr><th>' . esc_html__( 'Version', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Released', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Package', 'subtleforms-license-server' ) . '</th></tr></thead><tbody>';
-			foreach ( $history as $old ) {
-				echo '<tr><td>' . esc_html( $old['version'] ) . '</td><td>' . esc_html( SFLS_Releases::date_label( $old ) ) . '</td><td>' . esc_html( SFLS_Releases::has_package( $old ) ? size_format( (int) filesize( SFLS_Releases::package_path( $old ) ) ) : __( 'missing', 'subtleforms-license-server' ) ) . '</td></tr>';
-			}
-			echo '</tbody></table>';
-		}
-		echo '</div>';
+		$this->releases()->page();
 	}
 
 	// ── Settings ────────────────────────────────────────────────────────
@@ -899,10 +866,16 @@ final class SFLS_Admin {
 		$s = SFLS_Settings::all();
 		$this->header( __( 'License settings', 'subtleforms-license-server' ) );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Tab switch only.
-		$tab = isset( $_GET['tab'] ) && 'paddle' === $_GET['tab'] ? 'paddle' : 'general';
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'general';
+		$tab = in_array( $tab, array( 'paddle', 'releases' ), true ) ? $tab : 'general';
 		$this->settings_tabs( $tab );
 		if ( 'paddle' === $tab ) {
 			$this->page_paddle();
+			echo '</div>';
+			return;
+		}
+		if ( 'releases' === $tab ) {
+			$this->releases()->settings_tab();
 			echo '</div>';
 			return;
 		}
@@ -990,8 +963,9 @@ final class SFLS_Admin {
 	 */
 	private function settings_tabs( string $current ): void {
 		$tabs = array(
-			'general' => __( 'General', 'subtleforms-license-server' ),
-			'paddle'  => __( 'Paddle', 'subtleforms-license-server' ),
+			'general'  => __( 'General', 'subtleforms-license-server' ),
+			'paddle'   => __( 'Paddle', 'subtleforms-license-server' ),
+			'releases' => __( 'Releases', 'subtleforms-license-server' ),
 		);
 		echo '<nav class="nav-tab-wrapper sfls-tabs" aria-label="' . esc_attr__( 'Settings sections', 'subtleforms-license-server' ) . '">';
 		foreach ( $tabs as $slug => $label ) {
@@ -1707,118 +1681,5 @@ final class SFLS_Admin {
 			$out .= implode( ',', $cells ) . "\r\n";
 		}
 		return $out;
-	}
-
-	/**
-	 * Publish a release.
-	 */
-	public function handle_release(): void {
-		$this->guard();
-		check_admin_referer( 'sfls_release' );
-		$back = admin_url( 'admin.php?page=sfls-release' );
-
-		$data = array(
-			'version'      => sanitize_text_field( wp_unslash( $_POST['version'] ?? '' ) ),
-			'requires'     => sanitize_text_field( wp_unslash( $_POST['requires'] ?? '' ) ),
-			'tested'       => sanitize_text_field( wp_unslash( $_POST['tested'] ?? '' ) ),
-			'requires_php' => sanitize_text_field( wp_unslash( $_POST['requires_php'] ?? '' ) ),
-			'changelog'    => sanitize_textarea_field( wp_unslash( $_POST['changelog'] ?? '' ) ),
-			'updated'      => gmdate( 'Y-m-d' ),
-		);
-
-		$has_zip = ! empty( $_FILES['package']['tmp_name'] ) && ! empty( $_FILES['package']['name'] );
-		$note    = '';
-		if ( $has_zip ) {
-			$tmp     = (string) $_FILES['package']['tmp_name']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Path set by PHP's upload handling, checked with is_uploaded_file().
-			$headers = is_uploaded_file( $tmp ) ? SFLS_Releases::inspect_zip( $tmp ) : new WP_Error( 'upload', __( 'The upload failed. Try again.', 'subtleforms-license-server' ) );
-			if ( is_wp_error( $headers ) ) {
-				$this->flash( $headers->get_error_message(), 'error' );
-				wp_safe_redirect( $back );
-				exit;
-			}
-			if ( '' !== $data['version'] && $data['version'] !== $headers['version'] && $data['version'] !== SFLS_Releases::current()['version'] ) {
-				/* translators: 1: version typed in the form, 2: version in the zip */
-				$note = sprintf( __( 'You entered %1$s but the zip is %2$s, so %2$s was used.', 'subtleforms-license-server' ), $data['version'], $headers['version'] );
-			}
-			foreach ( $headers as $field => $value ) {
-				if ( '' !== $value ) {
-					$data[ $field ] = $value;
-				}
-			}
-		}
-
-		$problem = SFLS_Releases::version_problem( $data['version'] );
-		if ( '' !== $problem ) {
-			$this->flash( $problem, 'error' );
-			wp_safe_redirect( $back );
-			exit;
-		}
-
-		if ( $has_zip ) {
-			$file = $this->store_upload( $data['version'] );
-			if ( is_wp_error( $file ) ) {
-				$this->flash( $file->get_error_message(), 'error' );
-				wp_safe_redirect( $back );
-				exit;
-			}
-			$data['file'] = $file;
-		}
-
-		SFLS_Releases::save( $data );
-		$this->flash(
-			trim(
-				sprintf(
-					/* translators: %s: version */
-					__( 'SubtleForms Pro %s saved. Licensed sites will see it within 12 hours.', 'subtleforms-license-server' ),
-					$data['version']
-				) . ' ' . $note
-			)
-		);
-		wp_safe_redirect( $back );
-		exit;
-	}
-
-	/**
-	 * Move the uploaded zip into the private folder with wp_handle_upload().
-	 *
-	 * @param string $version Release version (used in the file name).
-	 * @return string|WP_Error Stored file name.
-	 */
-	private function store_upload( string $version ) {
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-
-		$dir = SFLS_Releases::dir();
-		wp_mkdir_p( $dir );
-
-		$name = 'subtleforms-pro-' . sanitize_file_name( '' !== $version ? $version : gmdate( 'YmdHis' ) ) . '.zip';
-		$path = trailingslashit( $dir ) . $name;
-		if ( file_exists( $path ) ) {
-			wp_delete_file( $path ); // Re-uploading the same version replaces it.
-		}
-
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce checked by the caller; wp_handle_upload() validates the file.
-		$upload         = isset( $_FILES['package'] ) ? (array) $_FILES['package'] : array();
-		$upload['name'] = $name;
-
-		$target = static function ( array $dirs ) use ( $dir ): array {
-			$dirs['path']   = $dir;
-			$dirs['subdir'] = '';
-			$dirs['url']    = trailingslashit( $dirs['baseurl'] ) . 'sfls-private';
-			return $dirs;
-		};
-		add_filter( 'upload_dir', $target );
-		$result = wp_handle_upload(
-			$upload,
-			array(
-				'test_form' => false,
-				'mimes'     => array( 'zip' => 'application/zip' ),
-			)
-		);
-		remove_filter( 'upload_dir', $target );
-
-		if ( isset( $result['error'] ) ) {
-			return new WP_Error( 'upload', (string) $result['error'] );
-		}
-		return basename( (string) $result['file'] );
 	}
 }

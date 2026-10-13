@@ -456,3 +456,200 @@ a.sfls-map-link:focus {
 .sfls-choice-list .description {
 	margin: 2px 0 12px 24px;
 }
+
+/* ── Releases (1.6.0) ──────────────────────────────────────────────────── */
+
+.sfls-release-cards .sfls-admin-card-value {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 24px;
+}
+
+.sfls-release-cards .sfls-admin-card-value .sfls-admin-pill {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	vertical-align: 4px;
+}
+
+.sfls-pin-notice {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 16px 0 0 !important;
+}
+
+.sfls-pin-notice form {
+	margin: 0;
+	flex: none;
+}
+
+.sfls-release-table {
+	margin-top: 16px;
+}
+
+.sfls-release-table th.column-version { width: 26%; }
+.sfls-release-table th.column-channel { width: 7%; }
+.sfls-release-table th.column-status { width: 10%; }
+.sfls-release-table th.column-released { width: 11%; }
+.sfls-release-table th.column-size { width: 7%; }
+.sfls-release-table th.column-sha { width: 11%; }
+.sfls-release-table th.column-downloads { width: 8%; }
+.sfls-release-table th.column-sites { width: 6%; }
+.sfls-release-table th.column-source { width: 14%; }
+
+.sfls-release-table .row-title {
+	font-size: 14px;
+}
+
+.sfls-badges {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-left: 4px;
+	vertical-align: middle;
+}
+
+.sfls-badges .sfls-admin-pill {
+	font-size: 11px;
+	line-height: 18px;
+}
+
+.sfls-release-row--yanked .row-title,
+.sfls-release-row--draft .row-title {
+	color: #50575e;
+}
+
+.sfls-release-row--yanked .row-title {
+	text-decoration: line-through;
+}
+
+.sfls-cell-note {
+	display: block;
+	margin-top: 2px;
+	color: #646970;
+	font-size: 12px;
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+}
+
+.sfls-sha {
+	padding: 1px 4px;
+	font-size: 12px;
+	background: #f6f7f7;
+	border-radius: 3px;
+}
+
+.sfls-sha-full code {
+	margin-top: 4px;
+	font-size: 12px;
+}
+
+.sfls-release-lower {
+	margin-top: 4px;
+}
+
+.sfls-release-lower .sfls-panel {
+	margin-top: 16px;
+}
+
+.sfls-version-bars {
+	margin: 8px 0 12px;
+}
+
+.sfls-version-bars li {
+	display: grid;
+	grid-template-columns: minmax(56px, auto) minmax(40px, 1fr) auto;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	padding: 6px 0;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.sfls-version-bars li:last-child {
+	border-bottom: 0;
+}
+
+.sfls-bar {
+	display: block;
+	height: 8px;
+	border-radius: 4px;
+	background: #f0f0f1;
+	overflow: hidden;
+}
+
+.sfls-bar span {
+	display: block;
+	height: 100%;
+	border-radius: 4px;
+	background: var(--sf-color-accent, #3858e9);
+}
+
+.sfls-bar-count {
+	color: #646970;
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+#sfls-yank.is-focused {
+	box-shadow: 0 0 0 2px #f2c4c5;
+}
+
+#sfls-yank .submit,
+#sfls-yank > .button {
+	margin-bottom: 12px;
+}
+
+.sfls-code {
+	margin: 0;
+	padding: 12px 14px;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	background: #f6f7f7;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	line-height: 1.6;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.sfls-inline-create,
+.sfls-import-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 12px 0;
+}
+
+.sfls-import-form input[type="text"] {
+	width: 10em;
+}
+
+.sfls-inline-check {
+	margin-left: 8px;
+}
+
+.sfls-token-table td,
+.sfls-deliveries td {
+	vertical-align: middle;
+}
+
+.sfls-token-table form,
+.sfls-deliveries form {
+	margin: 0;
+}
+
+.sfls-reveal input {
+	max-width: 640px;
+}
+
+@media (max-width: 782px) {
+	.sfls-pin-notice {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.sfls-release-table th.column-version {
+		width: auto;
+	}
+}
