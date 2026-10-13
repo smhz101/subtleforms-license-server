@@ -66,15 +66,8 @@ class SFLS_Blocks_Test extends SFLS_Test_Case {
 	 * Changelog and latest version blocks.
 	 */
 	public function test_changelog_and_version_blocks(): void {
-		$this->set_option(
-			SFLS_Releases::OPTION,
-			array(
-				'version'   => '3.0.0',
-				'changelog' => "* One\n* Two",
-				'updated'   => '2026-10-01',
-			)
-		);
-		$this->set_option( SFLS_Releases::HISTORY_OPTION, array( array( 'version' => '2.9.0' ) ) );
+		$this->add_release( '2.9.0' );
+		$this->add_release( '3.0.0', array( 'changelog' => "* One\n* Two" ) );
 		$all = do_blocks( '<!-- wp:sfls/changelog /-->' );
 		$this->assertStringContainsString( '3.0.0', $all );
 		$this->assertStringContainsString( '2.9.0', $all );

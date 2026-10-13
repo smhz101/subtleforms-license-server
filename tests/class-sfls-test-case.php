@@ -61,6 +61,20 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 	protected array $mails = array();
 
 	/**
+	 * Release rows and pin before isolate_releases() (null = not isolated).
+	 *
+	 * @var array|null
+	 */
+	protected ?array $release_snapshot = null;
+
+	/**
+	 * Temp files to delete.
+	 *
+	 * @var string[]
+	 */
+	protected array $temp_files = array();
+
+	/**
 	 * Set up.
 	 */
 	protected function setUp(): void {
@@ -126,6 +140,13 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 				update_option( $name, $value );
 			}
 		}
+		$this->restore_releases();
+		foreach ( $this->temp_files as $file ) {
+			if ( is_file( $file ) ) {
+				wp_delete_file( $file );
+			}
+		}
+		$this->temp_files = array();
 		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfls\\_rl\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfls\\_rl\\_%'" );
 		SFLS_Products::flush();
 		wp_set_current_user( 0 );
@@ -317,5 +338,97 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 			static fn( $n ) => wp_strip_all_tags( is_array( $n ) ? $n['notice'] : (string) $n ),
 			wc_get_notices( $type )
 		);
+	}
+
+	// ── Releases (1.6.0) ────────────────────────────────────────────────
+
+	/**
+	 * Start the test with no releases. The site's own releases (rows, files
+	 * and pin) come back in tearDown; releases the test created are deleted
+	 * with their files.
+	 */
+	protected function isolate_releases(): void {
+		global $wpdb;
+		if ( null !== $this->release_snapshot ) {
+			return;
+		}
+		$this->release_snapshot = array(
+			'rows' => (array) $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}sfls_releases", ARRAY_A ),
+			'pin'  => get_option( SFLS_Releases::PIN_OPTION, null ),
+		);
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}sfls_releases" );
+		delete_option( SFLS_Releases::PIN_OPTION );
+		SFLS_Releases::flush();
+	}
+
+	/**
+	 * Undo isolate_releases().
+	 */
+	private function restore_releases(): void {
+		global $wpdb;
+		if ( null === $this->release_snapshot ) {
+			return;
+		}
+		$keep = array();
+		foreach ( $this->release_snapshot['rows'] as $row ) {
+			$keep[] = (string) $row['file'];
+		}
+		SFLS_Releases::flush();
+		foreach ( SFLS_Releases::rows() as $row ) {
+			if ( in_array( $row['file'], $keep, true ) ) {
+				$wpdb->delete( $wpdb->prefix . 'sfls_releases', array( 'id' => $row['id'] ) ); // Never delete the site's own zips.
+			} else {
+				SFLS_Releases::delete( $row['id'] );
+			}
+		}
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}sfls_releases" );
+		foreach ( $this->release_snapshot['rows'] as $row ) {
+			$wpdb->insert( $wpdb->prefix . 'sfls_releases', $row );
+		}
+		if ( null === $this->release_snapshot['pin'] ) {
+			delete_option( SFLS_Releases::PIN_OPTION );
+		} else {
+			update_option( SFLS_Releases::PIN_OPTION, $this->release_snapshot['pin'], false );
+		}
+		$this->release_snapshot = null;
+		SFLS_Releases::flush();
+	}
+
+	/**
+	 * A Pro release zip in a temp file.
+	 *
+	 * @param string $version Version header.
+	 * @param array  $extra   Extra files: path => contents.
+	 */
+	protected function pro_zip( string $version, array $extra = array() ): string {
+		$path               = wp_tempnam( 'sfls-test-' . $version . '.zip' );
+		$this->temp_files[] = $path;
+		$zip                = new ZipArchive();
+		$zip->open( $path, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+		$zip->addFromString( 'subtleforms-pro/subtleforms-pro.php', "<?php\n/**\n * Plugin Name: SubtleForms Pro\n * Version: {$version}\n * Requires at least: 6.5\n * Requires PHP: 8.1\n */\n" );
+		$zip->addFromString( 'subtleforms-pro/readme.txt', "=== SubtleForms Pro ===\nTested up to: 7.1\nStable tag: {$version}\n" );
+		foreach ( $extra as $name => $contents ) {
+			$zip->addFromString( $name, $contents );
+		}
+		$zip->close();
+		return $path;
+	}
+
+	/**
+	 * Store a release through the real ingest path (isolates releases first).
+	 *
+	 * @param string $version Version.
+	 * @param array  $args    SFLS_Releases::ingest() args, plus released_at.
+	 */
+	protected function add_release( string $version, array $args = array() ): array {
+		$this->isolate_releases();
+		$released = $args['released_at'] ?? null;
+		unset( $args['released_at'] );
+		$result = SFLS_Releases::ingest( $this->pro_zip( $version, $args['extra'] ?? array() ), array_merge( array( 'publish' => true ), array_diff_key( $args, array( 'extra' => 1 ) ) ) );
+		$this->assertIsArray( $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
+		if ( null !== $released ) {
+			SFLS_Releases::update( $result['release']['id'], array( 'released_at' => $released ) );
+		}
+		return (array) SFLS_Releases::get( $version, true );
 	}
 }

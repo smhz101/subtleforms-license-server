@@ -6,9 +6,10 @@
  *   POST /wp-json/sfls/v1/license/validate    { license_key, site_url }
  *   POST /wp-json/sfls/v1/license/deactivate  { license_key, site_url }
  *   GET  /wp-json/sfls/v1/license/status      ?license_key&site_url
- *   GET  /wp-json/sfls/v1/update/check        ?license_key&site_url&version&slug
- *   GET  /wp-json/sfls/v1/update/package      ?license_key&site_url (redirects to a fresh signed link)
- *   GET  /wp-json/sfls/v1/update/download     ?license_key&site&expires&token&sig (15 minutes, single use)
+ *   GET  /wp-json/sfls/v1/update/check        ?license_key&site_url&version&slug[&channel=beta]
+ *   GET  /wp-json/sfls/v1/update/package      ?license_key&site_url[&channel][&version] (redirects to a fresh signed link)
+ *   GET  /wp-json/sfls/v1/update/download     ?license_key&site&expires&token&sig[&version] (15 minutes, single use)
+ *   GET  /wp-json/sfls/v1/update/versions     ?license_key&site_url[&channel=beta] (versions this license may download)
  *   POST /wp-json/sfls/v1/connect/exchange    { code, site_url }
  *
  * Every response is JSON except download. Errors use a 4xx status with
@@ -48,6 +49,7 @@ final class SFLS_REST {
 		register_rest_route( self::NS, '/update/check', array( 'methods' => 'GET', 'callback' => array( $this, 'update_check' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/package', array( 'methods' => 'GET', 'callback' => array( $this, 'package' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/download', array( 'methods' => 'GET', 'callback' => array( $this, 'download' ), 'permission_callback' => $open ) );
+		register_rest_route( self::NS, '/update/versions', array( 'methods' => 'GET', 'callback' => array( $this, 'versions' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/connect/exchange', array( 'methods' => 'POST', 'callback' => array( $this, 'exchange' ), 'permission_callback' => $open ) );
 	}
 
@@ -134,14 +136,26 @@ final class SFLS_REST {
 	}
 
 	/**
-	 * Update check endpoint.
+	 * The channel a request asks for: beta when the site opted in, else stable.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 */
+	private static function channel( WP_REST_Request $req ): string {
+		return 'beta' === sanitize_key( (string) $req->get_param( 'channel' ) ) ? 'beta' : 'stable';
+	}
+
+	/**
+	 * Update check endpoint. Offers the latest published release of the
+	 * site's channel (stable unless channel=beta); drafts and yanked releases
+	 * are never offered.
 	 *
 	 * @param WP_REST_Request $req Request.
 	 * @return WP_REST_Response
 	 */
 	public function update_check( WP_REST_Request $req ) {
-		$release = SFLS_Releases::current();
-		if ( '' === $release['version'] ) {
+		$channel = self::channel( $req );
+		$release = SFLS_Releases::latest( $channel );
+		if ( ! $release ) {
 			return rest_ensure_response( new stdClass() );
 		}
 
@@ -152,6 +166,7 @@ final class SFLS_REST {
 			'requires_php' => $release['requires_php'],
 			'last_updated' => $release['updated'],
 			'changelog'    => wpautop( esc_html( $release['changelog'] ) ),
+			'channel'      => $release['channel'],
 			'package'      => '',
 		);
 
@@ -160,13 +175,14 @@ final class SFLS_REST {
 			// Pro caches this answer for hours, longer than a signed link lives,
 			// so the package is a stable address that hands out a fresh signed
 			// link at download time (see package()).
-			$response['package'] = add_query_arg(
-				array(
-					'license_key' => rawurlencode( $lic['license_key'] ),
-					'site_url'    => rawurlencode( $domain ),
-				),
-				rest_url( self::NS . '/update/package' )
+			$args = array(
+				'license_key' => rawurlencode( $lic['license_key'] ),
+				'site_url'    => rawurlencode( $domain ),
 			);
+			if ( 'beta' === $channel ) {
+				$args['channel'] = 'beta';
+			}
+			$response['package'] = add_query_arg( $args, rest_url( self::NS . '/update/package' ) );
 			SFLS_Licenses::touch_activation( (int) $lic['id'], $domain, (string) $req->get_param( 'version' ) );
 		}
 
@@ -175,7 +191,11 @@ final class SFLS_REST {
 
 	/**
 	 * Package endpoint: checks the license and the site, then redirects to a
-	 * newly signed download link that works once within 15 minutes.
+	 * newly signed download link that works once within 15 minutes. Without
+	 * a version it serves the latest release of the channel and needs a valid
+	 * license. With a version it serves that release when the license may
+	 * download it (an expired license keeps the versions released while it
+	 * was valid).
 	 *
 	 * @param WP_REST_Request $req Request.
 	 * @return WP_REST_Response
@@ -189,23 +209,88 @@ final class SFLS_REST {
 		if ( $error ) {
 			return $error;
 		}
-		if ( ! SFLS_Licenses::state( $lic )['valid'] ) {
+		$version = sanitize_text_field( (string) $req->get_param( 'version' ) );
+		if ( '' === $version && ! SFLS_Licenses::state( $lic )['valid'] ) {
 			return $this->error( 403, 'expired', __( 'An active license is required to download updates.', 'subtleforms-license-server' ) );
 		}
 		if ( ! SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
 			return $this->error( 403, 'domain_not_activated', __( 'This site is not activated for this license.', 'subtleforms-license-server' ) );
 		}
-		if ( ! SFLS_Releases::has_package() ) {
+		$release = '' === $version ? SFLS_Releases::latest( self::channel( $req ) ) : SFLS_Releases::find( $version );
+		if ( ! $release || ! SFLS_Releases::has_package( $release ) ) {
 			return $this->error( 404, 'no_package', __( 'No package is available.', 'subtleforms-license-server' ) );
 		}
+		if ( ! SFLS_Releases::allowed( $lic, $release ) ) {
+			return $this->error( 403, 'expired', __( 'This version was released after your license expired. Renew to download it.', 'subtleforms-license-server' ) );
+		}
 		$response = new WP_REST_Response( null, 302 );
-		$response->header( 'Location', SFLS_Releases::signed_url( $lic['license_key'], $domain ) );
+		$response->header( 'Location', SFLS_Releases::signed_url( $lic['license_key'], $domain, $release['version'] ) );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;
 	}
 
 	/**
-	 * Download endpoint. The signed link must be unexpired and unused.
+	 * Versions endpoint: every published, non-yanked version this license may
+	 * download, highest first, each with a package address that redirects to
+	 * a fresh signed link for that version.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function versions( WP_REST_Request $req ) {
+		$limited = $this->limit_license_request( $req );
+		if ( $limited ) {
+			return $limited;
+		}
+		[ $lic, $domain, $error ] = $this->resolve( $req );
+		if ( $error ) {
+			return $error;
+		}
+		$activated = (bool) SFLS_Licenses::activation( (int) $lic['id'], $domain );
+		$channel   = self::channel( $req );
+		$latest    = SFLS_Releases::latest( $channel );
+		$list      = array();
+		foreach ( SFLS_Releases::allowed_for( $lic, $channel ) as $release ) {
+			if ( ! SFLS_Releases::has_package( $release ) ) {
+				continue;
+			}
+			$list[] = array(
+				'version'      => $release['version'],
+				'channel'      => $release['channel'],
+				'latest'       => $latest && $latest['version'] === $release['version'],
+				'released_at'  => $release['released_at'] ? gmdate( 'c', (int) strtotime( $release['released_at'] . ' UTC' ) ) : null,
+				'requires'     => $release['requires'],
+				'tested'       => $release['tested'],
+				'requires_php' => $release['requires_php'],
+				'size'         => (int) $release['size'],
+				'sha256'       => $release['sha256'],
+				'changelog'    => $release['changelog'],
+				'package'      => $activated ? add_query_arg(
+					array(
+						'license_key' => rawurlencode( $lic['license_key'] ),
+						'site_url'    => rawurlencode( $domain ),
+						'version'     => rawurlencode( $release['version'] ),
+					),
+					rest_url( self::NS . '/update/package' )
+				) : '',
+			);
+		}
+		$state = SFLS_Licenses::state( $lic );
+		return rest_ensure_response(
+			array(
+				'status'    => $state['status'],
+				'valid'     => $state['valid'],
+				'activated' => $activated,
+				'channel'   => $channel,
+				'versions'  => $list,
+			)
+		);
+	}
+
+	/**
+	 * Download endpoint. The signed link must be unexpired and unused, and
+	 * the license must be allowed to download that version. Links without a
+	 * version (handed out by 1.5) serve the current stable release.
 	 *
 	 * @param WP_REST_Request $req Request.
 	 * @return WP_REST_Response
@@ -216,28 +301,33 @@ final class SFLS_REST {
 		$expires = (int) $req->get_param( 'expires' );
 		$token   = strtolower( sanitize_key( (string) $req->get_param( 'token' ) ) );
 		$sig     = sanitize_text_field( (string) $req->get_param( 'sig' ) );
+		$version = sanitize_text_field( (string) $req->get_param( 'version' ) );
 
-		if ( ! SFLS_Releases::verify( $key, $domain, $expires, $sig, $token ) ) {
+		if ( ! SFLS_Releases::verify( $key, $domain, $expires, $sig, $token, $version ) ) {
 			return $this->error( 403, 'invalid_signature', __( 'This download link has expired. Check for updates again.', 'subtleforms-license-server' ) );
 		}
-		$lic = SFLS_Licenses::find_by_key( $key );
-		if ( ! $lic || ! SFLS_Licenses::state( $lic )['valid'] ) {
+		$lic     = SFLS_Licenses::find_by_key( $key );
+		$release = '' === $version ? SFLS_Releases::latest( 'stable' ) : SFLS_Releases::find( $version );
+		if ( ! $lic || ( $release && ! SFLS_Releases::allowed( $lic, $release ) ) || ( ! $release && ! SFLS_Licenses::state( $lic )['valid'] ) ) {
 			return $this->error( 403, 'expired', __( 'An active license is required to download updates.', 'subtleforms-license-server' ) );
+		}
+		if ( ! $release || ! SFLS_Releases::has_package( $release ) ) {
+			return $this->error( 404, 'no_package', __( 'No package is available.', 'subtleforms-license-server' ) );
 		}
 		if ( ! SFLS_Releases::consume_token( $token ) ) {
 			return $this->error( 403, 'link_used', __( 'This download link was already used. Check for updates again to get a new one.', 'subtleforms-license-server' ) );
 		}
 
-		$path = SFLS_Releases::package_path();
-		if ( ! $path || ! is_readable( $path ) ) {
-			return $this->error( 404, 'no_package', __( 'No package is available.', 'subtleforms-license-server' ) );
-		}
-
-		nocache_headers();
-		header( 'Content-Type: application/zip' );
-		header( 'Content-Disposition: attachment; filename="subtleforms-pro.zip"' );
-		header( 'Content-Length: ' . filesize( $path ) );
-		readfile( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile
+		SFLS_Releases::count_download( (int) $release['id'] );
+		/**
+		 * Fires before a licensed download is streamed.
+		 *
+		 * @param array  $release Release.
+		 * @param array  $lic     License.
+		 * @param string $domain  Site domain, or "account" for the members area.
+		 */
+		do_action( 'sfls_release_downloaded', $release, $lic, $domain );
+		SFLS_Releases::stream( $release );
 		exit;
 	}
 

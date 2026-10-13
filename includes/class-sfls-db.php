@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '4';
+	const SCHEMA_VERSION = '5';
 
 	/**
 	 * Licenses table name.
@@ -63,6 +63,22 @@ final class SFLS_DB {
 	}
 
 	/**
+	 * Pro releases table name (1.6.0).
+	 */
+	public static function releases(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_releases';
+	}
+
+	/**
+	 * GitHub webhook deliveries table name (1.6.0).
+	 */
+	public static function github_deliveries(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_github_deliveries';
+	}
+
+	/**
 	 * Create or upgrade the tables and the private release folder.
 	 */
 	public static function install(): void {
@@ -76,6 +92,8 @@ final class SFLS_DB {
 		$tokens   = self::download_tokens();
 		$claims   = self::trial_claims();
 		$events   = self::paddle_events();
+		$releases = self::releases();
+		$hooks    = self::github_deliveries();
 
 		dbDelta(
 			"CREATE TABLE {$licenses} (
@@ -188,6 +206,56 @@ final class SFLS_DB {
 ) {$charset};"
 		);
 
+		// Schema 5 (1.6.0): every Pro release, with its channel, status and package.
+		dbDelta(
+			"CREATE TABLE {$releases} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  version varchar(40) NOT NULL,
+  channel varchar(10) NOT NULL DEFAULT 'stable',
+  status varchar(10) NOT NULL DEFAULT 'draft',
+  file varchar(190) NOT NULL DEFAULT '',
+  size bigint(20) unsigned NOT NULL DEFAULT 0,
+  sha256 char(64) NOT NULL DEFAULT '',
+  requires varchar(20) NOT NULL DEFAULT '',
+  tested varchar(20) NOT NULL DEFAULT '',
+  requires_php varchar(20) NOT NULL DEFAULT '',
+  changelog text NULL,
+  source varchar(10) NOT NULL DEFAULT 'upload',
+  git_ref varchar(190) NOT NULL DEFAULT '',
+  git_commit varchar(64) NOT NULL DEFAULT '',
+  notes text NULL,
+  yank_reason varchar(255) NOT NULL DEFAULT '',
+  replaced_files text NULL,
+  downloads bigint(20) unsigned NOT NULL DEFAULT 0,
+  released_at datetime NULL,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY version (version),
+  KEY status (status)
+) {$charset};"
+		);
+
+		// Schema 5 (1.6.0): GitHub webhook deliveries, kept so they can be retried.
+		dbDelta(
+			"CREATE TABLE {$hooks} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  delivery_id varchar(64) NOT NULL DEFAULT '',
+  event varchar(40) NOT NULL DEFAULT '',
+  action varchar(40) NOT NULL DEFAULT '',
+  tag varchar(100) NOT NULL DEFAULT '',
+  result varchar(20) NOT NULL DEFAULT '',
+  message text NULL,
+  release_version varchar(40) NOT NULL DEFAULT '',
+  payload longtext NULL,
+  received_at datetime NOT NULL,
+  processed_at datetime NULL,
+  PRIMARY KEY  (id),
+  KEY delivery_id (delivery_id),
+  KEY received_at (received_at)
+) {$charset};"
+		);
+
 		self::backfill_billing();
 
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
@@ -203,6 +271,9 @@ final class SFLS_DB {
 		if ( ! file_exists( $dir . '/index.php' ) ) {
 			file_put_contents( $dir . '/index.php', "<?php\n// Silence.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		}
+
+		// Schema 5 (1.6.0): move the releases out of the two options.
+		SFLS_Releases::migrate_from_options();
 	}
 
 	/**

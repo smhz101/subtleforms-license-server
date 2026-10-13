@@ -101,10 +101,11 @@ class SFLS_Releases_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * Lower versions are refused, the same version may be re-uploaded.
+	 * A version lower than the current release gets a note (since 1.6.0 it
+	 * is stored as an older version instead of refused).
 	 */
 	public function test_version_must_not_go_down(): void {
-		$this->set_option( SFLS_Releases::OPTION, array( 'version' => '2.2.0' ) );
+		$this->add_release( '2.2.0' );
 		$this->assertNotSame( '', SFLS_Releases::version_problem( '2.1.9' ) );
 		$this->assertStringContainsString( 'lower than the current release 2.2.0', SFLS_Releases::version_problem( '2.1.9' ) );
 		$this->assertSame( '', SFLS_Releases::version_problem( '2.2.0' ) );

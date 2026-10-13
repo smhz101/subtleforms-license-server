@@ -60,7 +60,7 @@ class SFLS_Plans_And_Version_Test extends SFLS_Test_Case {
 	 * With no release the shortcode, block and dashboard say "Coming soon".
 	 */
 	public function test_latest_version_fallback(): void {
-		$this->set_option( SFLS_Releases::OPTION, null );
+		$this->isolate_releases();
 		$this->assertSame( 'Coming soon', do_shortcode( '[sfls_latest_version]' ) );
 		$this->assertStringContainsString( 'Coming soon', ( new SFLS_Blocks() )->render_latest_version( array() ) );
 
@@ -77,7 +77,7 @@ class SFLS_Plans_And_Version_Test extends SFLS_Test_Case {
 	 * A real version is shown as is.
 	 */
 	public function test_latest_version_when_released(): void {
-		$this->set_option( SFLS_Releases::OPTION, array( 'version' => '9.8.7' ) );
+		$this->add_release( '9.8.7' );
 		$this->assertSame( '9.8.7', do_shortcode( '[sfls_latest_version]' ) );
 	}
 
@@ -86,7 +86,7 @@ class SFLS_Plans_And_Version_Test extends SFLS_Test_Case {
 	 */
 	public function test_admin_notice_without_release(): void {
 		wp_set_current_user( 1 );
-		$this->set_option( SFLS_Releases::OPTION, null );
+		$this->isolate_releases();
 		$admin = new SFLS_Admin();
 		foreach ( array( 'page_settings', 'page_products', 'page_new', 'page_release' ) as $page ) {
 			ob_start();

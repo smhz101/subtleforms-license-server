@@ -22,6 +22,8 @@ $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_activation_log" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_download_tokens" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_trial_claims" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_paddle_events" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_releases" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_github_deliveries" );
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfls\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfls\\_%'" );
 // phpcs:enable
 
@@ -31,6 +33,11 @@ foreach ( array(
 	'sfls_flush_rewrite',
 	'sfls_release',
 	'sfls_release_history',
+	'sfls_releases_migrated',
+	'sfls_release_pin',
+	'sfls_release_settings',
+	'sfls_deploy_tokens',
+	'sfls_github',
 	'sfls_settings',
 	'sfls_products',
 	'sfls_paddle',
