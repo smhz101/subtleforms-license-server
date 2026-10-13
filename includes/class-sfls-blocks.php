@@ -8,6 +8,8 @@
  *   sfls/latest-version  Same as [sfls_latest_version].
  *   sfls/account-link    "Sign in" for visitors, "My licenses" with an avatar
  *                        for signed-in customers.
+ *   sfls/downloads       Same as [sfls_downloads]: the latest Pro release and
+ *                        every older version for the signed-in customer.
  *
  * Each block has a block.json in blocks/<name>/. The editor script
  * (assets/js/sfls-blocks-editor.js) is plain JavaScript on the wp.* globals,
@@ -65,6 +67,7 @@ final class SFLS_Blocks {
 			'changelog'      => array( $this, 'render_changelog' ),
 			'latest-version' => array( $this, 'render_latest_version' ),
 			'account-link'   => array( $this, 'render_account_link' ),
+			'downloads'      => array( $this, 'render_downloads' ),
 		);
 		foreach ( $callbacks as $dir => $callback ) {
 			register_block_type( SFLS_DIR . 'blocks/' . $dir, array( 'render_callback' => $callback ) );
@@ -140,6 +143,20 @@ final class SFLS_Blocks {
 		$prefix = sanitize_text_field( (string) ( $attributes['prefix'] ?? '' ) );
 		$text   = '' !== $prefix ? $prefix . ' ' . SFLS_Account::latest_version_label() : SFLS_Account::latest_version_label();
 		return '<p ' . get_block_wrapper_attributes() . '>' . esc_html( $text ) . '</p>';
+	}
+
+	/**
+	 * Downloads block.
+	 *
+	 * @param array $attributes Block attributes.
+	 */
+	public function render_downloads( $attributes ): string {
+		unset( $attributes );
+		if ( self::in_editor() ) {
+			return self::editor_note( __( 'Signed-in customers see the latest SubtleForms Pro release and every older version here, with download buttons.', 'subtleforms-license-server' ) );
+		}
+		$html = ( new SFLS_Shortcodes() )->downloads();
+		return '' === $html ? '' : '<div ' . get_block_wrapper_attributes() . '>' . $html . '</div>';
 	}
 
 	/**

@@ -147,6 +147,25 @@ final class SFLS_Account {
 	}
 
 	/**
+	 * The license of a user that may download a release, valid licenses
+	 * first. An expired or revoked license still covers the versions released
+	 * while it was valid.
+	 *
+	 * @param WP_User $user    User.
+	 * @param array   $release Release.
+	 */
+	public static function license_for_release( WP_User $user, array $release ): ?array {
+		$licenses = SFLS_Licenses::for_user( $user );
+		usort( $licenses, static fn( $a, $b ) => (int) SFLS_Licenses::state( $b )['valid'] <=> (int) SFLS_Licenses::state( $a )['valid'] );
+		foreach ( $licenses as $lic ) {
+			if ( SFLS_Releases::allowed( $lic, $release ) ) {
+				return $lic;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Latest Pro version for display, "Coming soon" before the first release.
 	 */
 	public static function latest_version_label(): string {
@@ -629,20 +648,49 @@ final class SFLS_Account {
 	 */
 	public function downloads_page(): void {
 		SFLS_Assets::enqueue();
-		$user     = wp_get_current_user();
-		$allowed  = self::can_download( $user );
-		$releases = SFLS_Releases::all();
-		$latest   = $releases[0] ?? null;
+		echo self::downloads_html( wp_get_current_user() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Built from escaped parts in downloads_html().
+	}
 
-		echo '<div class="sfls sfls-account">';
+	/**
+	 * The latest release with its changelog, then every older published
+	 * version (betas included, yanked and draft versions never) with its own
+	 * changelog and download button. Each button leads to a fresh signed,
+	 * single-use link for that license and version.
+	 *
+	 * @param WP_User $user Customer.
+	 */
+	public static function downloads_html( WP_User $user ): string {
+		$latest = SFLS_Releases::latest( 'stable' );
+		$all    = SFLS_Releases::published();
+		if ( ! $latest && $all ) {
+			$latest = $all[0]; // Only betas so far.
+		}
+
+		ob_start();
+		echo '<div class="sfls sfls-account sfls-downloads">';
 
 		if ( ! $latest ) {
 			echo '<div class="sfls-card sfls-empty-card"><h3>' . esc_html__( 'No releases yet', 'subtleforms-license-server' ) . '</h3><p>' . esc_html__( 'The first SubtleForms Pro release will be available here.', 'subtleforms-license-server' ) . '</p></div></div>';
-			return;
+			return (string) ob_get_clean();
 		}
 
-		if ( ! $allowed ) {
-			echo '<div class="sfls-alert sfls-alert--warn">' . esc_html__( 'Downloads need an active license.', 'subtleforms-license-server' ) . ' <a href="' . esc_url( SFLS_Settings::pricing_url() ) . '">' . esc_html__( 'See plans', 'subtleforms-license-server' ) . '</a></div>';
+		$licenses = SFLS_Licenses::for_user( $user );
+		$valid    = self::can_download( $user );
+		$may      = static fn( array $release ): bool => null !== self::license_for_release( $user, $release ) && SFLS_Releases::has_package( $release );
+
+		if ( ! $valid ) {
+			$renew = '';
+			foreach ( $licenses as $lic ) {
+				$renew = '' !== $renew ? $renew : (string) SFLS_Products::renew_url( $lic );
+			}
+			echo '<div class="sfls-alert sfls-alert--warn">';
+			if ( $licenses ) {
+				echo esc_html__( 'Your license is not active, so new versions are not available. You can still download the versions released while it was active.', 'subtleforms-license-server' );
+				echo ' <a href="' . esc_url( '' !== $renew ? $renew : SFLS_Settings::pricing_url() ) . '">' . esc_html( '' !== $renew ? __( 'Renew', 'subtleforms-license-server' ) : __( 'See plans', 'subtleforms-license-server' ) ) . '</a>';
+			} else {
+				echo esc_html__( 'Downloads need an active license.', 'subtleforms-license-server' ) . ' <a href="' . esc_url( SFLS_Settings::pricing_url() ) . '">' . esc_html__( 'See plans', 'subtleforms-license-server' ) . '</a>';
+			}
+			echo '</div>';
 		}
 
 		echo '<article class="sfls-card sfls-release">';
@@ -656,13 +704,16 @@ final class SFLS_Account {
 				$latest['requires'] ? sprintf( __( 'WordPress %s+', 'subtleforms-license-server' ), $latest['requires'] ) : '',
 				/* translators: %s: PHP version */
 				$latest['requires_php'] ? sprintf( __( 'PHP %s+', 'subtleforms-license-server' ), $latest['requires_php'] ) : '',
+				$latest['size'] ? size_format( (int) $latest['size'] ) : '',
 			)
 		);
 		echo '<p class="sfls-muted">' . esc_html( implode( ' · ', $meta ) ) . '</p></div>';
-		if ( $allowed && SFLS_Releases::has_package( $latest ) ) {
+		if ( $may( $latest ) ) {
 			echo '<a class="sfls-btn sfls-btn--primary" href="' . esc_url( self::download_url( $latest['version'] ) ) . '">';
 			self::print_icon( 'download' );
 			echo esc_html__( 'Download zip', 'subtleforms-license-server' ) . '</a>';
+		} elseif ( $licenses ) {
+			echo '<span class="sfls-muted sfls-locked">' . esc_html__( 'Renew to download', 'subtleforms-license-server' ) . '</span>';
 		}
 		echo '</header>';
 
@@ -671,29 +722,45 @@ final class SFLS_Account {
 			echo '<div class="sfls-changelog"><h4>' . esc_html__( 'What is new', 'subtleforms-license-server' ) . '</h4>' . wp_kses_post( $log ) . '</div>';
 		}
 		echo '<p class="sfls-muted sfls-install-hint">' . esc_html__( 'Install it in WordPress from Plugins › Add New › Upload Plugin. Connected sites also get updates automatically in Dashboard › Updates.', 'subtleforms-license-server' ) . '</p>';
+		if ( $latest['sha256'] ) {
+			echo '<p class="sfls-muted sfls-checksum">' . esc_html__( 'SHA-256', 'subtleforms-license-server' ) . ' <code>' . esc_html( $latest['sha256'] ) . '</code></p>';
+		}
 		echo '</article>';
 
-		$older = array_slice( $releases, 1 );
+		$older = array_values( array_filter( $all, static fn( $r ) => $r['version'] !== $latest['version'] ) );
 		if ( $older ) {
-			echo '<article class="sfls-card"><h4 class="sfls-card-title">' . esc_html__( 'Older versions', 'subtleforms-license-server' ) . '</h4><ul class="sfls-version-list">';
+			echo '<article class="sfls-card sfls-older"><h4 class="sfls-card-title">' . esc_html__( 'Older versions', 'subtleforms-license-server' ) . '</h4>';
+			echo '<p class="sfls-muted sfls-older-intro">' . esc_html__( 'Every version stays available. Use an older one to roll back a site or to test an upgrade.', 'subtleforms-license-server' ) . '</p>';
+			echo '<ul class="sfls-version-list">';
 			foreach ( $older as $rel ) {
-				echo '<li><span class="sfls-version">' . esc_html( $rel['version'] ) . '</span><span class="sfls-muted">' . esc_html( SFLS_Releases::date_label( $rel ) ) . '</span>';
-				if ( $allowed && SFLS_Releases::has_package( $rel ) ) {
-					echo '<a class="sfls-btn sfls-btn--ghost sfls-btn--sm" href="' . esc_url( self::download_url( $rel['version'] ) ) . '">';
+				echo '<li class="sfls-version-row" id="' . esc_attr( 'version-' . sanitize_title( $rel['version'] ) ) . '"><div class="sfls-version-main"><span class="sfls-version">' . esc_html( $rel['version'] ) . '</span>';
+				if ( 'beta' === $rel['channel'] ) {
+					echo '<span class="sfls-tag sfls-tag--beta">' . esc_html__( 'Beta', 'subtleforms-license-server' ) . '</span>';
+				}
+				echo '<span class="sfls-muted">' . esc_html( SFLS_Releases::date_label( $rel ) ) . '</span></div>';
+				if ( $may( $rel ) ) {
+					echo '<a class="sfls-btn sfls-btn--ghost sfls-btn--sm" href="' . esc_url( self::download_url( $rel['version'] ) ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: version */ __( 'Download version %s', 'subtleforms-license-server' ), $rel['version'] ) ) . '">';
 					self::print_icon( 'download' );
 					echo esc_html__( 'Download', 'subtleforms-license-server' ) . '</a>';
 				} else {
-					echo '<span class="sfls-muted">' . esc_html__( 'Not available', 'subtleforms-license-server' ) . '</span>';
+					echo '<span class="sfls-muted sfls-locked">' . esc_html( $licenses && SFLS_Releases::has_package( $rel ) ? __( 'Renew to download', 'subtleforms-license-server' ) : __( 'Not available', 'subtleforms-license-server' ) ) . '</span>';
+				}
+				$log = SFLS_Releases::changelog_html( $rel );
+				if ( '' !== $log ) {
+					echo '<details class="sfls-version-notes"><summary>' . esc_html__( 'What changed', 'subtleforms-license-server' ) . '</summary><div class="sfls-changelog-body">' . wp_kses_post( $log ) . '</div></details>';
 				}
 				echo '</li>';
 			}
 			echo '</ul></article>';
 		}
 		echo '</div>';
+		return (string) ob_get_clean();
 	}
 
 	/**
-	 * Stream a package to a customer with a valid license.
+	 * A download button: checks the nonce and the customer's licenses, then
+	 * sends the browser to a fresh signed link for that license and version
+	 * (15 minutes, single use; see SFLS_REST::download()).
 	 */
 	public function handle_download(): void {
 		if ( ! isset( $_GET['sfls_download'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Checked below.
@@ -704,19 +771,27 @@ final class SFLS_Account {
 			exit;
 		}
 		check_admin_referer( 'sfls_download' );
-		if ( ! self::can_download( wp_get_current_user() ) ) {
-			wc_add_notice( __( 'Downloads need an active license.', 'subtleforms-license-server' ), 'error' );
-			wp_safe_redirect( wc_get_account_endpoint_url( self::EP_DOWNLOADS ) );
-			exit;
-		}
+		$back    = wc_get_account_endpoint_url( self::EP_DOWNLOADS );
 		$version = sanitize_text_field( wp_unslash( $_GET['sfls_download'] ) );
-		$release = 'latest' === $version ? SFLS_Releases::current() : SFLS_Releases::find( $version );
+		$release = 'latest' === $version ? SFLS_Releases::latest( 'stable' ) : SFLS_Releases::find( $version );
 		if ( ! $release || ! SFLS_Releases::has_package( $release ) ) {
 			wc_add_notice( __( 'That version is not available for download.', 'subtleforms-license-server' ), 'error' );
-			wp_safe_redirect( wc_get_account_endpoint_url( self::EP_DOWNLOADS ) );
+			wp_safe_redirect( $back );
 			exit;
 		}
-		SFLS_Releases::stream( $release );
+		$lic = self::license_for_release( wp_get_current_user(), $release );
+		if ( ! $lic ) {
+			wc_add_notice(
+				self::can_download( wp_get_current_user() ) || ! SFLS_Licenses::for_user( wp_get_current_user() )
+					? __( 'Downloads need an active license.', 'subtleforms-license-server' )
+					: __( 'This version was released after your license expired. Renew to download it.', 'subtleforms-license-server' ),
+				'error'
+			);
+			wp_safe_redirect( $back );
+			exit;
+		}
+		wp_safe_redirect( SFLS_Releases::signed_url( $lic['license_key'], 'account', $release['version'] ) );
+		exit;
 	}
 
 	// ── Dashboard ───────────────────────────────────────────────────────

@@ -8,6 +8,8 @@
  *   [sfls_changelog limit="0"]               Every Pro release, newest first.
  *   [sfls_latest_version]                    The current Pro version number
  *                                           ("Coming soon" before the first release).
+ *   [sfls_downloads]                         The signed-in customer's Pro downloads: the
+ *                                           latest release and every older version.
  *   [sfls_license_welcome]                   Landing page after a Paddle checkout
  *                                           (see SFLS_Checkout_Paddle).
  *
@@ -35,6 +37,7 @@ final class SFLS_Shortcodes {
 		add_shortcode( 'sfls_pricing', array( $this, 'pricing' ) );
 		add_shortcode( 'sfls_changelog', array( $this, 'changelog' ) );
 		add_shortcode( 'sfls_latest_version', array( $this, 'latest_version' ) );
+		add_shortcode( 'sfls_downloads', array( $this, 'downloads' ) );
 	}
 
 	/**
@@ -220,12 +223,15 @@ final class SFLS_Shortcodes {
 		foreach ( $releases as $i => $rel ) {
 			echo '<article class="sfls-changelog-entry" id="' . esc_attr( 'v' . sanitize_title( $rel['version'] ) ) . '">';
 			echo '<header><h3>' . esc_html( $rel['version'] ) . '</h3>';
-			if ( 0 === $i ) {
+			if ( 0 === $i && 'stable' === $rel['channel'] ) {
 				echo '<span class="sfls-pill sfls-pill--ok">' . esc_html__( 'Latest', 'subtleforms-license-server' ) . '</span>';
+			}
+			if ( 'beta' === $rel['channel'] ) {
+				echo '<span class="sfls-tag sfls-tag--beta">' . esc_html__( 'Beta', 'subtleforms-license-server' ) . '</span>';
 			}
 			$date = SFLS_Releases::date_label( $rel );
 			if ( '' !== $date ) {
-				echo '<time datetime="' . esc_attr( $rel['updated'] ) . '">' . esc_html( $date ) . '</time>';
+				echo '<time datetime="' . esc_attr( (string) $rel['updated'] ) . '">' . esc_html( $date ) . '</time>';
 			}
 			echo '</header>';
 			echo '<div class="sfls-changelog-body">' . wp_kses_post( SFLS_Releases::changelog_html( $rel ) ) . '</div>';
@@ -233,6 +239,22 @@ final class SFLS_Shortcodes {
 		}
 		echo '</div>';
 		return (string) ob_get_clean();
+	}
+
+	/**
+	 * [sfls_downloads]: the members area download list, for any page.
+	 */
+	public function downloads(): string {
+		if ( ! is_user_logged_in() ) {
+			$this->styles();
+			$account = function_exists( 'wc_get_page_permalink' ) && wc_get_page_id( 'myaccount' ) > 0 ? wc_get_page_permalink( 'myaccount' ) : wp_login_url( get_permalink() );
+			return '<div class="sfls sfls-notice-box">' . esc_html__( 'Sign in to download SubtleForms Pro.', 'subtleforms-license-server' ) . ' <a href="' . esc_url( $account ) . '">' . esc_html__( 'Sign in', 'subtleforms-license-server' ) . '</a></div>';
+		}
+		if ( ! function_exists( 'wc_get_account_endpoint_url' ) ) {
+			return '';
+		}
+		$this->styles();
+		return SFLS_Account::downloads_html( wp_get_current_user() );
 	}
 
 	/**

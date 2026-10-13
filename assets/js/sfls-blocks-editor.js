@@ -207,11 +207,16 @@
 		);
 	}
 
+	function editDownloads( props ) {
+		return el( 'div', useBlockProps(), preview( 'sfls/downloads', props.attributes ) );
+	}
+
 	var edits = {
 		'sfls/pricing': editPricing,
 		'sfls/changelog': editChangelog,
 		'sfls/latest-version': editLatestVersion,
 		'sfls/account-link': editAccountLink,
+		'sfls/downloads': editDownloads,
 	};
 
 	Object.keys( edits ).forEach( function ( name ) {
