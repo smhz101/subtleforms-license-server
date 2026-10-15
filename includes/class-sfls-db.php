@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '5';
+	const SCHEMA_VERSION = '6';
 
 	/**
 	 * Licenses table name.
@@ -79,21 +79,48 @@ final class SFLS_DB {
 	}
 
 	/**
+	 * Audit log table name (1.7.0): who changed what on a license.
+	 */
+	public static function audit(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_audit';
+	}
+
+	/**
+	 * License transfers table name (1.7.0).
+	 */
+	public static function transfers(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_transfers';
+	}
+
+	/**
+	 * Outgoing webhook deliveries table name (1.7.0).
+	 */
+	public static function webhook_log(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_webhook_log';
+	}
+
+	/**
 	 * Create or upgrade the tables and the private release folder.
 	 */
 	public static function install(): void {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-		$charset  = $wpdb->get_charset_collate();
-		$licenses = self::licenses();
-		$acts     = self::activations();
-		$log      = self::activation_log();
-		$tokens   = self::download_tokens();
-		$claims   = self::trial_claims();
-		$events   = self::paddle_events();
-		$releases = self::releases();
-		$hooks    = self::github_deliveries();
+		$charset   = $wpdb->get_charset_collate();
+		$licenses  = self::licenses();
+		$acts      = self::activations();
+		$log       = self::activation_log();
+		$tokens    = self::download_tokens();
+		$claims    = self::trial_claims();
+		$events    = self::paddle_events();
+		$releases  = self::releases();
+		$hooks     = self::github_deliveries();
+		$audit     = self::audit();
+		$transfers = self::transfers();
+		$deliveries = self::webhook_log();
 
 		dbDelta(
 			"CREATE TABLE {$licenses} (
@@ -126,9 +153,14 @@ final class SFLS_DB {
   paddle_transaction_id varchar(64) NOT NULL DEFAULT '',
   checkout_token_hash varchar(64) NOT NULL DEFAULT '',
   billing_synced_at datetime NULL,
+  order_email varchar(190) NOT NULL DEFAULT '',
+  claimed_at datetime NULL,
+  flagged_at datetime NULL,
+  flag_reason varchar(255) NOT NULL DEFAULT '',
   PRIMARY KEY  (id),
   UNIQUE KEY license_key (license_key),
   KEY customer_email (customer_email),
+  KEY order_email (order_email),
   KEY order_id (order_id),
   KEY user_id (user_id),
   KEY paddle_subscription_id (paddle_subscription_id),
@@ -142,6 +174,7 @@ final class SFLS_DB {
   license_id bigint(20) unsigned NOT NULL,
   domain varchar(190) NOT NULL,
   is_local tinyint(1) NOT NULL DEFAULT 0,
+  is_network tinyint(1) NOT NULL DEFAULT 0,
   plugin_version varchar(20) NOT NULL DEFAULT '',
   activated_at datetime NOT NULL,
   last_seen_at datetime NOT NULL,
@@ -168,10 +201,12 @@ final class SFLS_DB {
 		);
 
 		// Schema 3 (1.3.0): signed download links that were already used.
+		// Schema 6 (1.7.0): multi-use links (the order email) count their uses.
 		dbDelta(
 			"CREATE TABLE {$tokens} (
   token char(32) NOT NULL,
   used_at datetime NOT NULL,
+  uses int(11) NOT NULL DEFAULT 1,
   PRIMARY KEY  (token),
   KEY used_at (used_at)
 ) {$charset};"
@@ -256,7 +291,69 @@ final class SFLS_DB {
 ) {$charset};"
 		);
 
+		// Schema 6 (1.7.0): audit log of every admin, CLI, webhook and billing change.
+		dbDelta(
+			"CREATE TABLE {$audit} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  license_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  action varchar(40) NOT NULL,
+  source varchar(20) NOT NULL DEFAULT '',
+  actor_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  actor varchar(190) NOT NULL DEFAULT '',
+  before_data text NULL,
+  after_data text NULL,
+  note text NULL,
+  ip varchar(45) NOT NULL DEFAULT '',
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY license_id (license_id),
+  KEY action (action),
+  KEY created_at (created_at)
+) {$charset};"
+		);
+
+		// Schema 6 (1.7.0): pending customer-to-customer license transfers.
+		dbDelta(
+			"CREATE TABLE {$transfers} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  license_id bigint(20) unsigned NOT NULL,
+  from_user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  to_email varchar(190) NOT NULL,
+  token_hash char(64) NOT NULL,
+  status varchar(20) NOT NULL DEFAULT 'pending',
+  created_at datetime NOT NULL,
+  expires_at datetime NOT NULL,
+  accepted_at datetime NULL,
+  PRIMARY KEY  (id),
+  KEY license_id (license_id),
+  KEY token_hash (token_hash)
+) {$charset};"
+		);
+
+		// Schema 6 (1.7.0): outgoing webhook deliveries with retries.
+		dbDelta(
+			"CREATE TABLE {$deliveries} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  endpoint varchar(255) NOT NULL,
+  event varchar(40) NOT NULL,
+  license_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  payload longtext NULL,
+  status varchar(20) NOT NULL DEFAULT 'pending',
+  attempts int(11) NOT NULL DEFAULT 0,
+  response_code int(11) NOT NULL DEFAULT 0,
+  response text NULL,
+  next_attempt_at datetime NULL,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY status (status),
+  KEY next_attempt_at (next_attempt_at),
+  KEY license_id (license_id)
+) {$charset};"
+		);
+
 		self::backfill_billing();
+		self::backfill_order_email();
 
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
 
@@ -274,6 +371,22 @@ final class SFLS_DB {
 
 		// Schema 5 (1.6.0): move the releases out of the two options.
 		SFLS_Releases::migrate_from_options();
+
+		// Schema 6 (1.7.0): packages move to random names in random folders.
+		SFLS_Releases::migrate_random_names();
+	}
+
+	/**
+	 * Schema 6: licenses issued by an order before 1.7.0 remember the email
+	 * the order was placed with. Until now customer_email held exactly that
+	 * (it was copied from the billing email), so it is the best record there is.
+	 */
+	private static function backfill_order_email(): void {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( "UPDATE {$wpdb->prefix}sfls_licenses SET order_email = customer_email WHERE order_email = '' AND order_id > 0" );
+		$wpdb->query( "UPDATE {$wpdb->prefix}sfls_licenses SET claimed_at = created_at WHERE claimed_at IS NULL AND user_id > 0" );
+		// phpcs:enable
 	}
 
 	/**

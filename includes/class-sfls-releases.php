@@ -548,8 +548,9 @@ final class SFLS_Releases {
 		}
 		$files = array_filter( array_merge( array( $release['file'] ), self::replaced_files( $release ) ) );
 		foreach ( $files as $file ) {
-			$path = trailingslashit( self::dir() ) . basename( (string) $file );
-			if ( is_file( $path ) ) {
+			$rel  = self::relative_file( (string) $file );
+			$path = '' !== $rel ? trailingslashit( self::dir() ) . $rel : '';
+			if ( '' !== $path && is_file( $path ) ) {
 				wp_delete_file( $path );
 			}
 		}
@@ -584,7 +585,7 @@ final class SFLS_Releases {
 	 */
 	public static function replaced_files( array $release ): array {
 		$list = json_decode( (string) $release['replaced_files'], true );
-		return is_array( $list ) ? array_values( array_filter( array_map( 'basename', array_map( 'strval', $list ) ) ) ) : array();
+		return is_array( $list ) ? array_values( array_filter( array_map( array( self::class, 'relative_file' ), array_map( 'strval', $list ) ) ) ) : array();
 	}
 
 	// ── Adding packages ─────────────────────────────────────────────────
@@ -799,32 +800,128 @@ final class SFLS_Releases {
 	}
 
 	/**
-	 * Copy a zip into the private folder. The name is
-	 * subtleforms-pro-<version>.zip, or subtleforms-pro-<version>-<sha8>.zip when
-	 * a different package of that version is already stored. Only a basename
-	 * is ever used, so a version can never point outside the folder.
+	 * Copy a zip into the private folder under a random folder and a random
+	 * file name (1.7.0, LS-08): sfls-private/<16 hex>/<32 hex>.zip. Nothing
+	 * about the name can be guessed from the version, so a web server that
+	 * ignores the .htaccess rule still cannot hand the zip out by name. The
+	 * stored value is the path relative to the private folder.
 	 *
 	 * @param string $path    Source.
-	 * @param string $version Version.
-	 * @param string $sha256  Hash of the source.
-	 * @return string|WP_Error File name.
+	 * @param string $version Version (unused, kept for the signature).
+	 * @param string $sha256  Hash of the source (unused).
+	 * @return string|WP_Error Relative file path.
 	 */
 	private static function store_file( string $path, string $version, string $sha256 ) {
+		unset( $version, $sha256 );
 		$dir = self::dir();
 		if ( ! is_dir( $dir ) ) {
 			wp_mkdir_p( $dir );
 		}
-		$base = sanitize_file_name( 'subtleforms-pro-' . preg_replace( '/[^0-9A-Za-z.\-+]/', '', $version ) );
-		$name = basename( $base . '.zip' );
+		$sub  = bin2hex( random_bytes( 8 ) );
+		$name = $sub . '/' . bin2hex( random_bytes( 16 ) ) . '.zip';
 		$dest = trailingslashit( $dir ) . $name;
-		if ( is_file( $dest ) && ! hash_equals( (string) hash_file( 'sha256', $dest ), $sha256 ) ) {
-			$name = basename( $base . '-' . substr( $sha256, 0, 8 ) . '.zip' );
-			$dest = trailingslashit( $dir ) . $name;
-		}
-		if ( ! is_file( $dest ) && ! copy( $path, $dest ) ) {
+		if ( ! wp_mkdir_p( dirname( $dest ) ) || ! copy( $path, $dest ) ) {
 			return new WP_Error( 'store_failed', __( 'The package could not be saved in the private releases folder. Check that wp-content/uploads is writable.', 'subtleforms-license-server' ), array( 'status' => 500 ) );
 		}
+		self::protect_dir( dirname( $dest ) );
 		return $name;
+	}
+
+	/**
+	 * Index file so a folder listing shows nothing.
+	 *
+	 * @param string $dir Folder.
+	 */
+	private static function protect_dir( string $dir ): void {
+		if ( ! file_exists( $dir . '/index.php' ) ) {
+			file_put_contents( $dir . '/index.php', "<?php\n// Silence.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		}
+	}
+
+	/**
+	 * A stored file value as a safe path relative to the private folder:
+	 * either a legacy basename (subtleforms-pro-1.2.3.zip) or a random
+	 * "<hex>/<hex>.zip". Anything else is refused.
+	 *
+	 * @param string $file Stored value.
+	 */
+	public static function relative_file( string $file ): string {
+		$file = str_replace( '\\', '/', trim( $file ) );
+		if ( preg_match( '#^[a-f0-9]{16}/[a-f0-9]{32}\.zip$#', $file ) ) {
+			return $file;
+		}
+		$base = basename( $file );
+		return '' !== $base && $base === $file ? $base : '';
+	}
+
+	/**
+	 * Whether a stored file value already uses the 1.7.0 random layout.
+	 *
+	 * @param string $file Stored value.
+	 */
+	public static function is_random_name( string $file ): bool {
+		return (bool) preg_match( '#^[a-f0-9]{16}/[a-f0-9]{32}\.zip$#', $file );
+	}
+
+	/**
+	 * 1.7.0 migration: move every package that still has a predictable name
+	 * (subtleforms-pro-<version>.zip) into a random folder with a random
+	 * name, and update the rows. Runs once; safe to run again.
+	 *
+	 * @return int Files moved.
+	 */
+	public static function migrate_random_names(): int {
+		global $wpdb;
+		if ( ! self::uses_table() ) {
+			return 0;
+		}
+		$moved = 0;
+		$dir   = trailingslashit( self::dir() );
+		self::flush();
+		foreach ( self::rows() as $row ) {
+			$changed  = array();
+			$files    = array( 'file' => (string) $row['file'] );
+			$replaced = self::replaced_files( $row );
+			foreach ( $replaced as $i => $old ) {
+				$files[ 'r' . $i ] = $old;
+			}
+			foreach ( $files as $slot => $old ) {
+				if ( '' === $old || self::is_random_name( $old ) ) {
+					continue;
+				}
+				$src = $dir . basename( $old );
+				if ( ! is_file( $src ) ) {
+					continue;
+				}
+				$sub  = bin2hex( random_bytes( 8 ) );
+				$name = $sub . '/' . bin2hex( random_bytes( 16 ) ) . '.zip';
+				if ( ! wp_mkdir_p( $dir . $sub ) || ! rename( $src, $dir . $name ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename
+					continue;
+				}
+				self::protect_dir( $dir . $sub );
+				$changed[ $slot ] = $name;
+				++$moved;
+			}
+			if ( ! $changed ) {
+				continue;
+			}
+			$data = array();
+			if ( isset( $changed['file'] ) ) {
+				$data['file'] = $changed['file'];
+			}
+			$new_replaced = array();
+			foreach ( $replaced as $i => $old ) {
+				$new_replaced[] = $changed[ 'r' . $i ] ?? $old;
+			}
+			if ( $replaced ) {
+				$data['replaced_files'] = (string) wp_json_encode( $new_replaced );
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update( SFLS_DB::releases(), $data, array( 'id' => (int) $row['id'] ) );
+		}
+		self::flush();
+		update_option( 'sfls_random_names', gmdate( 'c' ), false );
+		return $moved;
 	}
 
 	/**
@@ -1019,8 +1116,8 @@ final class SFLS_Releases {
 	 * @param array|null $release Release, defaults to current.
 	 */
 	public static function package_path( ?array $release = null ): string {
-		$file = (string) ( $release ?? self::current() )['file'];
-		return '' !== $file ? trailingslashit( self::dir() ) . basename( $file ) : '';
+		$file = self::relative_file( (string) ( $release ?? self::current() )['file'] );
+		return '' !== $file ? trailingslashit( self::dir() ) . $file : '';
 	}
 
 	/**
@@ -1126,8 +1223,20 @@ final class SFLS_Releases {
 	// ── Signed links ────────────────────────────────────────────────────
 
 	/**
+	 * How long the download link in the order email works (1.7.0).
+	 */
+	const GUEST_LINK_TTL = 7 * DAY_IN_SECONDS;
+
+	/**
+	 * How often the download link in the order email may be used.
+	 */
+	const GUEST_LINK_USES = 3;
+
+	/**
 	 * Signed download URL: valid for 15 minutes, works once, bound to a
-	 * license key, a domain and (since 1.6.0) a version.
+	 * license, a domain and (since 1.6.0) a version. Since 1.7.0 the link
+	 * carries the license ID instead of the key, so keys stay out of
+	 * server logs (the signature still covers the key).
 	 *
 	 * @param string $key     License key.
 	 * @param string $domain  Domain ("account" for the members area).
@@ -1137,17 +1246,55 @@ final class SFLS_Releases {
 		$expires = time() + self::LINK_TTL;
 		$token   = bin2hex( random_bytes( 16 ) );
 		$sig     = self::sign( $key, $domain, $expires, $token, $version );
+		$lic     = SFLS_Licenses::find_by_key( $key );
 		$args    = array(
-			'license_key' => rawurlencode( $key ),
-			'site'        => rawurlencode( $domain ),
-			'expires'     => $expires,
-			'token'       => $token,
-			'sig'         => $sig,
+			'site'    => rawurlencode( $domain ),
+			'expires' => $expires,
+			'token'   => $token,
+			'sig'     => $sig,
 		);
+		if ( $lic ) {
+			$args = array( 'lic' => (int) $lic['id'] ) + $args;
+		} else {
+			$args = array( 'license_key' => rawurlencode( $key ) ) + $args;
+		}
 		if ( '' !== $version ) {
 			$args['version'] = rawurlencode( $version );
 		}
 		return add_query_arg( $args, rest_url( 'sfls/v1/update/download' ) );
+	}
+
+	/**
+	 * The download link for the order email (1.7.0, LS-02): works for 7
+	 * days, three times, without signing in, and always serves the current
+	 * stable release. The token row is created now so uses can be counted.
+	 *
+	 * @param array $lic License.
+	 */
+	public static function guest_url( array $lic ): string {
+		global $wpdb;
+		$expires = time() + self::GUEST_LINK_TTL;
+		$token   = bin2hex( random_bytes( 16 ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert(
+			SFLS_DB::download_tokens(),
+			array(
+				'token'   => $token,
+				'used_at' => gmdate( 'Y-m-d H:i:s', $expires ),
+				'uses'    => 0,
+			)
+		);
+		return add_query_arg(
+			array(
+				'lic'     => (int) $lic['id'],
+				'site'    => 'email',
+				'expires' => $expires,
+				'token'   => $token,
+				'kind'    => 'guest',
+				'sig'     => self::sign( (string) $lic['license_key'], 'email', $expires, $token, '', 'guest' ),
+			),
+			rest_url( 'sfls/v1/update/download' )
+		);
 	}
 
 	/**
@@ -1159,11 +1306,15 @@ final class SFLS_Releases {
 	 * @param int    $expires Expiry timestamp.
 	 * @param string $token   One-time token.
 	 * @param string $version Version, '' for the current release.
+	 * @param string $kind    '' for a 15 minute link, guest for the order email link.
 	 */
-	public static function sign( string $key, string $domain, int $expires, string $token = '', string $version = '' ): string {
+	public static function sign( string $key, string $domain, int $expires, string $token = '', string $version = '', string $kind = '' ): string {
 		$message = strtoupper( $key ) . '|' . $domain . '|' . $expires . '|' . $token;
 		if ( '' !== $version ) {
 			$message .= '|v=' . $version;
+		}
+		if ( '' !== $kind ) {
+			$message .= '|k=' . $kind;
 		}
 		return hash_hmac( 'sha256', $message, wp_salt( 'auth' ) . 'subtleforms-license-server' );
 	}
@@ -1177,12 +1328,30 @@ final class SFLS_Releases {
 	 * @param string $sig     Signature.
 	 * @param string $token   One-time token.
 	 * @param string $version Version the link was signed for ('' = current).
+	 * @param string $kind    '' or guest.
 	 */
-	public static function verify( string $key, string $domain, int $expires, string $sig, string $token = '', string $version = '' ): bool {
+	public static function verify( string $key, string $domain, int $expires, string $sig, string $token = '', string $version = '', string $kind = '' ): bool {
 		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
 			return false; // Links without a one-time token (1.2.0 and older) are no longer accepted.
 		}
-		return $expires >= time() && $expires <= time() + self::LINK_TTL && hash_equals( self::sign( $key, $domain, $expires, $token, $version ), $sig );
+		$ttl = 'guest' === $kind ? self::GUEST_LINK_TTL : self::LINK_TTL;
+		return $expires >= time() && $expires <= time() + $ttl && hash_equals( self::sign( $key, $domain, $expires, $token, $version, $kind ), $sig );
+	}
+
+	/**
+	 * Use a multi-use token (the order email link) once more. False when it
+	 * is unknown or already used up.
+	 *
+	 * @param string $token Token.
+	 * @param int    $max   Allowed uses.
+	 */
+	public static function consume_guest_token( string $token, int $max = self::GUEST_LINK_USES ): bool {
+		global $wpdb;
+		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return 1 === (int) $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}sfls_download_tokens SET uses = uses + 1 WHERE token = %s AND uses < %d", $token, $max ) );
 	}
 
 	/**

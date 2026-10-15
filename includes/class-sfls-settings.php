@@ -31,6 +31,17 @@ final class SFLS_Settings {
 			'sell_with'        => 'woo_paddle',
 			'renewal_notice'   => '14,3',
 			'trial_notice'     => 3,
+			// 1.7.0.
+			'grace_days'       => 14,
+			'staging_hosts'    => '',
+			'ip_retention'     => 90,
+			'partial_refund'   => 'note',
+			'network_one_site' => 1,
+			'abuse_domains'    => 10,
+			'abuse_ips'        => 20,
+			'abuse_email'      => 1,
+			'vat_field'        => 1,
+			'force_account'    => 1,
 		);
 	}
 
@@ -68,9 +79,57 @@ final class SFLS_Settings {
 					'support_email'    => sanitize_email( (string) ( $input['support_email'] ?? '' ) ),
 					'simplify_account' => empty( $input['simplify_account'] ) ? 0 : 1,
 					'simple_checkout'  => empty( $input['simple_checkout'] ) ? 0 : 1,
+					'force_account'    => empty( $input['force_account'] ) ? 0 : 1,
+					'grace_days'       => min( 365, absint( $input['grace_days'] ?? self::defaults()['grace_days'] ) ),
+					'staging_hosts'    => self::clean_patterns( (string) ( $input['staging_hosts'] ?? '' ) ),
+					'ip_retention'     => min( 3650, absint( $input['ip_retention'] ?? self::defaults()['ip_retention'] ) ),
+					'partial_refund'   => in_array( $input['partial_refund'] ?? '', array( 'note', 'suspend', 'ignore' ), true ) ? $input['partial_refund'] : 'note',
+					'network_one_site' => empty( $input['network_one_site'] ) ? 0 : 1,
+					'abuse_domains'    => min( 1000, absint( $input['abuse_domains'] ?? self::defaults()['abuse_domains'] ) ),
+					'abuse_ips'        => min( 1000, absint( $input['abuse_ips'] ?? self::defaults()['abuse_ips'] ) ),
+					'abuse_email'      => empty( $input['abuse_email'] ) ? 0 : 1,
+					'vat_field'        => empty( $input['vat_field'] ) ? 0 : 1,
 				)
 			)
 		);
+	}
+
+	/**
+	 * Staging host patterns: one per line, lowercase, only host characters and `*`.
+	 *
+	 * @param string $raw Textarea value.
+	 */
+	public static function clean_patterns( string $raw ): string {
+		$lines = array();
+		foreach ( preg_split( '/[\r\n,]+/', strtolower( $raw ) ) as $line ) {
+			$line = trim( (string) $line );
+			if ( '' === $line || ! preg_match( '/^[a-z0-9.\-*:]+$/', $line ) ) {
+				continue;
+			}
+			$lines[] = $line;
+		}
+		return implode( "\n", array_values( array_unique( $lines ) ) );
+	}
+
+	/**
+	 * Whether a multisite network counts as one site (1.7.0).
+	 */
+	public static function network_one_site(): bool {
+		return (bool) self::get( 'network_one_site' );
+	}
+
+	/**
+	 * Whether license carts force an account at checkout (1.7.0).
+	 */
+	public static function force_account(): bool {
+		return (bool) self::get( 'force_account' );
+	}
+
+	/**
+	 * Days the activation log keeps IP addresses (0 = forever).
+	 */
+	public static function ip_retention_days(): int {
+		return absint( self::get( 'ip_retention' ) );
 	}
 
 	/**

@@ -12,12 +12,25 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_Licenses {
 
+	/**
+	 * Default grace period after expiry. Licenses › Settings can change it
+	 * (see grace_days()).
+	 */
 	const GRACE_DAYS = 14;
 
 	/**
 	 * Billing columns (schema 4) that create() accepts as they are.
 	 */
-	const BILLING_COLUMNS = array( 'billing_status', 'trial', 'trial_started_at', 'trial_ends_at', 'renews_at', 'cancels_at', 'billing_amount', 'billing_currency', 'paddle_customer_id', 'paddle_subscription_id', 'paddle_price_id', 'paddle_transaction_id', 'checkout_token_hash', 'billing_synced_at' );
+	const BILLING_COLUMNS = array( 'billing_status', 'trial', 'trial_started_at', 'trial_ends_at', 'renews_at', 'cancels_at', 'billing_amount', 'billing_currency', 'paddle_customer_id', 'paddle_subscription_id', 'paddle_price_id', 'paddle_transaction_id', 'checkout_token_hash', 'billing_synced_at', 'order_email', 'claimed_at' );
+
+	/**
+	 * Days an expired license keeps working (Licenses › Settings › Grace period).
+	 */
+	public static function grace_days(): int {
+		$days = SFLS_Settings::get( 'grace_days' );
+		$days = null === $days || '' === $days ? self::GRACE_DAYS : (int) $days;
+		return max( 0, min( 365, (int) apply_filters( 'sfls_grace_days', $days ) ) );
+	}
 
 	/**
 	 * New key: SFP-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX (128 random bits).
@@ -73,10 +86,18 @@ final class SFLS_Licenses {
 				$row[ $column ] = $args[ $column ];
 			}
 		}
+		// 1.7.0: the email the order was placed with, and when an account took the key.
+		if ( ! isset( $row['order_email'] ) ) {
+			$row['order_email'] = $row['order_id'] > 0 ? $email : '';
+		}
+		if ( ! isset( $row['claimed_at'] ) && $user > 0 ) {
+			$row['claimed_at'] = $now;
+		}
 
 		$wpdb->insert( SFLS_DB::licenses(), $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$row['id'] = (int) $wpdb->insert_id;
 
+		SFLS_Audit::record( $row['id'], 'create', array(), $row, (string) ( $args['audit_note'] ?? '' ), (string) ( $args['audit_source'] ?? '' ) );
 		do_action( 'sfls_license_created', $row );
 
 		return $row;
@@ -144,8 +165,38 @@ final class SFLS_Licenses {
 	 */
 	public static function update( int $id, array $data ): void {
 		global $wpdb;
+		$before             = self::find( $id );
 		$data['updated_at'] = current_time( 'mysql', true );
 		$wpdb->update( SFLS_DB::licenses(), $data, array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( $before ) {
+			$after = array_merge( $before, $data );
+			SFLS_Audit::record_update( $before, $after );
+			self::notify_changes( $before, $after );
+		} else {
+			SFLS_Audit::clear_label();
+		}
+	}
+
+	/**
+	 * Fire the lifecycle hooks the outgoing webhooks listen to, from a diff.
+	 *
+	 * @param array $before License before.
+	 * @param array $after  License after.
+	 */
+	private static function notify_changes( array $before, array $after ): void {
+		if ( (string) $before['status'] !== (string) $after['status'] ) {
+			if ( in_array( $after['status'], array( 'suspended', 'refunded' ), true ) ) {
+				do_action( 'sfls_license_suspended', $after, $before );
+			} elseif ( 'active' === $after['status'] ) {
+				do_action( 'sfls_license_reactivated', $after, $before );
+			}
+		}
+		if ( (string) $before['expires_at'] !== (string) $after['expires_at'] && ! empty( $after['expires_at'] ) && strtotime( $after['expires_at'] . ' UTC' ) > (int) strtotime( (string) $before['expires_at'] . ' UTC' ) ) {
+			do_action( 'sfls_license_renewed', $after, $before );
+		}
+		if ( (int) $before['user_id'] !== (int) $after['user_id'] && (int) $before['user_id'] > 0 ) {
+			do_action( 'sfls_license_transferred', $after, $before );
+		}
 	}
 
 	/**
@@ -155,9 +206,15 @@ final class SFLS_Licenses {
 	 */
 	public static function delete( int $id ): void {
 		global $wpdb;
+		$lic = self::find( $id );
 		$wpdb->delete( SFLS_DB::activations(), array( 'license_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->delete( SFLS_DB::activation_log(), array( 'license_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->delete( SFLS_DB::transfers(), array( 'license_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->delete( SFLS_DB::licenses(), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( $lic ) {
+			SFLS_Audit::record( $id, 'delete', $lic, array(), SFLS_Licenses::mask_key( (string) $lic['license_key'] ) );
+			do_action( 'sfls_license_deleted', $lic );
+		}
 	}
 
 	/**
@@ -168,6 +225,7 @@ final class SFLS_Licenses {
 	 */
 	public static function regenerate_key( int $id ): string {
 		$key = self::generate_key();
+		SFLS_Audit::label( 'regenerate' );
 		self::update( $id, array( 'license_key' => $key ) );
 		return $key;
 	}
@@ -202,7 +260,20 @@ final class SFLS_Licenses {
 	// ── Ownership ───────────────────────────────────────────────────────
 
 	/**
-	 * Whether a user owns a license (by user ID or by customer email).
+	 * User meta: when the account's email address was last changed.
+	 */
+	const EMAIL_CHANGED_META = '_sfls_email_changed_at';
+
+	/**
+	 * Whether a user owns a license.
+	 *
+	 * Since 1.7.0 ownership is the user ID the license was bound to at
+	 * purchase (or when it was claimed, transferred or issued to the account).
+	 * A license that was never claimed (user_id 0, a guest order from before
+	 * 1.7.0 or a key issued by hand to an email) is also owned by the account
+	 * with that email, as long as the account did not change its email after
+	 * the license was created: that closes the takeover where a customer
+	 * changes their address to a guest buyer's one.
 	 *
 	 * @param array   $lic  License.
 	 * @param WP_User $user User.
@@ -211,10 +282,30 @@ final class SFLS_Licenses {
 		if ( ! $user->ID ) {
 			return false;
 		}
-		if ( (int) $lic['user_id'] > 0 && (int) $lic['user_id'] === (int) $user->ID ) {
-			return true;
+		if ( (int) $lic['user_id'] > 0 ) {
+			return (int) $lic['user_id'] === (int) $user->ID;
 		}
-		return '' !== $lic['customer_email'] && 0 === strcasecmp( $lic['customer_email'], $user->user_email );
+		return self::email_claim_allowed( $lic, $user );
+	}
+
+	/**
+	 * Whether an unclaimed license may be matched to an account by email:
+	 * the email is the license's customer email and the account has not
+	 * changed its address since the license was created.
+	 *
+	 * @param array   $lic  License (user_id 0).
+	 * @param WP_User $user User.
+	 */
+	public static function email_claim_allowed( array $lic, WP_User $user ): bool {
+		$email = (string) ( '' !== (string) ( $lic['order_email'] ?? '' ) ? $lic['order_email'] : $lic['customer_email'] );
+		if ( '' === $email || 0 !== strcasecmp( $email, $user->user_email ) ) {
+			return false;
+		}
+		$changed = (string) get_user_meta( $user->ID, self::EMAIL_CHANGED_META, true );
+		if ( '' !== $changed && strtotime( $changed . ' UTC' ) >= strtotime( (string) $lic['created_at'] . ' UTC' ) ) {
+			return false;
+		}
+		return (bool) apply_filters( 'sfls_email_claim_allowed', true, $lic, $user );
 	}
 
 	/**
@@ -229,8 +320,76 @@ final class SFLS_Licenses {
 			return array();
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE user_id = %d OR ( customer_email <> '' AND LOWER(customer_email) = LOWER(%s) ) ORDER BY created_at DESC, id DESC", $user->ID, $user->user_email ), ARRAY_A );
-		return (array) $rows;
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE user_id = %d OR ( user_id = 0 AND ( ( order_email <> '' AND LOWER(order_email) = LOWER(%s) ) OR ( order_email = '' AND customer_email <> '' AND LOWER(customer_email) = LOWER(%s) ) ) ) ORDER BY created_at DESC, id DESC", $user->ID, $user->user_email, $user->user_email ), ARRAY_A );
+		return array_values( array_filter( $rows, static fn( $lic ) => self::user_owns( $lic, $user ) ) );
+	}
+
+	/**
+	 * Bind an unclaimed license to an account. Returns false when another
+	 * account already owns it.
+	 *
+	 * @param array   $lic    License.
+	 * @param WP_User $user   User.
+	 * @param string  $source Where the claim came from (connect, account, claim_link).
+	 */
+	public static function claim( array $lic, WP_User $user, string $source = 'account' ): bool {
+		if ( ! $user->ID ) {
+			return false;
+		}
+		if ( (int) $lic['user_id'] > 0 ) {
+			return (int) $lic['user_id'] === (int) $user->ID;
+		}
+		SFLS_Audit::label( 'claim', $source, 'account' );
+		self::update(
+			(int) $lic['id'],
+			array(
+				'user_id'    => (int) $user->ID,
+				'claimed_at' => current_time( 'mysql', true ),
+			)
+		);
+		do_action( 'sfls_license_claimed', $lic, $user, $source );
+		return true;
+	}
+
+	/**
+	 * Signed claim token for the order email of a guest license. The link
+	 * proves the reader has the mailbox the order was placed with.
+	 *
+	 * @param array $lic License.
+	 */
+	public static function claim_token( array $lic ): string {
+		$email = '' !== (string) ( $lic['order_email'] ?? '' ) ? (string) $lic['order_email'] : (string) $lic['customer_email'];
+		return hash_hmac( 'sha256', 'claim|' . (int) $lic['id'] . '|' . strtolower( $email ), wp_salt( 'auth' ) . 'subtleforms-license-server' );
+	}
+
+	/**
+	 * Claim link for a license (My Account › Licenses with a signed token).
+	 *
+	 * @param array $lic License.
+	 */
+	public static function claim_url( array $lic ): string {
+		return add_query_arg(
+			array(
+				'sfls_claim' => (int) $lic['id'],
+				'token'      => self::claim_token( $lic ),
+			),
+			self::manage_url()
+		);
+	}
+
+	/**
+	 * Licenses (any owner) that use an email as customer or order email.
+	 *
+	 * @param string $email Email.
+	 * @return array[]
+	 */
+	public static function by_email( string $email ): array {
+		global $wpdb;
+		if ( '' === $email ) {
+			return array();
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE LOWER(customer_email) = LOWER(%s) OR LOWER(order_email) = LOWER(%s) ORDER BY id ASC", $email, $email ), ARRAY_A );
 	}
 
 	// ── Activations ─────────────────────────────────────────────────────
@@ -257,7 +416,52 @@ final class SFLS_Licenses {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_activations WHERE license_id = %d AND domain = %s", $license_id, $domain ), ARRAY_A );
-		return $row ? $row : null;
+		if ( $row ) {
+			return $row;
+		}
+		return self::network_activation_covering( $license_id, $domain );
+	}
+
+	/**
+	 * Multisite (1.7.0): when a network counts as one site, an activation of
+	 * the network's main domain with network=1 covers every subdomain site
+	 * under it (subdirectory sites share the domain anyway).
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $domain     Normalised domain of the requesting site.
+	 */
+	public static function network_activation_covering( int $license_id, string $domain ): ?array {
+		global $wpdb;
+		if ( ! SFLS_Settings::network_one_site() || '' === $domain ) {
+			return null;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_activations WHERE license_id = %d AND is_network = 1", $license_id ), ARRAY_A );
+		foreach ( $rows as $row ) {
+			if ( str_ends_with( $domain, '.' . $row['domain'] ) ) {
+				return $row;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Mark an activation as a multisite network (its main domain).
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $domain     Main domain.
+	 */
+	public static function mark_network( int $license_id, string $domain ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			SFLS_DB::activations(),
+			array( 'is_network' => 1 ),
+			array(
+				'license_id' => $license_id,
+				'domain'     => $domain,
+			)
+		);
 	}
 
 	/**
@@ -328,8 +532,10 @@ final class SFLS_Licenses {
 			);
 		}
 
-		if ( $existing ) {
+		if ( $existing && $existing['domain'] === $domain ) {
 			self::touch_activation( (int) $lic['id'], $domain, $version );
+		} elseif ( $existing ) {
+			self::touch_activation( (int) $lic['id'], (string) $existing['domain'], $version ); // Covered by a network activation.
 		} else {
 			self::add_activation( (int) $lic['id'], $domain, $version );
 			self::log( (int) $lic['id'], $domain, 'activate', $source );
@@ -409,6 +615,10 @@ final class SFLS_Licenses {
 		);
 		if ( $deleted ) {
 			self::log( $license_id, $domain, 'deactivate', $source );
+			$lic = self::find( $license_id );
+			if ( $lic ) {
+				do_action( 'sfls_domain_deactivated', $lic, $domain, $source );
+			}
 		}
 	}
 
@@ -488,19 +698,88 @@ final class SFLS_Licenses {
 	}
 
 	/**
+	 * The built-in list of local and staging host patterns (1.7.0). One
+	 * pattern per line in Licenses › Settings; `*` matches any characters,
+	 * everything else is matched exactly against the whole host, so
+	 * `*.wpengine.com` no longer covers production sites and `.kinsta.cloud`
+	 * only counts with the staging- prefix. IP addresses are always local.
+	 *
+	 * @return string[]
+	 */
+	public static function default_staging_patterns(): array {
+		return array(
+			'localhost',
+			'*.localhost',
+			'*.local',
+			'*.test',
+			'*.invalid',
+			'*.example',
+			'*.ddev.site',
+			'*.lndo.site',
+			'*.dev.cc',
+			'staging.*',
+			'stg.*',
+			'*stg.wpengine.com',
+			'*dev.wpengine.com',
+			'*stg.wpenginepowered.com',
+			'*dev.wpenginepowered.com',
+			'staging-*.kinsta.cloud',
+			'*.flywheelsites.com',
+			'dev-*.pantheonsite.io',
+			'test-*.pantheonsite.io',
+			'*.instawp.xyz',
+		);
+	}
+
+	/**
+	 * The active staging patterns: the admin list, or the defaults.
+	 *
+	 * @return string[]
+	 */
+	public static function staging_patterns(): array {
+		$raw = (string) SFLS_Settings::get( 'staging_hosts' );
+		if ( '' === trim( $raw ) ) {
+			$list = self::default_staging_patterns();
+		} else {
+			$list = array_values( array_filter( array_map( 'trim', preg_split( '/[\r\n,]+/', strtolower( $raw ) ) ), 'strlen' ) );
+		}
+		return (array) apply_filters( 'sfls_staging_patterns', $list );
+	}
+
+	/**
+	 * Whether a host matches a pattern (`*` = any characters, rest exact).
+	 *
+	 * @param string $pattern Pattern.
+	 * @param string $domain  Normalised domain.
+	 */
+	public static function host_matches( string $pattern, string $domain ): bool {
+		$pattern = strtolower( trim( $pattern ) );
+		if ( '' === $pattern ) {
+			return false;
+		}
+		if ( ! str_contains( $pattern, '*' ) ) {
+			return $pattern === $domain;
+		}
+		$regex = '/^' . str_replace( '\*', '.*', preg_quote( $pattern, '/' ) ) . '$/';
+		return (bool) preg_match( $regex, $domain );
+	}
+
+	/**
 	 * Local, staging and development hosts do not use a site slot.
 	 *
 	 * @param string $domain Normalised domain.
 	 */
 	public static function is_local_domain( string $domain ): bool {
-		if ( in_array( $domain, array( 'localhost', '127.0.0.1', '::1' ), true ) ) {
+		if ( '' === $domain ) {
+			return false;
+		}
+		if ( false !== filter_var( trim( $domain, '[]' ), FILTER_VALIDATE_IP ) ) {
 			return true;
 		}
-		if ( preg_match( '/\.(local|test|localhost|invalid|example|dev\.cc|lndo\.site|ddev\.site)$/', $domain ) ) {
-			return true;
-		}
-		if ( preg_match( '/^(staging|stage|dev|test)\./', $domain ) || str_contains( $domain, '.wpengine.com' ) || str_contains( $domain, '.kinsta.cloud' ) || str_contains( $domain, '.instawp.' ) ) {
-			return true;
+		foreach ( self::staging_patterns() as $pattern ) {
+			if ( self::host_matches( $pattern, $domain ) ) {
+				return true;
+			}
 		}
 		return (bool) apply_filters( 'sfls_is_local_domain', false, $domain );
 	}
@@ -537,7 +816,7 @@ final class SFLS_Licenses {
 			);
 		}
 		// A free trial that ended without a payment has no grace period.
-		$grace_end = ! empty( $lic['trial'] ) ? $expires : $expires + self::GRACE_DAYS * DAY_IN_SECONDS;
+		$grace_end = ! empty( $lic['trial'] ) ? $expires : $expires + self::grace_days() * DAY_IN_SECONDS;
 		if ( $grace_end > time() ) {
 			return array(
 				'status'               => 'grace_period',
@@ -766,15 +1045,18 @@ final class SFLS_Licenses {
 	 */
 	public static function csv_rows( array $licenses ): array {
 		$out = array( array( 'id', 'license_key', 'plan', 'status', 'sites_allowed', 'sites_used', 'domains', 'customer_email', 'user_id', 'order_id', 'expires_at', 'created_at' ) );
+		$acts = self::activations_for( array_map( static fn( $lic ) => (int) $lic['id'], $licenses ) );
 		foreach ( $licenses as $lic ) {
-			$domains = wp_list_pluck( self::activations( (int) $lic['id'] ), 'domain' );
+			$id      = (int) $lic['id'];
+			$domains = wp_list_pluck( $acts[ $id ] ?? array(), 'domain' );
+			$used    = count( array_filter( $acts[ $id ] ?? array(), static fn( $a ) => empty( $a['is_local'] ) ) );
 			$out[]   = array(
-				(int) $lic['id'],
+				$id,
 				(string) $lic['license_key'],
 				(string) $lic['plan'],
 				self::state( $lic )['status'],
 				(int) $lic['sites_allowed'],
-				self::used_slots( (int) $lic['id'] ),
+				$used,
 				implode( ' ', $domains ),
 				(string) $lic['customer_email'],
 				(int) $lic['user_id'],
@@ -784,6 +1066,27 @@ final class SFLS_Licenses {
 			);
 		}
 		return array_map( array( self::class, 'csv_safe_row' ), $out );
+	}
+
+	/**
+	 * Activations of many licenses in a few queries (CSV export, lists).
+	 *
+	 * @param int[] $ids License IDs.
+	 * @return array<int,array[]> license_id => activations.
+	 */
+	public static function activations_for( array $ids ): array {
+		global $wpdb;
+		$out = array();
+		$ids = array_values( array_unique( array_map( 'intval', $ids ) ) );
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			$in = implode( ',', array_map( 'intval', $chunk ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows = (array) $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}sfls_activations WHERE license_id IN ({$in}) ORDER BY activated_at ASC", ARRAY_A );
+			foreach ( $rows as $row ) {
+				$out[ (int) $row['license_id'] ][] = $row;
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -830,10 +1133,28 @@ final class SFLS_Licenses {
 	 * @param string $to   GMT datetime (inclusive).
 	 * @return array[]
 	 */
-	public static function expiring_between( string $from, string $to ): array {
+	public static function expiring_between( string $from, string $to, int $after_id = 0, int $limit = 500 ): array {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at > %s AND expires_at <= %s ORDER BY expires_at ASC LIMIT 500", $from, $to ), ARRAY_A );
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at > %s AND expires_at <= %s AND id > %d ORDER BY id ASC LIMIT %d", $from, $to, $after_id, max( 1, $limit ) ), ARRAY_A );
+	}
+
+	/**
+	 * Every license expiring in a window, in batches of 500 (1.7.0: no cap).
+	 *
+	 * @param string   $from     GMT datetime (exclusive).
+	 * @param string   $to       GMT datetime (inclusive).
+	 * @param callable $callback Called with each license.
+	 */
+	public static function each_expiring_between( string $from, string $to, callable $callback ): void {
+		$after = 0;
+		do {
+			$rows = self::expiring_between( $from, $to, $after );
+			foreach ( $rows as $lic ) {
+				$after = max( $after, (int) $lic['id'] );
+				$callback( $lic );
+			}
+		} while ( count( $rows ) === 500 );
 	}
 
 	/**
