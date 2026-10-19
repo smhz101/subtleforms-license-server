@@ -64,9 +64,7 @@ class SFLS_Account_Test extends SFLS_Test_Case {
 	 * Active license cards have Download Pro, and the page explains the install.
 	 */
 	public function test_licenses_screen_download_and_steps(): void {
-		if ( ! SFLS_Releases::has_package() ) {
-			$this->markTestSkipped( 'The test site has no release package.' );
-		}
+		$this->add_release( '9.9.0' ); // Its own package, whatever the site has.
 		$user = $this->make_user();
 		$this->make_license(
 			array(

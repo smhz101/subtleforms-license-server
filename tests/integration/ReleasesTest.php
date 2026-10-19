@@ -149,9 +149,7 @@ class SFLS_Releases_Test extends SFLS_Test_Case {
 	 * redirects to a fresh signed link; a used link answers 403.
 	 */
 	public function test_rest_package_and_used_link(): void {
-		if ( ! SFLS_Releases::has_package() ) {
-			$this->markTestSkipped( 'The test site has no release package.' );
-		}
+		$this->add_release( '9.9.0' ); // Its own package, whatever the site has.
 		$lic = $this->make_license();
 		SFLS_Licenses::add_activation( (int) $lic['id'], 'shop.example.com' );
 

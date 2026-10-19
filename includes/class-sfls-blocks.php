@@ -185,17 +185,23 @@ final class SFLS_Blocks {
 		$url   = function_exists( 'wc_get_account_endpoint_url' ) && wc_get_page_id( 'myaccount' ) > 0 ? wc_get_account_endpoint_url( SFLS_Account::EP_LICENSES ) : admin_url( 'profile.php' );
 		$html  = '<div ' . get_block_wrapper_attributes( array( 'class' => 'is-signed-in' ) ) . '><a class="sfls-account-link__link" href="' . esc_url( $url ) . '">';
 		if ( $attributes['showAvatar'] ) {
-			$html .= get_avatar(
+			// The initial sits under the photo, so a Gravatar that does not
+			// load (blocked, offline, no image) never shows as a broken image
+			// (UX2-30).
+			$name    = '' !== trim( (string) $user->first_name ) ? (string) $user->first_name : (string) $user->display_name;
+			$initial = function_exists( 'mb_substr' ) ? mb_strtoupper( mb_substr( trim( $name ), 0, 1 ) ) : strtoupper( substr( trim( $name ), 0, 1 ) );
+			$photo   = get_avatar(
 				$user->ID,
-				24,
-				'',
+				48,
+				'blank',
 				'',
 				array(
-					'class'         => 'sfls-account-link__avatar',
+					'class'         => 'sfls-account-link__photo',
 					'force_display' => true,
-					'extra_attr'    => 'aria-hidden="true"',
+					'loading'       => 'lazy',
 				)
 			);
+			$html   .= '<span class="sfls-account-link__avatar" aria-hidden="true"><span class="sfls-account-link__initial">' . esc_html( '' !== $initial ? $initial : '?' ) . '</span>' . ( $photo ? $photo : '' ) . '</span>';
 		}
 		$html .= '<span class="sfls-account-link__label">' . esc_html( $label ) . '</span></a></div>';
 		return $html;

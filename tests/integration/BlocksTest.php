@@ -31,10 +31,31 @@ class SFLS_Blocks_Test extends SFLS_Test_Case {
 	}
 
 	/**
+	 * Sell through the WooCommerce checkout with a full catalogue made for
+	 * the test, so the result does not depend on the site's own settings or
+	 * products.
+	 */
+	private function woo_catalog(): void {
+		$this->settings( array( 'sell_with' => 'woocommerce' ) );
+		$map = array();
+		foreach ( array( 'starter', 'pro', 'agency' ) as $plan ) {
+			$map[ $plan ]['yearly']   = $this->make_license_product( $plan, 12, '99' )->get_id();
+			$map[ $plan ]['lifetime'] = $this->make_license_product( $plan, 0, '299' )->get_id();
+			$renewal                  = $this->make_license_product( $plan, 12, '79' );
+			$renewal->update_meta_data( '_sfls_renewal', 'yes' );
+			$renewal->save();
+			$map[ $plan ]['renewal'] = $renewal->get_id();
+		}
+		$this->set_option( SFLS_Products::OPTION, $map );
+		SFLS_Products::flush();
+	}
+
+	/**
 	 * Pricing controls: highlighted plan, renewal note, default period and
 	 * button labels.
 	 */
 	public function test_pricing_block_controls(): void {
+		$this->woo_catalog();
 		$html = do_blocks( '<!-- wp:sfls/pricing {"popular":"agency","period":"lifetime","showRenewalNote":true,"buttonLabel":"Get {plan} now","lifetimeButtonLabel":"Own {plan}"} /-->' );
 		$this->assertStringContainsString( 'wp-block-sfls-pricing', $html );
 		$this->assertMatchesRegularExpression( '/sfls-plan is-popular.*?Agency/s', $html );
@@ -53,6 +74,7 @@ class SFLS_Blocks_Test extends SFLS_Test_Case {
 	 * The shortcodes still work and stay as they were by default.
 	 */
 	public function test_shortcodes_still_work(): void {
+		$this->woo_catalog();
 		$html = do_shortcode( '[sfls_pricing]' );
 		$this->assertStringContainsString( 'sfls-pricing', $html );
 		$this->assertStringContainsString( 'Buy Starter', $html );

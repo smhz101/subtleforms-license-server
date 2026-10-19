@@ -42,6 +42,23 @@ class SFLS_Rest_Api_Test extends SFLS_Test_Case {
 	}
 
 	/**
+	 * Status and update checks accept POST with the key in a JSON body, so
+	 * the key never has to travel in a URL (Pro 2.4.1).
+	 */
+	public function test_status_and_update_check_accept_post_body(): void {
+		$lic = $this->make_license();
+		foreach ( array( '/sfls/v1/license/status', '/sfls/v1/update/check' ) as $route ) {
+			$request = new WP_REST_Request( 'POST', $route );
+			$request->set_header( 'content-type', 'application/json' );
+			$request->set_body( wp_json_encode( $this->params( $lic ) ) );
+			$response = rest_ensure_response( rest_do_request( $request ) );
+			$this->assertNotSame( 404, $response->get_status(), $route );
+			$this->assertNotSame( 405, $response->get_status(), $route );
+			$this->assertNotSame( 'rest_no_route', $response->get_data()['code'] ?? '', $route );
+		}
+	}
+
+	/**
 	 * The defaults are 30 requests per 10 minutes.
 	 */
 	public function test_default_limit_is_30_per_10_minutes(): void {

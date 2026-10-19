@@ -130,6 +130,60 @@ final class SFLS_Products {
 	}
 
 	/**
+	 * One line about renewal prices for marketing pages, computed from the
+	 * yearly and renewal products so it can never disagree with them (LS-05):
+	 * "Renew at 20% off: $39, $79 or $159." When the plans have different
+	 * discounts: "Renewals: $39, $79 or $159 a year." '' when a plan has no
+	 * priced yearly or renewal product.
+	 */
+	public static function renewal_summary(): string {
+		if ( ! self::woo_active() ) {
+			return '';
+		}
+		$prices   = array();
+		$percents = array();
+		foreach ( array_keys( SFLS_Plans::all() ) as $plan ) {
+			$yearly  = self::find( $plan, 'yearly' );
+			$renewal = self::find( $plan, 'renewal' );
+			$y       = $yearly ? wc_get_product( $yearly['id'] ) : null;
+			$r       = $renewal ? wc_get_product( $renewal['id'] ) : null;
+			if ( ! $y || ! $r || '' === (string) $y->get_price() || '' === (string) $r->get_price() ) {
+				return '';
+			}
+			$full  = (float) wc_get_price_to_display( $y );
+			$renew = (float) wc_get_price_to_display( $r );
+			if ( $full <= 0 ) {
+				return '';
+			}
+			$prices[]   = html_entity_decode( wp_strip_all_tags( wc_price( $renew ) ), ENT_QUOTES, 'UTF-8' );
+			$percents[] = (int) round( ( 1 - $renew / $full ) * 100 );
+		}
+		if ( ! $prices ) {
+			return '';
+		}
+		$list = 1 === count( $prices ) ? $prices[0] : sprintf(
+			/* translators: 1: comma separated prices, 2: last price */
+			__( '%1$s or %2$s', 'subtleforms-license-server' ),
+			implode( ', ', array_slice( $prices, 0, -1 ) ),
+			end( $prices )
+		);
+		$same = 1 === count( array_unique( $percents ) ) && $percents[0] > 0;
+		$line = $same
+			/* translators: 1: discount percentage, 2: renewal prices */
+			? sprintf( __( 'Renew at %1$d%% off: %2$s.', 'subtleforms-license-server' ), $percents[0], $list )
+			/* translators: %s: renewal prices */
+			: sprintf( __( 'Renewals: %s a year.', 'subtleforms-license-server' ), $list );
+		/**
+		 * The renewal line for marketing pages.
+		 *
+		 * @param string $line     Line.
+		 * @param array  $prices   Renewal prices in plan order.
+		 * @param int[]  $percents Discount per plan.
+		 */
+		return (string) apply_filters( 'sfls_renewal_summary', $line, $prices, $percents );
+	}
+
+	/**
 	 * Sellable (non-renewal, published) products for the pricing table.
 	 *
 	 * @param string $type yearly | lifetime.

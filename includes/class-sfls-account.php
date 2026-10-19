@@ -252,6 +252,7 @@ final class SFLS_Account {
 		$release  = SFLS_Releases::current();
 
 		echo '<div class="sfls sfls-account">';
+		echo SFLS_Claims::card_html( $user ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Built from escaped parts in card_html().
 		if ( ! $licenses ) {
 			echo '<div class="sfls-card sfls-empty-card"><h3>' . esc_html__( 'No licenses yet', 'subtleforms-license-server' ) . '</h3><p>' . esc_html__( 'Buy SubtleForms Pro and your license key shows up here, ready to connect to your sites.', 'subtleforms-license-server' ) . '</p><p><a class="sfls-btn sfls-btn--primary" href="' . esc_url( SFLS_Settings::pricing_url() ) . '">' . esc_html__( 'See plans', 'subtleforms-license-server' ) . '</a></p></div></div>';
 			return;
@@ -267,7 +268,7 @@ final class SFLS_Account {
 
 		if ( $any_valid ) {
 			echo '<article class="sfls-card sfls-install-card">';
-			echo wp_kses_post( SFLS_Delivery::steps_html() );
+			echo wp_kses_post( SFLS_Delivery::steps_html( SFLS_Releases::has_package() ) );
 			if ( ! SFLS_Releases::has_package() ) {
 				echo '<p class="sfls-muted">' . esc_html__( 'The Pro download appears here as soon as the first release is published.', 'subtleforms-license-server' ) . '</p>';
 			}
@@ -712,8 +713,8 @@ final class SFLS_Account {
 			echo '<a class="sfls-btn sfls-btn--primary" href="' . esc_url( self::download_url( $latest['version'] ) ) . '">';
 			self::print_icon( 'download' );
 			echo esc_html__( 'Download zip', 'subtleforms-license-server' ) . '</a>';
-		} elseif ( $licenses ) {
-			echo '<span class="sfls-muted sfls-locked">' . esc_html__( 'Renew to download', 'subtleforms-license-server' ) . '</span>';
+		} elseif ( '' !== self::locked_label( $user, $latest, $licenses ) ) {
+			echo '<span class="sfls-muted sfls-locked">' . esc_html( self::locked_label( $user, $latest, $licenses ) ) . '</span>';
 		}
 		echo '</header>';
 
@@ -743,7 +744,8 @@ final class SFLS_Account {
 					self::print_icon( 'download' );
 					echo esc_html__( 'Download', 'subtleforms-license-server' ) . '</a>';
 				} else {
-					echo '<span class="sfls-muted sfls-locked">' . esc_html( $licenses && SFLS_Releases::has_package( $rel ) ? __( 'Renew to download', 'subtleforms-license-server' ) : __( 'Not available', 'subtleforms-license-server' ) ) . '</span>';
+					$locked = self::locked_label( $user, $rel, $licenses );
+					echo '<span class="sfls-muted sfls-locked">' . esc_html( '' !== $locked ? $locked : __( 'Not available', 'subtleforms-license-server' ) ) . '</span>';
 				}
 				$log = SFLS_Releases::changelog_html( $rel );
 				if ( '' !== $log ) {
@@ -755,6 +757,25 @@ final class SFLS_Account {
 		}
 		echo '</div>';
 		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Why a release cannot be downloaded (UX2-30): "Not available yet" when
+	 * it has no package, "Renew to download" only when the customer's
+	 * licenses do not cover it, '' when there is nothing to say.
+	 *
+	 * @param WP_User $user     Customer.
+	 * @param array   $release  Release.
+	 * @param array[] $licenses The customer's licenses.
+	 */
+	public static function locked_label( WP_User $user, array $release, array $licenses ): string {
+		if ( ! SFLS_Releases::has_package( $release ) ) {
+			return __( 'Not available yet', 'subtleforms-license-server' );
+		}
+		if ( $licenses && null === self::license_for_release( $user, $release ) ) {
+			return __( 'Renew to download', 'subtleforms-license-server' );
+		}
+		return '';
 	}
 
 	/**

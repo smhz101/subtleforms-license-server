@@ -101,9 +101,7 @@ class SFLS_Plans_And_Version_Test extends SFLS_Test_Case {
 	 * No warning once a package exists.
 	 */
 	public function test_no_admin_notice_with_release(): void {
-		if ( ! SFLS_Releases::has_package() ) {
-			$this->markTestSkipped( 'The test site has no release package.' );
-		}
+		$this->add_release( '9.9.0' ); // Its own package, whatever the site has.
 		wp_set_current_user( 1 );
 		ob_start();
 		( new SFLS_Admin() )->page_settings();

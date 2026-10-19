@@ -19,10 +19,26 @@
 	text-underline-offset: 3px;
 }
 .wp-block-sfls-account-link .sfls-account-link__avatar {
-	display: block;
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	width: 1.6em;
 	height: 1.6em;
 	border-radius: 50%;
 	flex: none;
+	overflow: hidden;
+	background: rgba(0, 0, 0, .08);
 	box-shadow: 0 0 0 1px rgba(0, 0, 0, .08);
+	font-size: .8em;
+	font-weight: 600;
+	line-height: 1;
+}
+.wp-block-sfls-account-link .sfls-account-link__photo {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	border-radius: 50%;
 }

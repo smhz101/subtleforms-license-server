@@ -675,6 +675,7 @@ final class SFLS_Admin {
 		echo '<tr><th><label for="sfls-months">' . esc_html__( 'Duration (months)', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-months" type="number" min="0" name="months" value="12" class="small-text"> <span class="description">' . esc_html__( '0 for lifetime.', 'subtleforms-license-server' ) . '</span></td></tr>';
 		echo '<tr><th><label for="sfls-count">' . esc_html__( 'How many', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-count" type="number" min="1" max="50" name="count" value="1" class="small-text"></td></tr>';
 		echo '<tr><th><label for="sfls-notes">' . esc_html__( 'Notes', 'subtleforms-license-server' ) . '</label></th><td><textarea id="sfls-notes" name="notes" rows="3" class="large-text"></textarea></td></tr>';
+		echo '<tr><th>' . esc_html__( 'Email', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="send_email" value="1"> ' . esc_html__( 'Email the key to the customer', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Sends the key and a link to the license page and Pro download (valid for 30 days, no account needed). Leave it off for test keys.', 'subtleforms-license-server' ) . '</p></td></tr>';
 		echo '</tbody></table>';
 		submit_button( __( 'Issue license', 'subtleforms-license-server' ) );
 		echo '</form></div></div>';
@@ -912,9 +913,13 @@ final class SFLS_Admin {
 		}
 		echo '</td></tr>';
 
+		echo '<tr><th scope="row"><label for="sfls-staging">' . esc_html__( 'Staging hosts', 'subtleforms-license-server' ) . '</label></th><td><textarea id="sfls-staging" name="staging_hosts" rows="6" class="large-text code">' . esc_textarea( (string) $s['staging_hosts'] ) . '</textarea><p class="description">' . esc_html__( 'Sites on these hosts do not use a seat. One per line. *.example.com matches every subdomain of example.com, staging.* matches a staging subdomain of any site, and a * inside a name matches any letters, as in *stg.wpengine.com. Production hosts such as *.wpengine.com and *.kinsta.cloud should not be listed. localhost, *.local, *.test, *.example and *.invalid are always free.', 'subtleforms-license-server' ) . '</p></td></tr>';
+
 		echo '<tr><th scope="row">' . esc_html__( 'My Account', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="simplify_account" value="1"' . checked( (int) $s['simplify_account'], 1, false ) . '> ' . esc_html__( 'Simplify My Account for license-only stores', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Hides the Addresses and Downloads tabs for customers whose orders only contain license products. Orders, Licenses, Pro downloads, Payment methods and Account details stay.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
 		echo '<tr><th scope="row">' . esc_html__( 'Checkout', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="simple_checkout" value="1"' . checked( (int) $s['simple_checkout'], 1, false ) . '> ' . esc_html__( 'Ask only for name, email and country when the cart holds only licenses', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Street, city, postcode, state, company and phone are hidden. Country stays because tax depends on it.', 'subtleforms-license-server' ) . '</p></td></tr>';
+
+		echo '<tr><th scope="row"><label for="sfls-retention">' . esc_html__( 'Keep activity for', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-retention" type="number" min="0" max="3650" step="1" name="retention_days" value="' . esc_attr( (string) (int) $s['retention_days'] ) . '" class="small-text"> ' . esc_html__( 'days', 'subtleforms-license-server' ) . '<p class="description">' . esc_html__( 'The activation log (with IP addresses) and handled Paddle webhook events older than this are deleted every day. 0 keeps them forever.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
 		echo '<tr><th scope="row">' . esc_html__( 'Uninstall', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="delete_data" value="1"' . checked( (bool) get_option( 'sfls_delete_data_on_uninstall' ), true, false ) . '> ' . esc_html__( 'Delete all licenses, activations and release files when the plugin is deleted', 'subtleforms-license-server' ) . '</label></td></tr>';
 
@@ -1412,28 +1417,61 @@ final class SFLS_Admin {
 	public function handle_create(): void {
 		$this->guard();
 		check_admin_referer( 'sfls_create' );
-		$count = min( 50, max( 1, absint( $_POST['count'] ?? 1 ) ) );
-		$sites = isset( $_POST['sites'] ) && '' !== $_POST['sites'] ? absint( $_POST['sites'] ) : null;
-		$email = sanitize_email( wp_unslash( $_POST['email'] ?? '' ) );
-		$plan  = sanitize_key( wp_unslash( $_POST['plan'] ?? 'pro' ) );
-		$plan  = SFLS_Plans::get( $plan ) ? $plan : 'pro';
-		$keys  = array();
+		$result = self::issue_from_form( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Each field is sanitized in issue_from_form().
+		$keys   = wp_list_pluck( $result['licenses'], 'license_key' );
+		/* translators: %s: keys */
+		$message = sprintf( __( 'Issued: %s', 'subtleforms-license-server' ), implode( ', ', $keys ) );
+		$type    = 'success';
+		if ( true === $result['emailed'] ) {
+			/* translators: %s: email address */
+			$message .= ' ' . sprintf( __( 'Emailed to %s.', 'subtleforms-license-server' ), $result['email'] );
+		} elseif ( false === $result['emailed'] ) {
+			$message .= ' ' . ( is_email( $result['email'] )
+				? __( 'The email could not be sent; copy the key to the customer by hand.', 'subtleforms-license-server' )
+				: __( 'No email was sent: enter a customer email to send the key.', 'subtleforms-license-server' ) );
+
+			$type = 'warning';
+		}
+		$this->flash( $message, $type );
+		wp_safe_redirect( admin_url( 'admin.php?page=sfls' ) );
+		exit;
+	}
+
+	/**
+	 * Issue licenses from the Issue license form, and email the keys when
+	 * asked (LS-18).
+	 *
+	 * @param array $input Unslashed form fields.
+	 * @return array{licenses:array[],email:string,emailed:bool|null} emailed is null when no email was asked for.
+	 */
+	public static function issue_from_form( array $input ): array {
+		$count    = min( 50, max( 1, absint( $input['count'] ?? 1 ) ) );
+		$sites    = isset( $input['sites'] ) && '' !== $input['sites'] ? absint( $input['sites'] ) : null;
+		$email    = sanitize_email( (string) ( $input['email'] ?? '' ) );
+		$plan     = sanitize_key( (string) ( $input['plan'] ?? 'pro' ) );
+		$plan     = SFLS_Plans::get( $plan ) ? $plan : 'pro';
+		$licenses = array();
 		for ( $i = 0; $i < $count; $i++ ) {
 			$args = array(
 				'plan'           => $plan,
 				'customer_email' => $email,
-				'months'         => absint( $_POST['months'] ?? 12 ),
-				'notes'          => sanitize_textarea_field( wp_unslash( $_POST['notes'] ?? '' ) ),
+				'months'         => absint( $input['months'] ?? 12 ),
+				'notes'          => sanitize_textarea_field( (string) ( $input['notes'] ?? '' ) ),
 			);
 			if ( null !== $sites ) {
 				$args['sites_allowed'] = $sites;
 			}
-			$keys[] = SFLS_Licenses::create( $args )['license_key'];
+			$licenses[] = SFLS_Licenses::create( $args );
 		}
-		/* translators: %s: keys */
-		$this->flash( sprintf( __( 'Issued: %s', 'subtleforms-license-server' ), implode( ', ', $keys ) ) );
-		wp_safe_redirect( admin_url( 'admin.php?page=sfls' ) );
-		exit;
+		$emailed = null;
+		if ( ! empty( $input['send_email'] ) ) {
+			$emailed = is_email( $email ) && SFLS_Delivery::email_issued( $licenses, $email );
+		}
+		return array(
+			'licenses' => $licenses,
+			'email'    => $email,
+			'emailed'  => $emailed,
+		);
 	}
 
 	/**
@@ -1587,8 +1625,15 @@ final class SFLS_Admin {
 	public function handle_settings(): void {
 		$this->guard();
 		check_admin_referer( 'sfls_settings' );
+		$extra = array();
+		if ( isset( $_POST['staging_hosts'] ) ) {
+			$extra['staging_hosts'] = sanitize_textarea_field( wp_unslash( $_POST['staging_hosts'] ) );
+		}
+		if ( isset( $_POST['retention_days'] ) ) {
+			$extra['retention_days'] = absint( $_POST['retention_days'] );
+		}
 		SFLS_Settings::save(
-			array(
+			$extra + array(
 				'pricing_url'      => isset( $_POST['pricing_url'] ) ? sanitize_url( wp_unslash( $_POST['pricing_url'] ) ) : '',
 				'reminder_days'    => isset( $_POST['reminder_days'] ) ? sanitize_text_field( wp_unslash( $_POST['reminder_days'] ) ) : '',
 				'lapsed_reminder'  => ! empty( $_POST['lapsed_reminder'] ),

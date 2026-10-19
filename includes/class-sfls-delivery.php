@@ -61,13 +61,17 @@ final class SFLS_Delivery {
 	/**
 	 * The three install steps: title => text.
 	 *
+	 * @param bool $button A Download Pro button is shown with the steps. When
+	 *                     not, the first step says where the zip is (UX2-30).
 	 * @return array<int,array{0:string,1:string}>
 	 */
-	public static function steps(): array {
+	public static function steps( bool $button = true ): array {
 		return array(
 			array(
 				__( 'Download the zip', 'subtleforms-license-server' ),
-				__( 'Use the Download Pro button. Keep the file zipped.', 'subtleforms-license-server' ),
+				$button
+					? __( 'Use the Download Pro button. Keep the file zipped.', 'subtleforms-license-server' )
+					: __( 'Download it from your license page or My Account › Pro downloads. Keep the file zipped.', 'subtleforms-license-server' ),
 			),
 			array(
 				__( 'Upload it to WordPress', 'subtleforms-license-server' ),
@@ -82,30 +86,54 @@ final class SFLS_Delivery {
 
 	/**
 	 * "How to install Pro" panel HTML for the front end.
+	 *
+	 * @param bool $button A Download Pro button is shown with the steps.
 	 */
-	public static function steps_html(): string {
+	public static function steps_html( bool $button = true ): string {
 		$html = '<div class="sfls-install"><h3 class="sfls-install-title">' . esc_html__( 'How to install Pro', 'subtleforms-license-server' ) . '</h3><ol class="sfls-steps">';
-		foreach ( self::steps() as $i => $step ) {
+		foreach ( self::steps( $button ) as $i => $step ) {
 			$html .= '<li class="sfls-step"><span class="sfls-step-num" aria-hidden="true">' . esc_html( (string) ( $i + 1 ) ) . '</span><span class="sfls-step-body"><strong>' . esc_html( $step[0] ) . '</strong><span>' . esc_html( $step[1] ) . '</span></span></li>';
 		}
 		return $html . '</ol></div>';
 	}
 
 	/**
-	 * Where Download Pro goes. In emails, or for visitors who are not signed in,
-	 * that is My Account › Pro downloads; signed-in customers with an active
-	 * license get the direct download. '' while no release exists.
+	 * Where Download Pro goes. Orders placed without an account get the signed
+	 * guest link (SFLS_Guest), which works without signing in: the guest page
+	 * in emails, the zip itself on the order received page. Otherwise, in
+	 * emails or for visitors who are not signed in, that is My Account › Pro
+	 * downloads; signed-in customers with an active license get the direct
+	 * download. '' while no release exists.
 	 *
-	 * @param bool $for_email Link for an email.
+	 * @param bool          $for_email Link for an email.
+	 * @param WC_Order|null $order     Order the link is for.
 	 */
-	public static function download_link( bool $for_email = false ): string {
+	public static function download_link( bool $for_email = false, ?WC_Order $order = null ): string {
 		if ( ! SFLS_Releases::has_package() ) {
 			return '';
+		}
+		$guest = $order ? self::guest_link( $order ) : '';
+		if ( '' !== $guest ) {
+			return $for_email ? $guest : add_query_arg( 'download', 1, $guest );
 		}
 		if ( ! $for_email && is_user_logged_in() && SFLS_Account::can_download( wp_get_current_user() ) ) {
 			return SFLS_Account::download_url();
 		}
 		return wc_get_account_endpoint_url( SFLS_Account::EP_DOWNLOADS );
+	}
+
+	/**
+	 * Signed guest page link of an order placed without an account ('' for
+	 * orders of customers with an account, or before a key exists).
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	public static function guest_link( WC_Order $order ): string {
+		if ( ! SFLS_Guest::is_guest_order( $order ) ) {
+			return '';
+		}
+		$licenses = SFLS_Woo::order_licenses( $order->get_id() );
+		return $licenses ? SFLS_Guest::url( $licenses[0] ) : '';
 	}
 
 	/**
@@ -124,6 +152,69 @@ final class SFLS_Delivery {
 				: __( 'lifetime', 'subtleforms-license-server' ),
 		);
 		return implode( ' · ', $parts );
+	}
+
+	/**
+	 * Email licenses issued by hand to the customer: the keys, the plan, a
+	 * signed link to the license page and download (30 days, no account
+	 * needed), and the install steps (LS-18).
+	 *
+	 * @param array[] $licenses Licenses.
+	 * @param string  $to       Recipient.
+	 */
+	public static function email_issued( array $licenses, string $to ): bool {
+		$licenses = array_values( array_filter( $licenses ) );
+		if ( ! $licenses || ! is_email( $to ) ) {
+			return false;
+		}
+		$many    = count( $licenses ) > 1;
+		$subject = $many ? __( 'Your SubtleForms Pro license keys', 'subtleforms-license-server' ) : __( 'Your SubtleForms Pro license key', 'subtleforms-license-server' );
+		$body    = '<p>' . esc_html__( 'Hi,', 'subtleforms-license-server' ) . '</p>';
+		$body   .= '<p>' . esc_html( $many ? __( 'Here are your SubtleForms Pro license keys.', 'subtleforms-license-server' ) : __( 'Here is your SubtleForms Pro license key.', 'subtleforms-license-server' ) ) . '</p>';
+		$body   .= '<table cellspacing="0" cellpadding="8" style="border-collapse:collapse;width:100%;margin:16px 0;border:1px solid #e5e5e5;">';
+		foreach ( $licenses as $lic ) {
+			$body .= '<tr><td style="border-bottom:1px solid #e5e5e5;"><code style="font-size:15px;">' . esc_html( $lic['license_key'] ) . '</code><br><span style="color:#757575;">' . esc_html( self::license_line( $lic ) ) . '</span></td></tr>';
+		}
+		$body .= '</table>';
+		$body .= SFLS_Reminders::button( SFLS_Guest::url( $licenses[0] ), __( 'Open your license page', 'subtleforms-license-server' ) );
+		$body .= '<p>' . esc_html__( 'The link opens your license page and the Pro download for 30 days, no account needed.', 'subtleforms-license-server' ) . '</p>';
+		$body .= '<h3>' . esc_html__( 'How to install Pro', 'subtleforms-license-server' ) . '</h3><ol>';
+		foreach ( self::steps( false ) as $step ) {
+			$body .= '<li><strong>' . esc_html( $step[0] ) . '</strong> ' . esc_html( $step[1] ) . '</li>';
+		}
+		$body .= '</ol>';
+		$body .= '<p>' . esc_html(
+			sprintf(
+				/* translators: %s: support email */
+				__( 'Questions? Reply to this email or write to %s.', 'subtleforms-license-server' ),
+				SFLS_Settings::support_email()
+			)
+		) . '</p>';
+		return SFLS_Reminders::deliver( $to, $subject, $subject, $body );
+	}
+
+	/**
+	 * What the order panel says before the license is ready. A renewal or
+	 * upgrade keeps its key, so it never promises a new one (LS-11).
+	 *
+	 * @param WC_Order $order  Order.
+	 * @param bool     $unpaid The customer left the payment unfinished.
+	 */
+	public static function waiting_text( WC_Order $order, bool $unpaid ): string {
+		$kind = SFLS_Woo::order_kind( $order );
+		if ( 'renewal' === $kind ) {
+			return $unpaid
+				? __( 'This order is waiting for payment. Your license is renewed once it is paid, with the same key.', 'subtleforms-license-server' )
+				: __( 'Your license is renewed as soon as your payment is confirmed. Your key stays the same, and we email you when it is done.', 'subtleforms-license-server' );
+		}
+		if ( 'upgrade' === $kind ) {
+			return $unpaid
+				? __( 'This order is waiting for payment. Your license is upgraded once it is paid, with the same key.', 'subtleforms-license-server' )
+				: __( 'Your license is upgraded as soon as your payment is confirmed. Your key stays the same, and we email you when it is done.', 'subtleforms-license-server' );
+		}
+		return $unpaid
+			? __( 'This order is waiting for payment. Your license key appears here once it is paid.', 'subtleforms-license-server' )
+			: __( 'Your license key appears here as soon as your payment is confirmed. We also email it to you.', 'subtleforms-license-server' );
 	}
 
 	/**
@@ -146,11 +237,11 @@ final class SFLS_Delivery {
 					return $html . self::waiting_html( $order ) . '</section>';
 				}
 				// My Account › Orders: the customer closed the Paddle window without paying.
-				$html .= '<p class="sfls-muted">' . esc_html__( 'This order is waiting for payment. Your license key appears here once it is paid.', 'subtleforms-license-server' ) . '</p>';
+				$html .= '<p class="sfls-muted">' . esc_html( self::waiting_text( $order, true ) ) . '</p>';
 				$html .= '<div class="sfls-actions"><a class="sfls-btn sfls-btn--primary" href="' . esc_url( $order->get_checkout_payment_url() ) . '">' . esc_html__( 'Pay now', 'subtleforms-license-server' ) . '</a></div></section>';
 				return $html;
 			}
-			$html .= '<p class="sfls-muted">' . esc_html__( 'Your license key appears here as soon as your payment is confirmed. We also email it to you.', 'subtleforms-license-server' ) . '</p></section>';
+			$html .= '<p class="sfls-muted">' . esc_html( self::waiting_text( $order, false ) ) . '</p></section>';
 			return $html;
 		}
 
@@ -160,16 +251,22 @@ final class SFLS_Delivery {
 			$html .= '<p class="sfls-muted sfls-delivery-meta">' . esc_html( self::license_line( $lic ) ) . '</p></div>';
 		}
 
-		$download = self::download_link();
+		$download = self::download_link( false, $order );
+		$guest    = self::guest_link( $order );
 		$html    .= '<div class="sfls-actions sfls-delivery-actions">';
 		if ( '' !== $download ) {
 			$html .= '<a class="sfls-btn sfls-btn--primary" href="' . esc_url( $download ) . '">' . esc_html__( 'Download Pro', 'subtleforms-license-server' ) . '</a>';
 		}
-		$html .= '<a class="sfls-btn sfls-btn--secondary" href="' . esc_url( wc_get_account_endpoint_url( SFLS_Account::EP_LICENSES ) ) . '">' . esc_html__( 'Manage licenses', 'subtleforms-license-server' ) . '</a></div>';
+		if ( '' !== $guest ) {
+			$html .= '<a class="sfls-btn sfls-btn--secondary" href="' . esc_url( $guest ) . '">' . esc_html__( 'Open your license page', 'subtleforms-license-server' ) . '</a></div>';
+			$html .= '<p class="sfls-muted">' . esc_html__( 'Keep the email we sent you: its link opens your license page and download for 30 days, no account needed.', 'subtleforms-license-server' ) . '</p>';
+		} else {
+			$html .= '<a class="sfls-btn sfls-btn--secondary" href="' . esc_url( wc_get_account_endpoint_url( SFLS_Account::EP_LICENSES ) ) . '">' . esc_html__( 'Manage licenses', 'subtleforms-license-server' ) . '</a></div>';
+		}
 		if ( '' === $download ) {
 			$html .= '<p class="sfls-muted">' . esc_html__( 'The Pro download appears in My Account › Pro downloads as soon as the first release is published.', 'subtleforms-license-server' ) . '</p>';
 		}
-		$html .= self::steps_html();
+		$html .= self::steps_html( '' !== $download );
 		return $html . '</section>';
 	}
 
@@ -358,7 +455,7 @@ final class SFLS_Delivery {
 		if ( ! $licenses ) {
 			return;
 		}
-		$download = $sent_to_admin ? '' : self::download_link( true );
+		$download = $sent_to_admin ? '' : self::download_link( true, $order );
 
 		if ( $plain_text ) {
 			echo "\n" . esc_html( strtoupper( _n( 'Your SubtleForms Pro license', 'Your SubtleForms Pro licenses', count( $licenses ), 'subtleforms-license-server' ) ) ) . "\n\n";
@@ -372,7 +469,7 @@ final class SFLS_Delivery {
 				echo esc_html__( 'Download Pro:', 'subtleforms-license-server' ) . ' ' . esc_url_raw( $download ) . "\n\n";
 			}
 			echo esc_html__( 'How to install Pro', 'subtleforms-license-server' ) . "\n";
-			foreach ( self::steps() as $i => $step ) {
+			foreach ( self::steps( '' !== $download ) as $i => $step ) {
 				echo esc_html( ( $i + 1 ) . '. ' . $step[0] . ': ' . $step[1] ) . "\n";
 			}
 			echo "\n";
@@ -391,7 +488,7 @@ final class SFLS_Delivery {
 				$html .= '<p style="margin:20px 0;"><a href="' . esc_url( $download ) . '" style="display:inline-block;background:#1e1e1e;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:600;">' . esc_html__( 'Download Pro', 'subtleforms-license-server' ) . '</a></p>';
 			}
 			$html .= '<h3 style="margin:24px 0 8px;">' . esc_html__( 'How to install Pro', 'subtleforms-license-server' ) . '</h3><ol style="margin:0 0 0 20px;padding:0;">';
-			foreach ( self::steps() as $step ) {
+			foreach ( self::steps( '' !== $download ) as $step ) {
 				$html .= '<li style="margin:0 0 8px;"><strong>' . esc_html( $step[0] ) . '.</strong> ' . esc_html( $step[1] ) . '</li>';
 			}
 			$html .= '</ol>';

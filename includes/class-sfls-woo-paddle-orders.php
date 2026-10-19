@@ -281,8 +281,9 @@ final class SFLS_Woo_Paddle_Orders {
 		if ( ! $order ) {
 			return null;
 		}
+		$occurred = (string) ( $ctx['occurred_at'] ?? '' );
 		if ( '' !== (string) $order->get_meta( '_sfls_paddle_paid_txn' ) ) {
-			$lic = self::link_licenses( $order, $sub_id, $sub );
+			$lic = self::link_licenses( $order, $sub_id, $sub, array(), $occurred );
 			return self::result( 'linked', sprintf( 'Linked to order #%d.', $order->get_id() ), $lic );
 		}
 		if ( ! in_array( (string) ( $sub['status'] ?? '' ), array( 'trialing', 'active', 'past_due' ), true ) ) {
@@ -298,7 +299,7 @@ final class SFLS_Woo_Paddle_Orders {
 			$order->save_meta_data();
 			return self::result( 'waiting', sprintf( 'Order #%d waits for transaction %s.', $order->get_id(), $txn_id ) );
 		}
-		return self::complete_checkout( $order, $txn, $sub );
+		return self::complete_checkout( $order, $txn, $sub, $occurred );
 	}
 
 	// ── Checkout completion ─────────────────────────────────────────────
@@ -306,12 +307,13 @@ final class SFLS_Woo_Paddle_Orders {
 	/**
 	 * Complete a WooCommerce order from its paid Paddle transaction.
 	 *
-	 * @param WC_Order   $order Order.
-	 * @param array      $txn   Transaction (completed or paid).
-	 * @param array|null $sub   Subscription, when known.
+	 * @param WC_Order   $order    Order.
+	 * @param array      $txn      Transaction (completed or paid).
+	 * @param array|null $sub      Subscription, when known.
+	 * @param string     $occurred When the subscription event that brought $sub happened (GMT), '' when none.
 	 * @return array{action:string,note:string,license:?array}
 	 */
-	public static function complete_checkout( WC_Order $order, array $txn, ?array $sub = null ): array {
+	public static function complete_checkout( WC_Order $order, array $txn, ?array $sub = null, string $occurred = '' ): array {
 		$order_id = $order->get_id();
 		$txn_id   = (string) ( $txn['id'] ?? '' );
 		$sub_id   = (string) ( $txn['subscription_id'] ?? ( $sub['id'] ?? '' ) );
@@ -333,7 +335,7 @@ final class SFLS_Woo_Paddle_Orders {
 					);
 					return self::result( 'duplicate', 'Order already paid by ' . $paid . '.' );
 				}
-				$lic = '' !== $sub_id ? self::link_licenses( $order, $sub_id, $sub, $txn ) : null;
+				$lic = '' !== $sub_id ? self::link_licenses( $order, $sub_id, $sub, $txn, $occurred ) : null;
 				return self::result( 'ignored', 'Order already completed.', $lic );
 			}
 
@@ -403,12 +405,13 @@ final class SFLS_Woo_Paddle_Orders {
 			// payment_complete() moves the order to Completed, which issues the
 			// license once; link_after_issue() then ties it to the subscription.
 			self::$pending_link[ $order_id ] = array(
-				'sub_id' => $sub_id,
-				'sub'    => $sub,
-				'txn'    => $txn,
+				'sub_id'   => $sub_id,
+				'sub'      => $sub,
+				'txn'      => $txn,
+				'occurred' => $occurred,
 			);
 			$order->payment_complete( $txn_id );
-			$lic = self::link_licenses( wc_get_order( $order_id ), $sub_id, $sub, $txn );
+			$lic = self::link_licenses( wc_get_order( $order_id ), $sub_id, $sub, $txn, $occurred );
 			unset( self::$pending_link[ $order_id ] );
 			return self::result( 'completed', sprintf( 'Order #%d completed.', $order_id ), $lic );
 		} finally {
@@ -451,7 +454,7 @@ final class SFLS_Woo_Paddle_Orders {
 		}
 		$order = wc_get_order( (int) $order_id );
 		if ( $order instanceof WC_Order ) {
-			self::link_licenses( $order, (string) $ctx['sub_id'], $ctx['sub'], (array) $ctx['txn'] );
+			self::link_licenses( $order, (string) $ctx['sub_id'], $ctx['sub'], (array) $ctx['txn'], (string) ( $ctx['occurred'] ?? '' ) );
 		}
 	}
 
@@ -459,13 +462,18 @@ final class SFLS_Woo_Paddle_Orders {
 	 * Tie the licenses of a paid order to its Paddle subscription, so they
 	 * follow it (trial, renewals, past due, cancel). Safe to run again.
 	 *
-	 * @param WC_Order   $order  Order.
-	 * @param string     $sub_id Subscription ID ('' for one-time payments).
-	 * @param array|null $sub    Subscription entity (fetched when null).
-	 * @param array      $txn    Checkout transaction.
+	 * The license is stamped as synced at the time the subscription state is
+	 * from: the event's occurred_at, else the subscription's updated_at, else
+	 * now. Later events are then applied, older ones skipped as stale.
+	 *
+	 * @param WC_Order   $order    Order.
+	 * @param string     $sub_id   Subscription ID ('' for one-time payments).
+	 * @param array|null $sub      Subscription entity (fetched when null).
+	 * @param array      $txn      Checkout transaction.
+	 * @param string     $occurred occurred_at of the event that brought $sub (GMT), '' when none.
 	 * @return array|null First license.
 	 */
-	public static function link_licenses( WC_Order $order, string $sub_id, ?array $sub = null, array $txn = array() ): ?array {
+	public static function link_licenses( WC_Order $order, string $sub_id, ?array $sub = null, array $txn = array(), string $occurred = '' ): ?array {
 		$licenses = SFLS_Woo::order_licenses( $order->get_id() );
 		if ( ! $licenses ) {
 			return null;
@@ -503,7 +511,7 @@ final class SFLS_Woo_Paddle_Orders {
 					unset( $from_sub['plan'] ); // Plan changes come through the subscription events.
 				}
 				$fields                      = array_merge( $from_sub, $fields );
-				$fields['billing_synced_at'] = current_time( 'mysql', true );
+				$fields['billing_synced_at'] = self::synced_at( $occurred, $sub, $lic );
 			} elseif ( $first ) {
 				if ( $trial_order ) {
 					$days                    = (int) self::trial_days( $order );
@@ -540,6 +548,23 @@ final class SFLS_Woo_Paddle_Orders {
 			$order->save_meta_data();
 		}
 		return $out ?? $licenses[0];
+	}
+
+	/**
+	 * When the subscription state applied by link_licenses() is from: the
+	 * event time, else the subscription's updated_at, else now. Never earlier
+	 * than what the license already applied.
+	 *
+	 * @param string $occurred Event time (GMT) or ''.
+	 * @param array  $sub      Subscription.
+	 * @param array  $lic      License.
+	 */
+	private static function synced_at( string $occurred, array $sub, array $lic ): string {
+		$at = '' !== $occurred ? $occurred : (string) ( SFLS_Billing::gmt( $sub['updated_at'] ?? null ) ?? current_time( 'mysql', true ) );
+		if ( ! empty( $lic['billing_synced_at'] ) && strtotime( $lic['billing_synced_at'] . ' UTC' ) > strtotime( $at . ' UTC' ) ) {
+			return (string) $lic['billing_synced_at'];
+		}
+		return $at;
 	}
 
 	/**

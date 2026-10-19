@@ -355,7 +355,7 @@ final class SFLS_Admin_Releases {
 			}
 			echo '</td>';
 			echo '<td data-colname="' . esc_attr( $heads['released'] ) . '">' . esc_html( $rel['released_at'] ? SFLS_Releases::date_label( $rel ) : __( 'Not yet', 'subtleforms-license-server' ) ) . '</td>';
-			echo '<td data-colname="' . esc_attr( $heads['size'] ) . '">' . esc_html( $rel['size'] ? size_format( $rel['size'], 1 ) : '–' ) . '</td>';
+			echo '<td data-colname="' . esc_attr( $heads['size'] ) . '">' . esc_html( $rel['size'] ? SFLS_Releases::size_label( (int) $rel['size'] ) : '–' ) . '</td>';
 			echo '<td data-colname="' . esc_attr( $heads['sha'] ) . '">' . ( '' !== $rel['sha256'] ? '<code class="sfls-sha" title="' . esc_attr( $rel['sha256'] ) . '">' . esc_html( substr( $rel['sha256'], 0, 12 ) ) . '</code>' : '–' ) . '</td>';
 			echo '<td data-colname="' . esc_attr( $heads['downloads'] ) . '">' . esc_html( number_format_i18n( $rel['downloads'] ) ) . '</td>';
 			echo '<td data-colname="' . esc_attr( $heads['sites'] ) . '">' . esc_html( number_format_i18n( $sites[ $rel['version'] ] ?? 0 ) ) . '</td>';
@@ -473,7 +473,7 @@ final class SFLS_Admin_Releases {
 		$meta = array(
 			__( 'Status', 'subtleforms-license-server' )    => wp_kses_post( self::status_pill( $rel ) ),
 			__( 'Released', 'subtleforms-license-server' )  => esc_html( $rel['released_at'] ? self::when( $rel['released_at'] ) : __( 'Not yet', 'subtleforms-license-server' ) ),
-			__( 'Size', 'subtleforms-license-server' )      => esc_html( $rel['size'] ? size_format( $rel['size'], 1 ) : '–' ),
+			__( 'Size', 'subtleforms-license-server' )      => esc_html( $rel['size'] ? SFLS_Releases::size_label( (int) $rel['size'] ) : '–' ),
 			__( 'Downloads', 'subtleforms-license-server' ) => esc_html( number_format_i18n( $rel['downloads'] ) ),
 			__( 'Source', 'subtleforms-license-server' )    => esc_html( self::source_label( $rel['source'] ) ),
 		);

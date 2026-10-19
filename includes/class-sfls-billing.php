@@ -124,9 +124,12 @@ final class SFLS_Billing {
 		if ( ! is_email( $email ) ) {
 			return array( 0, false );
 		}
-		$user = get_user_by( 'email', $email );
-		if ( $user ) {
-			return array( (int) $user->ID, false );
+		// An account with this email may have been given the address without
+		// any confirmation (WooCommerce account details), so the license is not
+		// linked to it here. Its owner claims it through the confirmation email
+		// sent on sign in (SFLS_Claims, LS-01).
+		if ( get_user_by( 'email', $email ) ) {
+			return array( 0, false );
 		}
 		$base  = sanitize_user( (string) strstr( $email, '@', true ), true );
 		$base  = '' !== $base ? $base : 'customer';

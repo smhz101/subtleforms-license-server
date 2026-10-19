@@ -6,6 +6,8 @@
  *                 button="Buy {plan}" button_lifetime="Buy {plan}"]
  *                                           Pricing cards from the license products.
  *   [sfls_changelog limit="0"]               Every Pro release, newest first.
+ *   [sfls_renewal_note]                      "Renew at 20% off: $39, $79 or $159.", from the
+ *                                           yearly and renewal products (LS-05).
  *   [sfls_latest_version]                    The current Pro version number
  *                                           ("Coming soon" before the first release).
  *   [sfls_downloads]                         The signed-in customer's Pro downloads: the
@@ -37,6 +39,7 @@ final class SFLS_Shortcodes {
 		add_shortcode( 'sfls_pricing', array( $this, 'pricing' ) );
 		add_shortcode( 'sfls_changelog', array( $this, 'changelog' ) );
 		add_shortcode( 'sfls_latest_version', array( $this, 'latest_version' ) );
+		add_shortcode( 'sfls_renewal_note', array( $this, 'renewal_note_line' ) );
 		add_shortcode( 'sfls_downloads', array( $this, 'downloads' ) );
 	}
 
@@ -201,6 +204,15 @@ final class SFLS_Shortcodes {
 			__( 'Renews at %s a year. Cancel any time.', 'subtleforms-license-server' ),
 			html_entity_decode( wp_strip_all_tags( wc_price( (float) wc_get_price_to_display( $product ) ) ), ENT_QUOTES, 'UTF-8' )
 		);
+	}
+
+	/**
+	 * [sfls_renewal_note]: renewal prices for marketing copy, computed from
+	 * the products instead of typed into the page (LS-05).
+	 */
+	public function renewal_note_line(): string {
+		$line = SFLS_Products::renewal_summary();
+		return '' === $line ? '' : '<span class="sfls-renewal-note">' . esc_html( $line ) . '</span>';
 	}
 
 	/**

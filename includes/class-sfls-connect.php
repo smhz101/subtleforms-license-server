@@ -123,6 +123,11 @@ final class SFLS_Connect {
 		if ( '' === $site_host || $site_host !== $return_host ) {
 			return __( 'The return address does not belong to the site being connected. For your safety the connection was stopped.', 'subtleforms-license-server' );
 		}
+		// The one-time code travels in the return address: only a site on
+		// this computer may receive it without https.
+		if ( 'https' !== $scheme && ! SFLS_Licenses::is_dev_host( (string) wp_parse_url( $args['return'], PHP_URL_HOST ) ) ) {
+			return __( 'This site does not use https, so it cannot be connected safely. Switch the site to https and start the connection again.', 'subtleforms-license-server' );
+		}
 		return '';
 	}
 
@@ -198,10 +203,6 @@ final class SFLS_Connect {
 		if ( is_wp_error( $result ) ) {
 			$this->error = $result->get_error_message();
 			return;
-		}
-
-		if ( 0 === (int) $lic['user_id'] ) {
-			SFLS_Licenses::update( (int) $lic['id'], array( 'user_id' => (int) $user->ID ) ); // Claim a key bought as a guest.
 		}
 
 		$code = wp_generate_password( 40, false );

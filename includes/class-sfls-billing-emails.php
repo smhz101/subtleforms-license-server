@@ -217,11 +217,13 @@ final class SFLS_Billing_Emails {
 						__( 'Renews', 'subtleforms-license-server' )      => ! $trial ? self::date( $lic['renews_at'] ?? $lic['expires_at'] ?? null ) : '',
 					)
 				);
-				if ( SFLS_Releases::has_package() && function_exists( 'wc_get_account_endpoint_url' ) ) {
+
+				$button = SFLS_Releases::has_package() && function_exists( 'wc_get_account_endpoint_url' );
+				if ( $button ) {
 					$body .= SFLS_Reminders::button( wc_get_account_endpoint_url( SFLS_Account::EP_DOWNLOADS ), __( 'Download Pro', 'subtleforms-license-server' ) );
 				}
 				$body .= '<h3 style="margin:24px 0 8px;">' . esc_html__( 'How to install Pro', 'subtleforms-license-server' ) . '</h3><ol style="margin:0 0 0 20px;padding:0;">';
-				foreach ( SFLS_Delivery::steps() as $step ) {
+				foreach ( SFLS_Delivery::steps( $button ) as $step ) {
 					$body .= '<li style="margin:0 0 8px;"><strong>' . esc_html( $step[0] ) . '.</strong> ' . esc_html( $step[1] ) . '</li>';
 				}
 				$body .= '</ol>';

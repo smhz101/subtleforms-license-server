@@ -32,7 +32,10 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 		$sub  = $this->subscription( array_merge( array( 'status' => 'active' ), $over ) );
 		$this->customer_emails[ $sub['customer_id'] ] = $user->user_email;
 		$this->webhook( 'subscription.created', $sub );
-		return array( SFLS_Licenses::find_by_subscription( $sub['id'] ), $sub, $user );
+		$lic = SFLS_Licenses::find_by_subscription( $sub['id'] );
+		// The owner has confirmed the address (SFLS_Claims), which links it.
+		SFLS_Licenses::update( (int) $lic['id'], array( 'user_id' => (int) $user->ID ) );
+		return array( SFLS_Licenses::find( (int) $lic['id'] ), $sub, $user );
 	}
 
 	/**
@@ -207,6 +210,9 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 	public function test_members_area_trial_card(): void {
 		$user = $this->make_user();
 		[ $lic ] = $this->start_trial( $user->user_email );
+		// The owner has confirmed the address (SFLS_Claims), which links it.
+		SFLS_Licenses::update( (int) $lic['id'], array( 'user_id' => (int) $user->ID ) );
+		$lic = SFLS_Licenses::find( (int) $lic['id'] );
 		wp_set_current_user( $user->ID );
 		ob_start();
 		( new SFLS_Account() )->licenses_page();

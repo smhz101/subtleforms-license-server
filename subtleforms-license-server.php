@@ -3,7 +3,7 @@
  * Plugin Name:       SubtleForms License Server
  * Plugin URI:        https://subtleforms.com
  * Description:       Issues and validates SubtleForms Pro license keys, sells them through WooCommerce, connects customer sites, runs the customer members area and serves Pro updates. Install on subtleforms.com only.
- * Version:           1.6.0
+ * Version:           1.7.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            SubtleForms
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SFLS_VERSION', '1.6.0' );
+define( 'SFLS_VERSION', '1.7.0' );
 define( 'SFLS_FILE', __FILE__ );
 define( 'SFLS_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SFLS_URL', plugin_dir_url( __FILE__ ) );
@@ -24,6 +24,8 @@ require_once SFLS_DIR . 'includes/class-sfls-settings.php';
 require_once SFLS_DIR . 'includes/class-sfls-plans.php';
 require_once SFLS_DIR . 'includes/class-sfls-db.php';
 require_once SFLS_DIR . 'includes/class-sfls-licenses.php';
+require_once SFLS_DIR . 'includes/class-sfls-claims.php';
+require_once SFLS_DIR . 'includes/class-sfls-guest.php';
 require_once SFLS_DIR . 'includes/class-sfls-releases.php';
 require_once SFLS_DIR . 'includes/class-sfls-deploy-tokens.php';
 require_once SFLS_DIR . 'includes/class-sfls-release-api.php';
@@ -97,6 +99,8 @@ add_action(
 		( new SFLS_Assets() )->register();
 		( new SFLS_Woo() )->register();
 		( new SFLS_Account() )->register();
+		( new SFLS_Claims() )->register();
+		( new SFLS_Guest() )->register();
 		( new SFLS_Shortcodes() )->register();
 		( new SFLS_Reminders() )->register();
 		( new SFLS_Upgrades() )->register();
@@ -119,6 +123,9 @@ add_action(
 		}
 	}
 );
+
+// One-time data migrations that need WooCommerce orders.
+add_action( 'init', array( 'SFLS_DB', 'run_migrations' ), 20 );
 
 // Flush rewrite rules once after activation or an upgrade, when every rule
 // (connect page, My Account endpoints) has been registered.

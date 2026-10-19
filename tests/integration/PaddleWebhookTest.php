@@ -89,12 +89,16 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * An existing account is reused, not duplicated.
+	 * An existing account with the same email is not duplicated, and the
+	 * license is not linked to it until its owner confirms the address
+	 * (LS-01: an account email can be changed without confirmation).
 	 */
-	public function test_existing_account_is_matched(): void {
-		$user = $this->make_user( 'existing' . wp_generate_password( 4, false, false ) );
+	public function test_existing_account_is_not_linked_by_email(): void {
+		$user    = $this->make_user( 'existing' . wp_generate_password( 4, false, false ) );
+		$before  = count_users()['total_users'];
 		[ $lic ] = $this->start_trial( $user->user_email );
-		$this->assertSame( (int) $user->ID, (int) $lic['user_id'] );
+		$this->assertSame( 0, (int) $lic['user_id'] );
+		$this->assertSame( $before, count_users()['total_users'] );
 		$this->assertSame( array(), $this->mails_with( 'Login Details' ) );
 	}
 

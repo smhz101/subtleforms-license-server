@@ -43,11 +43,18 @@ foreach ( array(
 	'sfls_paddle',
 	'sfls_paddle_rejected',
 	'sfls_migrated_150',
+	'sfls_owners_migrated',
+	'sfls_link_secret',
+	'sfls_release_files_private',
 	'woocommerce_sfls_paddle_settings',
 	'sfls_delete_data_on_uninstall',
 ) as $sfls_option ) {
 	delete_option( $sfls_option );
 }
+
+// User meta (pending claims, Paddle customer IDs) and leftover order locks.
+require_once __DIR__ . '/includes/class-sfls-db.php';
+SFLS_DB::remove_leftovers();
 
 wp_clear_scheduled_hook( 'sfls_daily' );
 

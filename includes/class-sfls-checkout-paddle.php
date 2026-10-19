@@ -381,7 +381,7 @@ final class SFLS_Checkout_Paddle {
 		if ( ! $download ) {
 			$html .= '<p class="sfls-muted">' . esc_html__( 'The Pro download appears in My Account › Pro downloads as soon as the first release is published.', 'subtleforms-license-server' ) . '</p>';
 		}
-		$html .= SFLS_Delivery::steps_html();
+		$html .= SFLS_Delivery::steps_html( (bool) $download );
 		$html .= '</div>';
 
 		$html .= '<div class="sfls-welcome-state" data-state="signin" hidden>';

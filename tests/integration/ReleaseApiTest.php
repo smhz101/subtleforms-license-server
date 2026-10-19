@@ -164,7 +164,7 @@ class SFLS_Release_Api_Test extends SFLS_Test_Case {
 		$this->assertTrue( $data['release']['latest'] );
 		$this->assertArrayNotHasKey( 'file', $data['release'], 'The storage path is never exposed.' );
 		$stored = SFLS_Releases::get( '9.4.0', true );
-		$this->assertSame( 'subtleforms-pro-9.4.0.zip', $stored['file'] );
+		$this->assertMatchesRegularExpression( '/^subtleforms-pro-9\.4\.0-[a-f0-9]{32}\.zip$/', $stored['file'], 'Stored under a name nobody can guess.' );
 		$this->assertFileExists( SFLS_Releases::package_path( $stored ) );
 		$this->assertFileExists( $zip, 'The source is not moved.' );
 
@@ -185,9 +185,9 @@ class SFLS_Release_Api_Test extends SFLS_Test_Case {
 		$this->assertSame( 'replaced', $replaced->get_data()['result'] );
 		$this->assertSame( hash_file( 'sha256', $other ), $replaced->get_data()['release']['sha256'] );
 		$new = SFLS_Releases::get( '9.4.0', true );
-		$this->assertNotSame( 'subtleforms-pro-9.4.0.zip', $new['file'] );
-		$this->assertSame( array( 'subtleforms-pro-9.4.0.zip' ), SFLS_Releases::replaced_files( $new ) );
-		$this->assertFileExists( trailingslashit( SFLS_Releases::dir() ) . 'subtleforms-pro-9.4.0.zip', 'The old zip is kept until the release is deleted.' );
+		$this->assertNotSame( $stored['file'], $new['file'] );
+		$this->assertSame( array( $stored['file'] ), SFLS_Releases::replaced_files( $new ) );
+		$this->assertFileExists( trailingslashit( SFLS_Releases::dir() ) . $stored['file'], 'The old zip is kept until the release is deleted.' );
 		$this->assertSame( '* New: CI' . "\n" . '* Fixed: things', $new['changelog'], 'Changelog kept when none is sent.' );
 
 		// A wrong sha256 is refused.
@@ -208,7 +208,7 @@ class SFLS_Release_Api_Test extends SFLS_Test_Case {
 		$this->assertSame( 413, $this->api( 'POST', '/sfls/v1/releases', array(), null, $this->upload( $this->pro_zip( '9.6.0' ) ) )->get_status() );
 
 		// Delete removes the release and both files.
-		$files = array( SFLS_Releases::package_path( $new ), trailingslashit( SFLS_Releases::dir() ) . 'subtleforms-pro-9.4.0.zip' );
+		$files = array( SFLS_Releases::package_path( $new ), trailingslashit( SFLS_Releases::dir() ) . $stored['file'] );
 		$del   = $this->api( 'DELETE', '/sfls/v1/releases/9.4.0' );
 		$this->assertSame( 200, $del->get_status() );
 		foreach ( $files as $file ) {

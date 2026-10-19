@@ -7,15 +7,18 @@
  *   POST /wp-json/sfls/v1/license/deactivate  { license_key, site_url }
  *   GET  /wp-json/sfls/v1/license/status      ?license_key&site_url
  *   GET  /wp-json/sfls/v1/update/check        ?license_key&site_url&version&slug[&channel=beta]
- *   GET  /wp-json/sfls/v1/update/package      ?license_key&site_url[&channel][&version] (redirects to a fresh signed link)
- *   GET  /wp-json/sfls/v1/update/download     ?license_key&site&expires&token&sig[&version] (15 minutes, single use)
+ *   GET  /wp-json/sfls/v1/update/package      ?lid&ptoken&site_url[&channel][&version], or ?license_key&site_url (redirects to a fresh signed link)
+ *   GET  /wp-json/sfls/v1/update/download     ?lid&site&expires&token&sig[&version] (15 minutes, single use)
  *   GET  /wp-json/sfls/v1/update/versions     ?license_key&site_url[&channel=beta] (versions this license may download)
  *   POST /wp-json/sfls/v1/connect/exchange    { code, site_url }
  *
  * Every response is JSON except download. Errors use a 4xx status with
  * { error, reason }, which is what the Pro client maps to a license state.
- * activate, validate and status are limited per IP and per key (30 requests
- * per 10 minutes each); over the limit they answer 429 with Retry-After.
+ * activate, validate, status, package and versions are limited per IP (30
+ * requests per 10 minutes). Requests from a site the valid key is activated
+ * on are also limited per key and site; every other request is checked
+ * against a per-key budget of failed requests. Over a limit they answer 429
+ * with Retry-After.
  *
  * @package SFLS
  */
@@ -45,8 +48,8 @@ final class SFLS_REST {
 		register_rest_route( self::NS, '/license/activate', array( 'methods' => 'POST', 'callback' => array( $this, 'activate' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/license/validate', array( 'methods' => 'POST', 'callback' => array( $this, 'validate' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/license/deactivate', array( 'methods' => 'POST', 'callback' => array( $this, 'deactivate' ), 'permission_callback' => $open ) );
-		register_rest_route( self::NS, '/license/status', array( 'methods' => 'GET', 'callback' => array( $this, 'validate' ), 'permission_callback' => $open ) );
-		register_rest_route( self::NS, '/update/check', array( 'methods' => 'GET', 'callback' => array( $this, 'update_check' ), 'permission_callback' => $open ) );
+		register_rest_route( self::NS, '/license/status', array( 'methods' => 'GET, POST', 'callback' => array( $this, 'validate' ), 'permission_callback' => $open ) );
+		register_rest_route( self::NS, '/update/check', array( 'methods' => 'GET, POST', 'callback' => array( $this, 'update_check' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/package', array( 'methods' => 'GET', 'callback' => array( $this, 'package' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/download', array( 'methods' => 'GET', 'callback' => array( $this, 'download' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/versions', array( 'methods' => 'GET', 'callback' => array( $this, 'versions' ), 'permission_callback' => $open ) );
@@ -62,10 +65,16 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function activate( WP_REST_Request $req ) {
-		$limited = $this->limit_license_request( $req );
-		if ( $limited ) {
-			return $limited;
-		}
+		return $this->guarded( $req, array( $this, 'activate_now' ) );
+	}
+
+	/**
+	 * Activate endpoint after the rate limit.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function activate_now( WP_REST_Request $req ) {
 		[ $lic, $domain, $error ] = $this->resolve( $req );
 		if ( $error ) {
 			return $error;
@@ -86,10 +95,16 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function validate( WP_REST_Request $req ) {
-		$limited = $this->limit_license_request( $req );
-		if ( $limited ) {
-			return $limited;
-		}
+		return $this->guarded( $req, array( $this, 'validate_now' ) );
+	}
+
+	/**
+	 * Validate endpoint after the rate limit.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function validate_now( WP_REST_Request $req ) {
 		[ $lic, $domain, $error ] = $this->resolve( $req );
 		if ( $error ) {
 			return $error;
@@ -98,11 +113,16 @@ final class SFLS_REST {
 		$payload = SFLS_Licenses::payload( $lic, $domain );
 
 		if ( ! SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
+			// Same shape as every other error (valid, reason, error). It stays
+			// HTTP 200, which Pro reads as "inactive" rather than "invalid", and
+			// keeps "message" for Pro versions that read that field (LS-10).
+			$text = __( 'This site is not activated for this license.', 'subtleforms-license-server' );
 			return rest_ensure_response(
 				array(
 					'valid'   => false,
 					'reason'  => 'domain_not_activated',
-					'message' => __( 'This site is not activated for this license.', 'subtleforms-license-server' ),
+					'error'   => $text,
+					'message' => $text,
 				) + array_diff_key( $payload, array( 'valid' => 1, 'status' => 1 ) )
 			);
 		}
@@ -165,7 +185,7 @@ final class SFLS_REST {
 			'tested'       => $release['tested'],
 			'requires_php' => $release['requires_php'],
 			'last_updated' => $release['updated'],
-			'changelog'    => wpautop( esc_html( $release['changelog'] ) ),
+			'changelog'    => SFLS_Releases::changelog_html( $release ),
 			'channel'      => $release['channel'],
 			'package'      => '',
 		);
@@ -175,14 +195,7 @@ final class SFLS_REST {
 			// Pro caches this answer for hours, longer than a signed link lives,
 			// so the package is a stable address that hands out a fresh signed
 			// link at download time (see package()).
-			$args = array(
-				'license_key' => rawurlencode( $lic['license_key'] ),
-				'site_url'    => rawurlencode( $domain ),
-			);
-			if ( 'beta' === $channel ) {
-				$args['channel'] = 'beta';
-			}
-			$response['package'] = add_query_arg( $args, rest_url( self::NS . '/update/package' ) );
+			$response['package'] = self::package_address( $lic, $domain, 'beta' === $channel ? array( 'channel' => 'beta' ) : array() );
 			SFLS_Licenses::touch_activation( (int) $lic['id'], $domain, (string) $req->get_param( 'version' ) );
 		}
 
@@ -201,10 +214,57 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function package( WP_REST_Request $req ) {
-		$limited = $this->limit_license_request( $req );
-		if ( $limited ) {
-			return $limited;
+		self::key_from_package_token( $req );
+		return $this->guarded( $req, array( $this, 'package_now' ) );
+	}
+
+	/**
+	 * Stable package address of a license and site: the license ID and a
+	 * token, never the key (1.7.0).
+	 *
+	 * @param array  $lic    License.
+	 * @param string $domain Normalised domain.
+	 * @param array  $extra  channel, version.
+	 */
+	public static function package_address( array $lic, string $domain, array $extra = array() ): string {
+		$args = array(
+			'lid'      => (int) $lic['id'],
+			'site_url' => rawurlencode( $domain ),
+			'ptoken'   => SFLS_Releases::package_token( $lic, $domain ),
+		);
+		foreach ( $extra as $name => $value ) {
+			$args[ $name ] = rawurlencode( (string) $value );
 		}
+		return add_query_arg( $args, rest_url( self::NS . '/update/package' ) );
+	}
+
+	/**
+	 * A package address with lid and ptoken stands for the license key: put
+	 * the key on the request when the token matches. Addresses with the key
+	 * itself (handed out before 1.7.0) keep working.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 */
+	private static function key_from_package_token( WP_REST_Request $req ): void {
+		if ( '' !== (string) $req->get_param( 'license_key' ) ) {
+			return;
+		}
+		$id     = absint( $req->get_param( 'lid' ) );
+		$token  = strtolower( sanitize_text_field( (string) $req->get_param( 'ptoken' ) ) );
+		$domain = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site_url' ) );
+		$lic    = $id ? SFLS_Licenses::find( $id ) : null;
+		if ( $lic && '' !== $domain && preg_match( '/^[a-f0-9]{64}$/', $token ) && hash_equals( SFLS_Releases::package_token( $lic, $domain ), $token ) ) {
+			$req->set_param( 'license_key', (string) $lic['license_key'] );
+		}
+	}
+
+	/**
+	 * Package endpoint after the rate limit.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function package_now( WP_REST_Request $req ) {
 		[ $lic, $domain, $error ] = $this->resolve( $req );
 		if ( $error ) {
 			return $error;
@@ -238,10 +298,16 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function versions( WP_REST_Request $req ) {
-		$limited = $this->limit_license_request( $req );
-		if ( $limited ) {
-			return $limited;
-		}
+		return $this->guarded( $req, array( $this, 'versions_now' ) );
+	}
+
+	/**
+	 * Versions endpoint after the rate limit.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function versions_now( WP_REST_Request $req ) {
 		[ $lic, $domain, $error ] = $this->resolve( $req );
 		if ( $error ) {
 			return $error;
@@ -265,14 +331,7 @@ final class SFLS_REST {
 				'size'         => (int) $release['size'],
 				'sha256'       => $release['sha256'],
 				'changelog'    => $release['changelog'],
-				'package'      => $activated ? add_query_arg(
-					array(
-						'license_key' => rawurlencode( $lic['license_key'] ),
-						'site_url'    => rawurlencode( $domain ),
-						'version'     => rawurlencode( $release['version'] ),
-					),
-					rest_url( self::NS . '/update/package' )
-				) : '',
+				'package'      => $activated ? self::package_address( $lic, $domain, array( 'version' => $release['version'] ) ) : '',
 			);
 		}
 		$state = SFLS_Licenses::state( $lic );
@@ -296,7 +355,10 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function download( WP_REST_Request $req ) {
-		$key     = strtoupper( sanitize_text_field( (string) $req->get_param( 'license_key' ) ) );
+		$id      = absint( $req->get_param( 'lid' ) );
+		$by_id   = $id ? SFLS_Licenses::find( $id ) : null;
+		// Links name the license by ID since 1.7.0; older links carry the key.
+		$key     = $id ? ( $by_id ? strtoupper( (string) $by_id['license_key'] ) : '' ) : strtoupper( sanitize_text_field( (string) $req->get_param( 'license_key' ) ) );
 		$domain  = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site' ) );
 		$expires = (int) $req->get_param( 'expires' );
 		$token   = strtolower( sanitize_key( (string) $req->get_param( 'token' ) ) );
@@ -388,8 +450,18 @@ final class SFLS_REST {
 		$key    = strtoupper( sanitize_text_field( (string) $req->get_param( 'license_key' ) ) );
 		$domain = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site_url' ) );
 
-		if ( '' === $key || '' === $domain ) {
+		$raw_site = trim( (string) $req->get_param( 'site_url' ) );
+		if ( '' === $key && '' === $raw_site ) {
 			return array( null, $domain, $this->error( 400, 'missing_parameters', __( 'license_key and site_url are required.', 'subtleforms-license-server' ) ) );
+		}
+		if ( '' === $key ) {
+			return array( null, $domain, $this->error( 400, 'missing_parameters', __( 'license_key is required.', 'subtleforms-license-server' ) ) );
+		}
+		if ( '' === $raw_site ) {
+			return array( null, $domain, $this->error( 400, 'missing_parameters', __( 'site_url is required.', 'subtleforms-license-server' ) ) );
+		}
+		if ( '' === $domain ) {
+			return array( null, $domain, $this->error( 400, 'invalid_site_url', __( 'site_url must be the address of a website, such as https://example.com.', 'subtleforms-license-server' ) ) );
 		}
 
 		$lic = SFLS_Licenses::find_by_key( $key );
@@ -429,18 +501,80 @@ final class SFLS_REST {
 	}
 
 	/**
-	 * Rate limits for activate, validate, status and package: one bucket per
-	 * IP and one per license key.
+	 * Rate limits for activate, validate, status, package and versions.
 	 *
-	 * @param WP_REST_Request $req Request.
+	 * Every request counts against its IP. A request for a valid license
+	 * from a site it is activated on then only counts against that key and
+	 * site, so others who know the key can never lock that site out. Any
+	 * other request (unknown key, a site the key is not activated on, a
+	 * license that is not active) is checked against the key's failure
+	 * budget and, when it fails, counts towards it. The failure budget is the
+	 * limit times the number of sites the license is activated on (at least
+	 * one, at most its site limit), so a big license is not cut off sooner
+	 * than a small one.
+	 *
+	 * @param WP_REST_Request $req     Request.
+	 * @param callable        $handler Endpoint.
+	 * @return WP_REST_Response
 	 */
-	private function limit_license_request( WP_REST_Request $req ): ?WP_REST_Response {
+	private function guarded( WP_REST_Request $req, callable $handler ) {
 		$limited = $this->rate_limit( 'ip', SFLS_Licenses::client_ip() );
 		if ( $limited ) {
 			return $limited;
 		}
 		$key = strtoupper( sanitize_text_field( (string) $req->get_param( 'license_key' ) ) );
-		return '' === $key ? null : $this->rate_limit( 'key', $key );
+		if ( '' === $key ) {
+			return $handler( $req );
+		}
+		$domain = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site_url' ) );
+		$lic    = SFLS_Licenses::find_by_key( $key );
+		if ( $lic && '' !== $domain && SFLS_Licenses::state( $lic )['valid'] && SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
+			$limited = $this->rate_limit( 'site', $key . '|' . $domain );
+			return $limited ? $limited : $handler( $req );
+		}
+		$scale   = $lic ? self::failure_scale( $lic ) : 1;
+		$limited = $this->rate_limit( 'key', $key, false, $scale );
+		if ( $limited ) {
+			return $limited;
+		}
+		$response = rest_ensure_response( $handler( $req ) );
+		if ( self::failed( $response ) ) {
+			$this->rate_limit( 'key', $key, true, $scale );
+		}
+		return $response;
+	}
+
+	/**
+	 * How many times the limit a license's failure budget is: the sites it
+	 * is activated on, at least one and at most its site limit.
+	 *
+	 * @param array $lic License.
+	 */
+	private static function failure_scale( array $lic ): int {
+		$sites = count( SFLS_Licenses::activations( (int) $lic['id'] ) );
+		$limit = (int) $lic['sites_allowed'];
+		if ( $limit > 0 ) {
+			$sites = min( $sites, $limit );
+		}
+		return max( 1, $sites );
+	}
+
+	/**
+	 * Whether a license request failed (error status, or valid / activated
+	 * false in the answer). A 429 is not counted again.
+	 *
+	 * @param WP_REST_Response $response Response.
+	 */
+	private static function failed( WP_REST_Response $response ): bool {
+		$status = $response->get_status();
+		if ( 429 === $status ) {
+			return false;
+		}
+		if ( $status >= 400 ) {
+			return true;
+		}
+		$data = $response->get_data();
+		return is_array( $data ) && ( ( array_key_exists( 'valid', $data ) && false === $data['valid'] ) || ( array_key_exists( 'activated', $data ) && false === $data['activated'] ) );
 	}
 
 	/**
@@ -452,10 +586,12 @@ final class SFLS_REST {
 	 * `sfls_rate_limit_enabled` filter says otherwise, so development and
 	 * automated tests are not throttled.
 	 *
-	 * @param string $type  ip | key.
-	 * @param string $value IP address or license key.
+	 * @param string $type  ip | key (failures of a key) | site (key and site).
+	 * @param string $value IP address, license key, or "key|domain".
+	 * @param bool   $count Count this request (false: only check).
+	 * @param int    $scale Multiplies the limit.
 	 */
-	public function rate_limit( string $type, string $value ): ?WP_REST_Response {
+	public function rate_limit( string $type, string $value, bool $count = true, int $scale = 1 ): ?WP_REST_Response {
 		if ( ! apply_filters( 'sfls_rate_limit_enabled', 'local' !== wp_get_environment_type(), $type ) ) {
 			return null;
 		}
@@ -466,7 +602,7 @@ final class SFLS_REST {
 				'window' => 10 * MINUTE_IN_SECONDS,
 			)
 		);
-		$limit  = max( 1, (int) $conf['limit'] );
+		$limit  = max( 1, (int) $conf['limit'] ) * max( 1, $scale );
 		$window = max( 1, (int) $conf['window'] );
 		$now    = time();
 		$bucket = 'sfls_rl_' . $type . '_' . md5( '' === $value ? 'unknown' : $value );
@@ -483,8 +619,10 @@ final class SFLS_REST {
 			return $response;
 		}
 
-		++$state['hits'];
-		set_transient( $bucket, $state, $window );
+		if ( $count ) {
+			++$state['hits'];
+			set_transient( $bucket, $state, $window );
+		}
 		return null;
 	}
 }

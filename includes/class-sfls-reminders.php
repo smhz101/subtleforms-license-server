@@ -25,6 +25,7 @@ final class SFLS_Reminders {
 	public function register(): void {
 		add_action( self::HOOK, array( self::class, 'run' ) );
 		add_action( self::HOOK, array( 'SFLS_Releases', 'purge_tokens' ) );
+		add_action( self::HOOK, array( 'SFLS_DB', 'prune' ) );
 		add_action( 'init', array( self::class, 'schedule' ) );
 	}
 
@@ -119,52 +120,48 @@ final class SFLS_Reminders {
 		$days = SFLS_Settings::reminder_days();
 
 		if ( $days ) {
-			SFLS_Licenses::each_expiring_between(
-				gmdate( 'Y-m-d H:i:s', $now ),
-				gmdate( 'Y-m-d H:i:s', $now + max( $days ) * DAY_IN_SECONDS ),
-				static function ( array $lic ) use ( &$sent, $now, $days, $dry_run ) {
-					if ( SFLS_Licenses::is_paddle( $lic ) ) {
-						return; // Paddle renews by itself; see the trial and renewal notices below.
-					}
-					$left       = (int) ceil( ( strtotime( $lic['expires_at'] . ' UTC' ) - $now ) / DAY_IN_SECONDS );
-					$applicable = array_values( array_filter( $days, static fn( $n ) => $left <= $n ) );
-					if ( ! $applicable ) {
-						return;
-					}
-					$stage = 'd' . min( $applicable ); // The most urgent stage that applies.
-					if ( self::was_sent( $lic, $stage ) ) {
-						return;
-					}
-					if ( ! $dry_run ) {
-						self::send( $lic, 'before', $left );
-						// Mark every applicable stage, so a skipped 30-day email is not sent after the 7-day one.
-						self::mark( $lic, array_map( static fn( $n ) => 'd' . $n, $applicable ) );
-					}
-					++$sent;
+			$from = gmdate( 'Y-m-d H:i:s', $now );
+			$to   = gmdate( 'Y-m-d H:i:s', $now + max( $days ) * DAY_IN_SECONDS );
+			foreach ( self::pages( static fn( int $after ) => SFLS_Licenses::expiring_between( $from, $to, $after ) ) as $lic ) {
+				if ( SFLS_Licenses::is_paddle( $lic ) ) {
+					continue; // Paddle renews by itself; see the trial and renewal notices below.
 				}
-			);
+				$left       = (int) ceil( ( strtotime( $lic['expires_at'] . ' UTC' ) - $now ) / DAY_IN_SECONDS );
+				$applicable = array_values( array_filter( $days, static fn( $n ) => $left <= $n ) );
+				if ( ! $applicable ) {
+					continue;
+				}
+				$stage = 'd' . min( $applicable ); // The most urgent stage that applies.
+				if ( self::was_sent( $lic, $stage ) ) {
+					continue;
+				}
+				if ( ! $dry_run ) {
+					self::send( $lic, 'before', $left );
+					// Mark every applicable stage, so a skipped 30-day email is not sent after the 7-day one.
+					self::mark( $lic, array_map( static fn( $n ) => 'd' . $n, $applicable ) );
+				}
+				++$sent;
+			}
 		}
 
 		$sent += self::run_paddle_notices( $now, $dry_run );
 
 		if ( SFLS_Settings::get( 'lapsed_reminder' ) ) {
-			SFLS_Licenses::each_expiring_between(
-				gmdate( 'Y-m-d H:i:s', $now - 8 * DAY_IN_SECONDS ),
-				gmdate( 'Y-m-d H:i:s', $now - DAY_IN_SECONDS ),
-				static function ( array $lic ) use ( &$sent, $dry_run ) {
-					if ( self::was_sent( $lic, 'lapsed' ) ) {
-						return;
-					}
-					if ( ! empty( $lic['trial'] ) && 'canceled' === $lic['billing_status'] ) {
-						return; // A canceled trial was already told it ended.
-					}
-					if ( ! $dry_run ) {
-						self::send( $lic, 'lapsed', 0 );
-						self::mark( $lic, array( 'lapsed' ) );
-					}
-					++$sent;
+			$from = gmdate( 'Y-m-d H:i:s', $now - 8 * DAY_IN_SECONDS );
+			$to   = gmdate( 'Y-m-d H:i:s', $now - DAY_IN_SECONDS );
+			foreach ( self::pages( static fn( int $after ) => SFLS_Licenses::expiring_between( $from, $to, $after ) ) as $lic ) {
+				if ( self::was_sent( $lic, 'lapsed' ) ) {
+					continue;
 				}
-			);
+				if ( ! empty( $lic['trial'] ) && 'canceled' === $lic['billing_status'] ) {
+					continue; // A canceled trial was already told it ended.
+				}
+				if ( ! $dry_run ) {
+					self::send( $lic, 'lapsed', 0 );
+					self::mark( $lic, array( 'lapsed' ) );
+				}
+				++$sent;
+			}
 		}
 
 		return $sent;
@@ -182,7 +179,9 @@ final class SFLS_Reminders {
 		$sent  = 0;
 		$trial = SFLS_Settings::trial_notice_days();
 		if ( $trial > 0 ) {
-			foreach ( SFLS_Licenses::paddle_due( 'trial_ends_at', gmdate( 'Y-m-d H:i:s', $now ), gmdate( 'Y-m-d H:i:s', $now + $trial * DAY_IN_SECONDS ) ) as $lic ) {
+			$from = gmdate( 'Y-m-d H:i:s', $now );
+			$to   = gmdate( 'Y-m-d H:i:s', $now + $trial * DAY_IN_SECONDS );
+			foreach ( self::pages( static fn( int $after ) => SFLS_Licenses::paddle_due( 'trial_ends_at', $from, $to, $after ) ) as $lic ) {
 				$marker = 'trial|' . $lic['trial_ends_at'];
 				if ( self::has_marker( $lic, $marker ) ) {
 					continue;
@@ -196,7 +195,9 @@ final class SFLS_Reminders {
 
 		$days = SFLS_Settings::renewal_notice_days();
 		if ( $days ) {
-			foreach ( SFLS_Licenses::paddle_due( 'renews_at', gmdate( 'Y-m-d H:i:s', $now ), gmdate( 'Y-m-d H:i:s', $now + max( $days ) * DAY_IN_SECONDS ) ) as $lic ) {
+			$from = gmdate( 'Y-m-d H:i:s', $now );
+			$to   = gmdate( 'Y-m-d H:i:s', $now + max( $days ) * DAY_IN_SECONDS );
+			foreach ( self::pages( static fn( int $after ) => SFLS_Licenses::paddle_due( 'renews_at', $from, $to, $after ) ) as $lic ) {
 				$left       = (int) ceil( ( strtotime( $lic['renews_at'] . ' UTC' ) - $now ) / DAY_IN_SECONDS );
 				$applicable = array_values( array_filter( $days, static fn( $n ) => $left <= $n ) );
 				if ( ! $applicable ) {
@@ -216,6 +217,24 @@ final class SFLS_Reminders {
 			}
 		}
 		return $sent;
+	}
+
+	/**
+	 * Every row of a paged license query (LS-17: no cap of 500 per window).
+	 *
+	 * @param callable $fetch Returns the page after a license ID.
+	 * @return Generator<array>
+	 */
+	private static function pages( callable $fetch ): Generator {
+		$after = 0;
+		do {
+			$rows = (array) $fetch( $after );
+			$full = count( $rows ) >= SFLS_Licenses::PAGE;
+			foreach ( $rows as $row ) {
+				yield $row;
+			}
+			$after = $rows ? (int) end( $rows )['id'] : 0;
+		} while ( $full && $after > 0 );
 	}
 
 	/**
@@ -265,7 +284,7 @@ final class SFLS_Reminders {
 			$intro   = sprintf(
 				/* translators: %d: grace period days */
 				__( 'Your SubtleForms Pro license expired yesterday. Pro keeps working for %d days, after which Pro features, updates and support stop on your sites. Renew now to keep everything running.', 'subtleforms-license-server' ),
-				SFLS_Licenses::grace_days()
+				SFLS_Licenses::GRACE_DAYS
 			);
 		} else {
 			$subject = 1 >= $left

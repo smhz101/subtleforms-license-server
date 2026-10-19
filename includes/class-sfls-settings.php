@@ -31,17 +31,10 @@ final class SFLS_Settings {
 			'sell_with'        => 'woo_paddle',
 			'renewal_notice'   => '14,3',
 			'trial_notice'     => 3,
-			// 1.7.0.
-			'grace_days'       => 14,
-			'staging_hosts'    => '',
-			'ip_retention'     => 90,
-			'partial_refund'   => 'note',
-			'network_one_site' => 1,
-			'abuse_domains'    => 10,
-			'abuse_ips'        => 20,
-			'abuse_email'      => 1,
-			'vat_field'        => 1,
-			'force_account'    => 1,
+			// 1.7.0: hosts whose sites do not use a seat, one pattern per line.
+			'staging_hosts'    => implode( "\n", SFLS_Licenses::default_staging_patterns() ),
+			// 1.7.0: days to keep the activation log (IP addresses) and Paddle events, 0 = forever.
+			'retention_days'   => 365,
 		);
 	}
 
@@ -68,68 +61,55 @@ final class SFLS_Settings {
 	 * @param array $input Raw values (already unslashed).
 	 */
 	public static function save( array $input ): void {
-		update_option(
-			self::OPTION,
-			array_merge(
-				self::all(),
-				array(
-					'pricing_url'      => esc_url_raw( (string) ( $input['pricing_url'] ?? '' ) ),
-					'reminder_days'    => self::day_list( (string) ( $input['reminder_days'] ?? '' ) ),
-					'lapsed_reminder'  => empty( $input['lapsed_reminder'] ) ? 0 : 1,
-					'support_email'    => sanitize_email( (string) ( $input['support_email'] ?? '' ) ),
-					'simplify_account' => empty( $input['simplify_account'] ) ? 0 : 1,
-					'simple_checkout'  => empty( $input['simple_checkout'] ) ? 0 : 1,
-					'force_account'    => empty( $input['force_account'] ) ? 0 : 1,
-					'grace_days'       => min( 365, absint( $input['grace_days'] ?? self::defaults()['grace_days'] ) ),
-					'staging_hosts'    => self::clean_patterns( (string) ( $input['staging_hosts'] ?? '' ) ),
-					'ip_retention'     => min( 3650, absint( $input['ip_retention'] ?? self::defaults()['ip_retention'] ) ),
-					'partial_refund'   => in_array( $input['partial_refund'] ?? '', array( 'note', 'suspend', 'ignore' ), true ) ? $input['partial_refund'] : 'note',
-					'network_one_site' => empty( $input['network_one_site'] ) ? 0 : 1,
-					'abuse_domains'    => min( 1000, absint( $input['abuse_domains'] ?? self::defaults()['abuse_domains'] ) ),
-					'abuse_ips'        => min( 1000, absint( $input['abuse_ips'] ?? self::defaults()['abuse_ips'] ) ),
-					'abuse_email'      => empty( $input['abuse_email'] ) ? 0 : 1,
-					'vat_field'        => empty( $input['vat_field'] ) ? 0 : 1,
-				)
-			)
+		$values = array(
+			'pricing_url'      => esc_url_raw( (string) ( $input['pricing_url'] ?? '' ) ),
+			'reminder_days'    => self::day_list( (string) ( $input['reminder_days'] ?? '' ) ),
+			'lapsed_reminder'  => empty( $input['lapsed_reminder'] ) ? 0 : 1,
+			'support_email'    => sanitize_email( (string) ( $input['support_email'] ?? '' ) ),
+			'simplify_account' => empty( $input['simplify_account'] ) ? 0 : 1,
+			'simple_checkout'  => empty( $input['simple_checkout'] ) ? 0 : 1,
 		);
-	}
-
-	/**
-	 * Staging host patterns: one per line, lowercase, only host characters and `*`.
-	 *
-	 * @param string $raw Textarea value.
-	 */
-	public static function clean_patterns( string $raw ): string {
-		$lines = array();
-		foreach ( preg_split( '/[\r\n,]+/', strtolower( $raw ) ) as $line ) {
-			$line = trim( (string) $line );
-			if ( '' === $line || ! preg_match( '/^[a-z0-9.\-*:]+$/', $line ) ) {
-				continue;
-			}
-			$lines[] = $line;
+		if ( array_key_exists( 'retention_days', $input ) ) {
+			$values['retention_days'] = min( 3650, absint( $input['retention_days'] ) );
 		}
-		return implode( "\n", array_values( array_unique( $lines ) ) );
+		if ( array_key_exists( 'staging_hosts', $input ) ) {
+			$values['staging_hosts'] = implode( "\n", self::clean_patterns( (string) $input['staging_hosts'] ) );
+		}
+		update_option( self::OPTION, array_merge( self::all(), $values ) );
 	}
 
 	/**
-	 * Whether a multisite network counts as one site (1.7.0).
+	 * Staging host patterns from text: one per line (commas work too),
+	 * lowercase, only letters, digits, dots, hyphens and "*", no duplicates.
+	 *
+	 * @param string $raw Text.
+	 * @return string[]
 	 */
-	public static function network_one_site(): bool {
-		return (bool) self::get( 'network_one_site' );
+	public static function clean_patterns( string $raw ): array {
+		$out = array();
+		foreach ( preg_split( '/[\s,]+/', strtolower( $raw ) ) as $line ) {
+			$line = trim( (string) $line, '.' );
+			if ( '' !== $line && preg_match( '/^[a-z0-9*][a-z0-9.*-]*$/', $line ) && '*' !== $line && str_contains( $line, '.' ) ) {
+				$out[] = $line;
+			}
+		}
+		return array_values( array_unique( $out ) );
 	}
 
 	/**
-	 * Whether license carts force an account at checkout (1.7.0).
+	 * Days the activation log and Paddle webhook events are kept (0 = forever).
 	 */
-	public static function force_account(): bool {
-		return (bool) self::get( 'force_account' );
+	public static function retention_days(): int {
+		return absint( self::get( 'retention_days' ) );
 	}
 
 	/**
-	 * Days the activation log keeps IP addresses (0 = forever).
+	 * Staging host patterns of Licenses › Settings.
+	 *
+	 * @return string[]
 	 */
-	public static function ip_retention_days(): int {
-		return absint( self::get( 'ip_retention' ) );
+	public static function staging_patterns(): array {
+		return self::clean_patterns( (string) self::get( 'staging_hosts' ) );
 	}
 
 	/**

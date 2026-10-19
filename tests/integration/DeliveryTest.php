@@ -16,9 +16,7 @@ class SFLS_Delivery_Test extends SFLS_Test_Case {
 	 * The completed order email carries the key, Download Pro and the steps.
 	 */
 	public function test_completed_email_has_key_download_and_steps(): void {
-		if ( ! SFLS_Releases::has_package() ) {
-			$this->markTestSkipped( 'The test site has no release package.' );
-		}
+		$this->add_release( '9.9.0' ); // Its own package, whatever the site has.
 		$this->set_option( 'woocommerce_customer_completed_order_settings', array_merge( (array) get_option( 'woocommerce_customer_completed_order_settings', array() ), array( 'enabled' => 'yes' ) ) );
 		$user  = $this->make_user();
 		$order = $this->make_order( array( $this->make_license_product( 'pro' ) ), $user );

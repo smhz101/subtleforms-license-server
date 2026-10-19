@@ -52,6 +52,11 @@ class SFLS_Products_Wizard_Test extends SFLS_Test_Case {
 	 * The mapping reports the product and status of every price.
 	 */
 	public function test_mapping_statuses(): void {
+		// A published yearly Pro product made for the test, so the result does
+		// not depend on the site's own products.
+		$pro = $this->make_license_product( 'pro' );
+		$this->set_option( SFLS_Products::OPTION, array_replace_recursive( SFLS_Products::map(), array( 'pro' => array( 'yearly' => $pro->get_id() ) ) ) );
+		SFLS_Products::flush();
 		$map     = SFLS_Products::map();
 		$mapping = SFLS_Products::mapping();
 		$this->assertSame( 'publish', $mapping['pro']['yearly']['status'] );

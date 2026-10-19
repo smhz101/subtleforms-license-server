@@ -10,7 +10,7 @@ SubtleForms Pro talks to it at `https://subtleforms.com/wp-json/sfls/v1/`.
 2. Upload `subtleforms-license-server.zip` in **Plugins › Add New › Upload** and activate it. Activation creates the tables, registers `/connect-site/` and the My Account pages, and schedules the daily reminder check. (If `/connect-site/` or **My Account › Licenses** ever returns a 404, go to **Settings › Permalinks** and click **Save**.)
 3. In **Licenses › Settings**, set the pricing page URL and support email.
 
-On Nginx, block direct access to the release folder (Apache is handled by the bundled `.htaccess`):
+On Nginx, block direct access to the release folder (Apache is handled by the bundled `.htaccess`). Since 1.7.0 the zips also have random file names and are only served through the signed download endpoint:
 
 ```
 location ^~ /wp-content/uploads/sfls-private/ { deny all; }
@@ -64,9 +64,11 @@ Styles load only on pages that use a shortcode and are scoped under `.sfls`. Ove
 5. Keys are shown on the order received page (right under "Thank you"), in the order emails and in **My Account › Licenses**, with a Download Pro button and three install steps. License emails reply to the support address (and come from it when it is on your domain).
 
 The cart holds one plan at a time: a Buy button swaps out any other plan, other ways of adding a license (shop buttons, the Store API) swap too and say so, and the checkout order summary has a **Change plan** link. When the cart holds only licenses, checkout asks for name, email and country only (Licenses › Settings).
-6. Refunded or cancelled orders suspend the keys they issued.
+6. Refunded or cancelled orders suspend the keys they issued. A refunded or cancelled renewal order takes off the time it added, and a refunded upgrade order moves the license back to its previous plan, site limit and expiry (each order records what it changed). Partial refunds change nothing.
+7. Renewal products can only be bought from **Renew** in My Account for a license of the signed-in customer; anything else is refused in the cart, and an order with a renewal product never issues a new key.
+8. Licenses belong to a user ID: the customer of the order. Guest orders get a signed link (30 days) in the order email and on the thank-you page that downloads Pro and adds the license to an account. A guest license is also added when the buyer signs in to, or creates, an account with the order's email and opens the one-time link emailed to that address. Changing an account email never moves a license.
 
-Local and staging hosts (`localhost`, `*.local`, `*.test`, `staging.*`, `dev.*`, WP Engine/Kinsta staging, InstaWP) never use a site slot.
+Local hosts (`localhost`, `*.local`, `*.test`, `*.example`, `*.invalid`, Lando, DDEV) and the staging hosts in **Licenses › Settings** never use a site slot. The default list has `staging.*`, WP Engine `*stg` and `*dev` installs, Kinsta `staging-*`, Flywheel staging, Pantheon `dev-` and `test-`, and InstaWP. Production hosts such as `*.wpengine.com` and `*.kinsta.cloud` use a seat. Filter the list with `sfls_staging_patterns`.
 
 ## 5. Members area (WooCommerce My Account)
 
@@ -83,9 +85,9 @@ Pro sends the admin to:
 https://subtleforms.com/connect-site/?site=<home url>&return=<wp-admin callback>&state=<random>&name=<site name>&v=<pro version>
 ```
 
-* `return` must be http(s) and on the same host as `site` (compared without `www.`), otherwise an error page is shown.
+* `return` must be https (http only for local hosts) and on the same host as `site` (compared without `www.`), otherwise an error page is shown.
 * Signed-out visitors are sent to the My Account login and come back afterwards.
-* The customer picks one of their licenses (matched by user ID or email). Suspended, expired or full licenses are disabled with the reason, unless the site is already active on them or is a local/staging host.
+* The customer picks one of their licenses (matched by user ID only). Suspended, expired or full licenses are disabled with the reason, unless the site is already active on them or is a local/staging host.
 * **Connect site** activates the domain with the same rules as `/license/activate`, then redirects to `return?sfls_code=<40 chars>&state=<state>`. The code is valid for 10 minutes and works once.
 * **Cancel** redirects to `return?sfls_error=cancelled&state=<state>`.
 
@@ -237,7 +239,7 @@ Errors return 4xx with `{ "valid": false, "reason": "…", "error": "…" }`.
 
 License payloads (activate, validate, status, connect exchange) carry `is_local`: true when the requesting site is a local or staging host that does not use a seat. Since 1.4.0 they also carry `billing`, `billing_status`, `trial`, `trial_ends_at`, `renews_at`, `cancels_at`, `renewal_amount` and `manage_url` (see Selling with Paddle).
 
-Rate limits: activate, validate, status and package allow 30 requests per 10 minutes per IP and per license key; deactivate and connect exchange per IP. Over the limit they answer `429` with `Retry-After` (seconds). Change it with the `sfls_rate_limit` filter (`array( 'limit' => 30, 'window' => 600 )`). Sites with `WP_ENVIRONMENT_TYPE` `local` skip it unless `sfls_rate_limit_enabled` returns true. Behind a proxy or CDN, filter `sfls_client_ip` to return the visitor address the proxy forwards, otherwise every request looks like it comes from the proxy.
+Rate limits: activate, validate, status, package and versions allow 30 requests per 10 minutes per IP. A valid key on a site it is activated on is then limited per key and site, so nobody else can lock that site out; every other request (unknown key, a site the key is not on, an inactive license) counts against the key's failure budget of 30 times the sites it is activated on. Deactivate and connect exchange are limited per IP. Over the limit they answer `429` with `Retry-After` (seconds). Change it with the `sfls_rate_limit` filter (`array( 'limit' => 30, 'window' => 600 )`). Sites with `WP_ENVIRONMENT_TYPE` `local` skip it unless `sfls_rate_limit_enabled` returns true. Behind a proxy or CDN, filter `sfls_client_ip` to return the visitor address the proxy forwards, otherwise every request looks like it comes from the proxy.
 
 ## Tests
 

@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.6.0
+Stable tag: 1.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,6 +25,29 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, 7 or 14 day free trials with one trial per customer, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.7.0 - 2026-10-20 =
+* Change: License status and update checks also accept POST, so SubtleForms Pro 2.4.1 sends the license key in the request body instead of the address.
+* Fix: A Paddle purchase made with the email of an existing account is no longer linked to that account until its owner confirms the address.
+* Fix: Licenses belong to the account that bought them, so changing an account email to a buyer's address no longer shows their licenses, and a license bought as a guest is added to an account only after the buyer confirms the address through an emailed link.
+* Fix: A guest who buys a license gets a link in the order email and on the thank-you page that downloads Pro and adds the license to an account for 30 days, without an account.
+* Fix: Refunding or cancelling a renewal order removes the time it added, and refunding an upgrade order moves the license back to its previous plan, site limit and expiry, while partial refunds change nothing.
+* Fix: Renewal products can only be bought for a license in the buyer's account and never issue a new key.
+* Fix: Someone who knows a license key can no longer lock its connected sites out of validation and updates, and licenses on many sites no longer hit the rate limit when they update at once.
+* Change: Only local hosts and known staging hosts of hosting companies are free, so production sites on *.wpengine.com, *.kinsta.cloud or dev. subdomains use a seat, and the staging hosts can be edited in Licenses › Settings.
+* Fix: Release zips are stored under random file names, so they cannot be fetched directly even when the server ignores the .htaccess rule.
+* Fix: A Paddle event that happened after an order was linked to its subscription is applied instead of being skipped as out of date.
+* Fix: Connecting a site needs https unless it is a local development site.
+* Change: The activation log and Paddle events are deleted after 365 days (Licenses › Settings), uninstall also removes the plugin's user meta and lock options, and download links no longer contain the license key.
+* New: The [sfls_renewal_note] shortcode prints the renewal prices and discount from the yearly and renewal products, so the pricing page can no longer promise a discount the products do not give.
+* New: Issue license has an option to email the key to the customer, with a link to the license page and Pro download and the install steps.
+* Fix: The license CSV export reads activations in bulk, so 10,000 licenses export in a few seconds instead of timing out on large stores.
+* Fix: License API errors all carry valid, reason and error, and a missing key, a missing site or an unusable site_url each get their own message.
+* Fix: License-only orders get a completed email subject about the license instead of "Your order is on its way!", and a renewal or upgrade order page says the key stays the same.
+* Fix: Release sizes under 1 KB show whole bytes, such as 478 B.
+* Fix: The update check sends a bulleted changelog as a list, so the WordPress update screen shows list items instead of asterisks.
+* Fix: Renewal and trial reminders go out for every due license on the same day instead of stopping at 500 per run.
+* Fix: Pro downloads says Not available yet for a version without a package and Renew to download only when no license covers it, install steps mention the Download Pro button only where one is shown, and the account link shows an initial when the profile photo does not load.
 
 = 1.6.0 - 2026-10-14 =
 * New: Pro releases are stored in their own database table, with no limit on how many versions are kept. Each version has a channel (stable or beta), a status (draft, published or yanked), its size, SHA-256 checksum, requirements, changelog, source (upload, CI API, GitHub or WP-CLI), Git tag and commit, private notes and a download count. The releases from 1.5 are copied over automatically on the first request after updating.
