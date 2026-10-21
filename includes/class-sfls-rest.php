@@ -17,8 +17,9 @@
  * activate, validate, status, package and versions are limited per IP (30
  * requests per 10 minutes). Requests from a site the valid key is activated
  * on are also limited per key and site; every other request is checked
- * against a per-key budget of failed requests. Over a limit they answer 429
- * with Retry-After.
+ * against a budget of failed requests per key, address and site, and a
+ * high ceiling per key (see guarded()). Over a limit they answer 429 with
+ * Retry-After.
  *
  * @package SFLS
  */
@@ -501,24 +502,31 @@ final class SFLS_REST {
 	}
 
 	/**
-	 * Rate limits for activate, validate, status, package and versions.
+	 * Rate limits for activate, validate, status, package, versions and
+	 * branding.
 	 *
-	 * Every request counts against its IP. A request for a valid license
-	 * from a site it is activated on then only counts against that key and
-	 * site, so others who know the key can never lock that site out. Any
-	 * other request (unknown key, a site the key is not activated on, a
-	 * license that is not active) is checked against the key's failure
-	 * budget and, when it fails, counts towards it. The failure budget is the
-	 * limit times the number of sites the license is activated on (at least
-	 * one, at most its site limit), so a big license is not cut off sooner
-	 * than a small one.
+	 * Every request counts against its IP. Then, by what the request is:
+	 *
+	 * - A valid license asked by a site it is activated on counts only
+	 *   against that key and site.
+	 * - A valid license asked by a site that is not activated yet but could
+	 *   be (a free seat, or a local or staging site) is checked against the
+	 *   failure budget of its own address and site pair. Failures of other
+	 *   addresses and sites never block it, however many there are (LS-06).
+	 * - Any other request (unknown key, license not active, no free seat)
+	 *   is checked against the failure budget of its address and site pair
+	 *   and against a high ceiling for the key as a whole; failures count
+	 *   towards both. The ceiling is ten times the limit, times the number
+	 *   of sites the license is activated on (at least one, at most its site
+	 *   limit), so a big license is not cut off sooner than a small one.
 	 *
 	 * @param WP_REST_Request $req     Request.
 	 * @param callable        $handler Endpoint.
 	 * @return WP_REST_Response
 	 */
 	private function guarded( WP_REST_Request $req, callable $handler ) {
-		$limited = $this->rate_limit( 'ip', SFLS_Licenses::client_ip() );
+		$ip      = SFLS_Licenses::client_ip();
+		$limited = $this->rate_limit( 'ip', $ip );
 		if ( $limited ) {
 			return $limited;
 		}
@@ -528,21 +536,41 @@ final class SFLS_REST {
 		}
 		$domain = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site_url' ) );
 		$lic    = SFLS_Licenses::find_by_key( $key );
-		if ( $lic && '' !== $domain && SFLS_Licenses::state( $lic )['valid'] && SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
+		$valid  = $lic && '' !== $domain && SFLS_Licenses::state( $lic )['valid'];
+		if ( $valid && SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
 			$limited = $this->rate_limit( 'site', $key . '|' . $domain );
 			return $limited ? $limited : $handler( $req );
 		}
-		$scale   = $lic ? self::failure_scale( $lic ) : 1;
-		$limited = $this->rate_limit( 'key', $key, false, $scale );
+
+		$pair    = $key . '|' . $ip . '|' . $domain;
+		$limited = $this->rate_limit( 'pair', $pair, false );
 		if ( $limited ) {
 			return $limited;
 		}
+		// A site that can still be activated is not counted against the key.
+		$newcomer = $valid && ( SFLS_Licenses::has_free_slot( $lic ) || SFLS_Licenses::is_local_domain( $domain ) );
+		$scale    = $lic ? self::failure_scale( $lic ) * self::CEILING_FACTOR : self::CEILING_FACTOR;
+		if ( ! $newcomer ) {
+			$limited = $this->rate_limit( 'ceiling', $key, false, $scale );
+			if ( $limited ) {
+				return $limited;
+			}
+		}
 		$response = rest_ensure_response( $handler( $req ) );
 		if ( self::failed( $response ) ) {
-			$this->rate_limit( 'key', $key, true, $scale );
+			$this->rate_limit( 'pair', $pair, true );
+			if ( ! $newcomer ) {
+				$this->rate_limit( 'ceiling', $key, true, $scale );
+			}
 		}
 		return $response;
 	}
+
+	/**
+	 * How many times the per-pair limit the ceiling of failures for one key
+	 * is, before it is scaled by the sites of the license.
+	 */
+	const CEILING_FACTOR = 10;
 
 	/**
 	 * How many times the limit a license's failure budget is: the sites it
@@ -586,8 +614,8 @@ final class SFLS_REST {
 	 * `sfls_rate_limit_enabled` filter says otherwise, so development and
 	 * automated tests are not throttled.
 	 *
-	 * @param string $type  ip | key (failures of a key) | site (key and site).
-	 * @param string $value IP address, license key, or "key|domain".
+	 * @param string $type  ip | site (key and site) | pair (failures of key, address and site) | ceiling (failures of a key).
+	 * @param string $value IP address, "key|domain", "key|ip|domain" or license key.
 	 * @param bool   $count Count this request (false: only check).
 	 * @param int    $scale Multiplies the limit.
 	 */

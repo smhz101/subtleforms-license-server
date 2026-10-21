@@ -26,6 +26,9 @@ Private plugin for subtleforms.com. See README.md for setup.
 
 == Changelog ==
 
+= Unreleased =
+* Fix: A valid license key can activate a new site while it has free seats even after others sent failing requests for the key from other addresses and sites. Failures are now budgeted per key, address and site, with a separate high ceiling per key.
+
 = 1.7.0 - 2026-10-20 =
 * Change: License status and update checks also accept POST, so SubtleForms Pro 2.4.1 sends the license key in the request body instead of the address.
 * Fix: A Paddle purchase made with the email of an existing account is no longer linked to that account until its owner confirms the address.
