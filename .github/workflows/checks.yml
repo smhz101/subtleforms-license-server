@@ -103,6 +103,27 @@ jobs:
           ln -s "$GITHUB_WORKSPACE/plugin" "$WP_DIR/wp-content/plugins/subtleforms-license-server"
           out=$(wp plugin activate subtleforms-license-server --path="$WP_DIR" 2>&1) || fail "$out"
           wp plugin list --path="$WP_DIR"
+
+          # Site state the tests expect: pretty permalinks, the check payment
+          # method on, and the license products the Products wizard creates.
+          wp rewrite structure '/%postname%/' --path="$WP_DIR"
+          wp option update woocommerce_cheque_settings '{"enabled":"yes","title":"Check payments"}' --format=json --path="$WP_DIR"
+          cat > "$RUNNER_TEMP/seed.php" <<'PHP'
+          <?php
+          $rows = array();
+          foreach ( SFLS_Plans::all() as $plan => $def ) {
+              $rows[ $plan ] = array(
+                  'yearly'   => '59',
+                  'renewal'  => '39',
+                  'lifetime' => '199',
+                  'sites'    => (string) $def['sites'],
+              );
+          }
+          $result = SFLS_Products::save_wizard( $rows );
+          echo wp_json_encode( $result ), "\n";
+          PHP
+          out=$(wp eval-file "$RUNNER_TEMP/seed.php" --path="$WP_DIR" 2>&1) || fail "$out"
+          echo "$out"
           # Block outbound requests only now that WordPress.org downloads are done.
           wp config set WP_HTTP_BLOCK_EXTERNAL true --raw --path="$WP_DIR"
 
@@ -121,18 +142,18 @@ jobs:
             python3 - "$RUNNER_TEMP/junit.xml" "$RUNNER_TEMP/phpunit.log" <<'PY'
           import sys, xml.etree.ElementTree as ET
           n = 0
+          lines = []
           try:
               for tc in ET.parse(sys.argv[1]).iter('testcase'):
                   for kind in ('failure', 'error'):
                       for el in tc.findall(kind):
-                          if n < 25:
-                              first = ((el.text or el.get('type') or '').strip().splitlines() or [''])[0:3]
-                              print('::error::%s::%s %s' % (tc.get('class') or '', tc.get('name'), ' | '.join(first)))
+                          first = ((el.text or el.get('type') or '').strip().splitlines() or [''])[0:3]
+                          lines.append('%s::%s %s' % (tc.get('class') or '', tc.get('name'), ' | '.join(first)[:200]))
                           n += 1
           except Exception as e:
               print('::error::could not read junit: %s' % e)
               print('::error::' + ' | '.join(open(sys.argv[2]).read().strip().splitlines()[-6:]))
-          print('::error::%d failing tests' % n)
+          print('::error::%d failing tests%%0A%s' % (n, '%0A'.join(lines[:70])))
           PY
           fi
           exit $status
