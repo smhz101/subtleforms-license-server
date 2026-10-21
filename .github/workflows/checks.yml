@@ -90,7 +90,6 @@ jobs:
           wp config set WP_ENVIRONMENT_TYPE local --path="$WP_DIR"
           wp config set DISABLE_WP_CRON true --raw --path="$WP_DIR"
           wp config set AUTOMATIC_UPDATER_DISABLED true --raw --path="$WP_DIR"
-          wp config set WP_HTTP_BLOCK_EXTERNAL true --raw --path="$WP_DIR"
 
       - name: Install WordPress
         run: |
@@ -104,6 +103,8 @@ jobs:
           ln -s "$GITHUB_WORKSPACE/plugin" "$WP_DIR/wp-content/plugins/subtleforms-license-server"
           out=$(wp plugin activate subtleforms-license-server --path="$WP_DIR" 2>&1) || fail "$out"
           wp plugin list --path="$WP_DIR"
+          # Block outbound requests only now that WordPress.org downloads are done.
+          wp config set WP_HTTP_BLOCK_EXTERNAL true --raw --path="$WP_DIR"
 
       - name: PHPUnit (integration)
         working-directory: plugin
