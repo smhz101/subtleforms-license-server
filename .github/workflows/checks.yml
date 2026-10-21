@@ -106,6 +106,10 @@ jobs:
 
           # Site state the tests expect: pretty permalinks, the check payment
           # method on, and the license products the Products wizard creates.
+          # The suite was written against the classic order storage. A new
+          # WooCommerce defaults to HPOS, which rejects meta_query order lookups.
+          wp option update woocommerce_custom_orders_table_enabled no --path="$WP_DIR"
+          wp option update woocommerce_custom_orders_table_data_sync_enabled no --path="$WP_DIR"
           wp rewrite structure '/%postname%/' --path="$WP_DIR"
           wp option update woocommerce_cheque_settings '{"enabled":"yes","title":"Check payments"}' --format=json --path="$WP_DIR"
           cat > "$RUNNER_TEMP/seed.php" <<'PHP'
