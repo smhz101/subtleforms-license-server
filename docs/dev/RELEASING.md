@@ -1,6 +1,6 @@
 # Releasing SubtleForms License Server
 
-This repository has no GitHub Actions yet, so these rules are followed by hand. The release is one pull request, `release/<version>`, opened after every feature and fix pull request for that version is merged. It is the only pull request that touches `readme.txt`, the version files and `languages/subtleforms-license-server.pot`, so those files stop conflicting.
+The `Checks` workflow runs on every pull request (see `docs/dev/MERGING.md`); the rest of these rules are followed by hand. The release is one pull request, `release/<version>`, opened after every feature and fix pull request for that version is merged. It is the only pull request that touches `readme.txt`, the version files and `languages/subtleforms-license-server.pot`, so those files stop conflicting.
 
 ## Order
 
