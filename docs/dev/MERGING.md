@@ -13,6 +13,17 @@ A pull request is merged only when all of these are true:
 3. Every review comment (people, Codex, CodeRabbit) is either fixed on the
    branch or answered with the reason it is not a problem.
 4. No conflict markers anywhere: `git grep -nE '^(<<<<<<<|>>>>>>>)'` prints nothing.
+5. Feature and fix pull requests add one changelog fragment in
+   `docs/dev/changes/unreleased/` and do not edit `readme.txt`, the version
+   files or `languages/subtleforms-license-server.pot`. A stale POT does not
+   hold a feature pull request. A release pull request (`release/*`) must
+   have a current POT as its last commit.
+
+Release order: merge every feature and fix pull request first. Then one
+release pull request bumps the version, runs `bin/compile-changes.sh <version>
+--apply` (readme.txt block, release notes, fragments moved), regenerates the
+POT as its last step and is merged and tagged last. Commands:
+docs/dev/RELEASING.md.
 
 Merging is done with the merge button (or the API), never by pushing a local
 merge to the base branch. A release branch is merged into `main` only after the
