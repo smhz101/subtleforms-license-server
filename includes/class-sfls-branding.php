@@ -572,6 +572,18 @@ final class SFLS_Branding {
 	}
 
 	/**
+	 * Address to show a logo at inside the portal: an uploaded logo is served
+	 * with the scheme this site is on (clients always get the https address).
+	 *
+	 * @param string $url Logo address.
+	 */
+	public static function display_url( string $url ): string {
+		$uploads = wp_upload_dir( null, false );
+		$base    = set_url_scheme( trailingslashit( $uploads['baseurl'] ) . self::LOGO_DIR . '/', 'https' );
+		return str_starts_with( $url, $base ) ? set_url_scheme( $url ) : $url;
+	}
+
+	/**
 	 * Check an uploaded logo by its content and store it under a random name.
 	 * The type comes from the image itself, never from the file name or the
 	 * type the browser sent. PNG, JPEG, GIF and WebP are accepted, up to 1 MB.
