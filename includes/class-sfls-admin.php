@@ -530,6 +530,7 @@ final class SFLS_Admin {
 			echo '<p><a class="button-link" href="' . esc_url( $this->action_url( 'reset', $id ) ) . '" onclick="return confirm(\'' . esc_js( __( 'Remove every activation from this license?', 'subtleforms-license-server' ) ) . '\');">' . esc_html__( 'Deactivate all sites', 'subtleforms-license-server' ) . '</a></p>';
 		}
 		echo '</div>';
+		$this->branding_panel( $lic );
 		$this->activity_panel( $id );
 		echo '</div>';
 
@@ -542,6 +543,11 @@ final class SFLS_Admin {
 		$fmt = get_option( 'date_format' );
 		echo '<li><span>' . esc_html__( 'Created', 'subtleforms-license-server' ) . '</span><span>' . esc_html( wp_date( $fmt, strtotime( $lic['created_at'] . ' UTC' ) ) ) . '</span></li>';
 		echo '<li><span>' . esc_html__( 'Updated', 'subtleforms-license-server' ) . '</span><span>' . esc_html( wp_date( $fmt, strtotime( $lic['updated_at'] . ' UTC' ) ) ) . '</span></li>';
+		$branding_version = SFLS_Branding::version_for( $lic );
+		if ( $branding_version > 0 ) {
+			/* translators: %d: branding version */
+			echo '<li><span>' . esc_html__( 'Branding', 'subtleforms-license-server' ) . '</span><span><a href="#sfls-branding">' . esc_html( sprintf( __( 'Version %d', 'subtleforms-license-server' ), $branding_version ) ) . '</a></span></li>';
+		}
 		if ( $lic['order_id'] ) {
 			echo '<li><span>' . esc_html__( 'Order', 'subtleforms-license-server' ) . '</span><span><a href="' . esc_url( $this->order_url( (int) $lic['order_id'] ) ) . '">#' . esc_html( (string) $lic['order_id'] ) . '</a></span></li>';
 		}
@@ -615,6 +621,58 @@ final class SFLS_Admin {
 			echo '<p><a class="button-link" href="' . esc_url( $this->action_url( 'release_trial', (int) $lic['id'] ) ) . '" onclick="return confirm(\'' . esc_js( __( 'Let this customer, company and site start another free trial?', 'subtleforms-license-server' ) ) . '\');">' . esc_html__( 'Allow another trial', 'subtleforms-license-server' ) . '</a></p>';
 		}
 		echo '</div>';
+	}
+
+	/**
+	 * Branding of a license for support: the version clients are on, the
+	 * client sites that fetched it and the last ten revisions. The customer
+	 * changes it in My Account › Branding; nothing can be edited here.
+	 *
+	 * @param array $lic License.
+	 */
+	private function branding_panel( array $lic ): void {
+		$id    = (int) $lic['id'];
+		$state = SFLS_Branding::get( $id );
+		$fmt   = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+		$plan  = SFLS_Branding::plan_allows( $lic );
+		if ( ! $plan && ! $state ) {
+			return;
+		}
+		echo '<div class="sfls-panel" id="sfls-branding"><h2>' . esc_html__( 'Branding', 'subtleforms-license-server' ) . '</h2>';
+		if ( ! $plan ) {
+			echo '<p class="description">' . esc_html__( 'The plan of this license has no branding, so sites get the default SubtleForms branding. The saved branding is kept and applies again on an Agency plan.', 'subtleforms-license-server' ) . '</p>';
+		}
+		if ( ! $state ) {
+			echo '<p class="description">' . esc_html__( 'The customer has not saved any branding yet.', 'subtleforms-license-server' ) . '</p></div>';
+			return;
+		}
+		$by = $state['updated_by'] ? get_userdata( $state['updated_by'] ) : false;
+		echo '<ul class="sfls-meta-list">';
+		echo '<li><span>' . esc_html__( 'State', 'subtleforms-license-server' ) . '</span><span>' . esc_html( $state['enabled'] ? __( 'Live', 'subtleforms-license-server' ) : __( 'Removed', 'subtleforms-license-server' ) ) . '</span></li>';
+		echo '<li><span>' . esc_html__( 'Version', 'subtleforms-license-server' ) . '</span><span>' . esc_html( (string) $state['version'] ) . '</span></li>';
+		echo '<li><span>' . esc_html__( 'Changed', 'subtleforms-license-server' ) . '</span><span>' . esc_html( wp_date( $fmt, strtotime( $state['updated_at'] . ' UTC' ) ) . ( $by ? ' · ' . $by->display_name : '' ) ) . '</span></li>';
+		echo '</ul>';
+
+		$sites = array_filter( SFLS_Branding::client_sites( $id ), static fn( $site ) => null !== $site['fetched_at'] );
+		if ( $sites ) {
+			echo '<h3>' . esc_html__( 'Sites that fetched it', 'subtleforms-license-server' ) . '</h3><table class="widefat striped sfls-acts"><thead><tr><th>' . esc_html__( 'Site', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Version', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Fetched', 'subtleforms-license-server' ) . '</th></tr></thead><tbody>';
+			foreach ( $sites as $site ) {
+				echo '<tr><td><strong>' . esc_html( $site['domain'] ) . '</strong></td><td>' . esc_html( (string) $site['version'] ) . '</td><td>' . esc_html( wp_date( $fmt, strtotime( $site['fetched_at'] . ' UTC' ) ) ) . '</td></tr>';
+			}
+			echo '</tbody></table>';
+		}
+
+		$actions = array(
+			'save'    => __( 'Saved', 'subtleforms-license-server' ),
+			'restore' => __( 'Restored', 'subtleforms-license-server' ),
+			'reset'   => __( 'Removed', 'subtleforms-license-server' ),
+		);
+		echo '<h3>' . esc_html__( 'Revisions', 'subtleforms-license-server' ) . '</h3><table class="widefat striped sfls-acts"><thead><tr><th>' . esc_html__( 'Version', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Event', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Name', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'By', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Time', 'subtleforms-license-server' ) . '</th></tr></thead><tbody>';
+		foreach ( SFLS_Branding::revisions( $id ) as $rev ) {
+			$who = $rev['updated_by'] ? get_userdata( $rev['updated_by'] ) : false;
+			echo '<tr><td>' . esc_html( (string) $rev['version'] ) . '</td><td>' . esc_html( $actions[ $rev['action'] ] ?? $rev['action'] ) . '</td><td>' . esc_html( '' !== $rev['profile']['name'] ? $rev['profile']['name'] : '–' ) . '</td><td>' . esc_html( $who ? $who->display_name : '–' ) . '</td><td>' . esc_html( wp_date( $fmt, strtotime( $rev['updated_at'] . ' UTC' ) ) ) . '</td></tr>';
+		}
+		echo '</tbody></table></div>';
 	}
 
 	/**

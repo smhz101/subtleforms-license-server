@@ -10,15 +10,17 @@
  *   GET  /wp-json/sfls/v1/update/package      ?lid&ptoken&site_url[&channel][&version], or ?license_key&site_url (redirects to a fresh signed link)
  *   GET  /wp-json/sfls/v1/update/download     ?lid&site&expires&token&sig[&version] (15 minutes, single use)
  *   GET  /wp-json/sfls/v1/update/versions     ?license_key&site_url[&channel=beta] (versions this license may download)
+ *   POST /wp-json/sfls/v1/branding            { license_key, site_url[, version] } (white-label profile, Agency plan)
  *   POST /wp-json/sfls/v1/connect/exchange    { code, site_url }
  *
  * Every response is JSON except download. Errors use a 4xx status with
  * { error, reason }, which is what the Pro client maps to a license state.
- * activate, validate, status, package and versions are limited per IP (30
+ * activate, validate, status, package, versions and branding are limited per IP (30
  * requests per 10 minutes). Requests from a site the valid key is activated
  * on are also limited per key and site; every other request is checked
- * against a per-key budget of failed requests. Over a limit they answer 429
- * with Retry-After.
+ * against a budget of failed requests per key, address and site, and a
+ * high ceiling per key (see guarded()). Over a limit they answer 429 with
+ * Retry-After.
  *
  * @package SFLS
  */
@@ -53,6 +55,7 @@ final class SFLS_REST {
 		register_rest_route( self::NS, '/update/package', array( 'methods' => 'GET', 'callback' => array( $this, 'package' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/download', array( 'methods' => 'GET', 'callback' => array( $this, 'download' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/versions', array( 'methods' => 'GET', 'callback' => array( $this, 'versions' ), 'permission_callback' => $open ) );
+		register_rest_route( self::NS, '/branding', array( 'methods' => 'POST', 'callback' => array( $this, 'branding' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/connect/exchange', array( 'methods' => 'POST', 'callback' => array( $this, 'exchange' ), 'permission_callback' => $open ) );
 	}
 
@@ -123,7 +126,7 @@ final class SFLS_REST {
 					'reason'  => 'domain_not_activated',
 					'error'   => $text,
 					'message' => $text,
-				) + array_diff_key( $payload, array( 'valid' => 1, 'status' => 1 ) )
+				) + array_diff_key( self::with_data( $payload ), array( 'valid' => 1, 'status' => 1 ) )
 			);
 		}
 
@@ -133,7 +136,72 @@ final class SFLS_REST {
 			$payload['reason'] = $payload['status'];
 		}
 
-		return rest_ensure_response( $payload );
+		return rest_ensure_response( self::with_data( $payload ) );
+	}
+
+	/**
+	 * Add the `data` object that carries the branding version (1.8.0). The
+	 * flat field stays for Pro versions that read the license fields from the
+	 * top level of the answer.
+	 *
+	 * @param array $payload License payload.
+	 */
+	private static function with_data( array $payload ): array {
+		$payload['data'] = array( 'branding_version' => (int) ( $payload['branding_version'] ?? 0 ) );
+		return $payload;
+	}
+
+	/**
+	 * Branding endpoint: the white-label profile of the license (Agency
+	 * plan) for a site the key is activated on.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function branding( WP_REST_Request $req ) {
+		return $this->guarded( $req, array( $this, 'branding_now' ) );
+	}
+
+	/**
+	 * Branding endpoint after the rate limit. Answers like validate does for
+	 * a missing or unknown key, and refuses a license that is not active or a
+	 * site that is not activated with the same error shape. The site's
+	 * `version` is the one it applied last; when it is the current one the
+	 * answer has `unchanged` and no profile.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function branding_now( WP_REST_Request $req ) {
+		[ $lic, $domain, $error ] = $this->resolve( $req );
+		if ( $error ) {
+			return $error;
+		}
+		$sent = $req->get_param( 'version' );
+		if ( null !== $sent && '' !== $sent && ( is_bool( $sent ) || ! is_numeric( $sent ) || (float) $sent < 0 || (float) $sent !== (float) (int) $sent ) ) {
+			return $this->error( 400, 'invalid_version', __( 'version must be a whole number.', 'subtleforms-license-server' ) );
+		}
+		$sent  = null === $sent || '' === $sent ? null : (int) $sent;
+		$state = SFLS_Licenses::state( $lic );
+		if ( ! $state['valid'] ) {
+			return $this->error(
+				403,
+				$state['status'],
+				'expired' === $state['status']
+					? __( 'This license has expired. Renew it from your SubtleForms account.', 'subtleforms-license-server' )
+					: __( 'This license is not active. Contact SubtleForms support.', 'subtleforms-license-server' )
+			);
+		}
+		if ( ! SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
+			return $this->error( 403, 'domain_not_activated', __( 'This site is not activated for this license.', 'subtleforms-license-server' ) );
+		}
+		SFLS_Licenses::touch_activation( (int) $lic['id'], $domain );
+		return rest_ensure_response(
+			array(
+				'success' => true,
+				'data'    => SFLS_Branding::answer( $lic, $domain, sanitize_text_field( (string) $req->get_param( 'site_url' ) ), $sent ),
+			)
+		);
 	}
 
 	/**
@@ -501,24 +569,31 @@ final class SFLS_REST {
 	}
 
 	/**
-	 * Rate limits for activate, validate, status, package and versions.
+	 * Rate limits for activate, validate, status, package, versions and
+	 * branding.
 	 *
-	 * Every request counts against its IP. A request for a valid license
-	 * from a site it is activated on then only counts against that key and
-	 * site, so others who know the key can never lock that site out. Any
-	 * other request (unknown key, a site the key is not activated on, a
-	 * license that is not active) is checked against the key's failure
-	 * budget and, when it fails, counts towards it. The failure budget is the
-	 * limit times the number of sites the license is activated on (at least
-	 * one, at most its site limit), so a big license is not cut off sooner
-	 * than a small one.
+	 * Every request counts against its IP. Then, by what the request is:
+	 *
+	 * - A valid license asked by a site it is activated on counts only
+	 *   against that key and site.
+	 * - A valid license asked by a site that is not activated yet but could
+	 *   be (a free seat, or a local or staging site) is checked against the
+	 *   failure budget of its own address and site pair. Failures of other
+	 *   addresses and sites never block it, however many there are (LS-06).
+	 * - Any other request (unknown key, license not active, no free seat)
+	 *   is checked against the failure budget of its address and site pair
+	 *   and against a high ceiling for the key as a whole; failures count
+	 *   towards both. The ceiling is ten times the limit, times the number
+	 *   of sites the license is activated on (at least one, at most its site
+	 *   limit), so a big license is not cut off sooner than a small one.
 	 *
 	 * @param WP_REST_Request $req     Request.
 	 * @param callable        $handler Endpoint.
 	 * @return WP_REST_Response
 	 */
 	private function guarded( WP_REST_Request $req, callable $handler ) {
-		$limited = $this->rate_limit( 'ip', SFLS_Licenses::client_ip() );
+		$ip      = SFLS_Licenses::client_ip();
+		$limited = $this->rate_limit( 'ip', $ip );
 		if ( $limited ) {
 			return $limited;
 		}
@@ -528,21 +603,41 @@ final class SFLS_REST {
 		}
 		$domain = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site_url' ) );
 		$lic    = SFLS_Licenses::find_by_key( $key );
-		if ( $lic && '' !== $domain && SFLS_Licenses::state( $lic )['valid'] && SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
+		$valid  = $lic && '' !== $domain && SFLS_Licenses::state( $lic )['valid'];
+		if ( $valid && SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
 			$limited = $this->rate_limit( 'site', $key . '|' . $domain );
 			return $limited ? $limited : $handler( $req );
 		}
-		$scale   = $lic ? self::failure_scale( $lic ) : 1;
-		$limited = $this->rate_limit( 'key', $key, false, $scale );
+
+		$pair    = $key . '|' . $ip . '|' . $domain;
+		$limited = $this->rate_limit( 'pair', $pair, false );
 		if ( $limited ) {
 			return $limited;
 		}
+		// A site that can still be activated is not counted against the key.
+		$newcomer = $valid && ( SFLS_Licenses::has_free_slot( $lic ) || SFLS_Licenses::is_local_domain( $domain ) );
+		$scale    = $lic ? self::failure_scale( $lic ) * self::CEILING_FACTOR : self::CEILING_FACTOR;
+		if ( ! $newcomer ) {
+			$limited = $this->rate_limit( 'ceiling', $key, false, $scale );
+			if ( $limited ) {
+				return $limited;
+			}
+		}
 		$response = rest_ensure_response( $handler( $req ) );
 		if ( self::failed( $response ) ) {
-			$this->rate_limit( 'key', $key, true, $scale );
+			$this->rate_limit( 'pair', $pair, true );
+			if ( ! $newcomer ) {
+				$this->rate_limit( 'ceiling', $key, true, $scale );
+			}
 		}
 		return $response;
 	}
+
+	/**
+	 * How many times the per-pair limit the ceiling of failures for one key
+	 * is, before it is scaled by the sites of the license.
+	 */
+	const CEILING_FACTOR = 10;
 
 	/**
 	 * How many times the limit a license's failure budget is: the sites it
@@ -586,8 +681,8 @@ final class SFLS_REST {
 	 * `sfls_rate_limit_enabled` filter says otherwise, so development and
 	 * automated tests are not throttled.
 	 *
-	 * @param string $type  ip | key (failures of a key) | site (key and site).
-	 * @param string $value IP address, license key, or "key|domain".
+	 * @param string $type  ip | site (key and site) | pair (failures of key, address and site) | ceiling (failures of a key).
+	 * @param string $value IP address, "key|domain", "key|ip|domain" or license key.
 	 * @param bool   $count Count this request (false: only check).
 	 * @param int    $scale Multiplies the limit.
 	 */

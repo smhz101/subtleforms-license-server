@@ -1,7 +1,7 @@
 <?php
 /**
- * Members area: My Account › Licenses, My Account › Pro downloads and a
- * summary on the account dashboard.
+ * Members area: My Account › Licenses, My Account › Pro downloads, My Account
+ * › Branding (Agency plan) and a summary on the account dashboard.
  *
  * @package SFLS
  */
@@ -15,6 +15,7 @@ final class SFLS_Account {
 
 	const EP_LICENSES  = 'licenses';
 	const EP_DOWNLOADS = 'pro-downloads';
+	const EP_BRANDING  = 'branding';
 
 	/**
 	 * Hook in when WooCommerce is loaded.
@@ -35,12 +36,15 @@ final class SFLS_Account {
 		add_filter( 'woocommerce_account_menu_items', array( $this, 'menu_items' ) );
 		add_filter( 'woocommerce_endpoint_' . self::EP_LICENSES . '_title', array( $this, 'title_licenses' ) );
 		add_filter( 'woocommerce_endpoint_' . self::EP_DOWNLOADS . '_title', array( $this, 'title_downloads' ) );
+		add_filter( 'woocommerce_endpoint_' . self::EP_BRANDING . '_title', array( $this, 'title_branding' ) );
 		add_action( 'woocommerce_account_' . self::EP_LICENSES . '_endpoint', array( $this, 'licenses_page' ) );
 		add_action( 'woocommerce_account_' . self::EP_DOWNLOADS . '_endpoint', array( $this, 'downloads_page' ) );
+		add_action( 'woocommerce_account_' . self::EP_BRANDING . '_endpoint', array( $this, 'branding_page' ) );
 		add_action( 'woocommerce_account_dashboard', array( $this, 'dashboard' ) );
 		add_action( 'template_redirect', array( $this, 'handle_deactivate' ) );
 		add_action( 'template_redirect', array( $this, 'handle_download' ) );
 		add_action( 'template_redirect', array( $this, 'handle_billing' ) );
+		add_action( 'template_redirect', array( $this, 'handle_branding' ) );
 	}
 
 	/**
@@ -52,6 +56,7 @@ final class SFLS_Account {
 	public function query_vars( $vars ) {
 		$vars[ self::EP_LICENSES ]  = self::EP_LICENSES;
 		$vars[ self::EP_DOWNLOADS ] = self::EP_DOWNLOADS;
+		$vars[ self::EP_BRANDING ]  = self::EP_BRANDING;
 		return $vars;
 	}
 
@@ -65,12 +70,17 @@ final class SFLS_Account {
 		if ( SFLS_Settings::simplify_account() && is_user_logged_in() && self::license_only_customer( get_current_user_id() ) ) {
 			unset( $items['edit-address'], $items['downloads'] );
 		}
-		$new = array();
+		// Branding is for customers with an active license whose plan includes it.
+		$branding = is_user_logged_in() && SFLS_Branding::eligible_licenses( wp_get_current_user() );
+		$new      = array();
 		foreach ( $items as $key => $label ) {
 			$new[ $key ] = $label;
 			if ( 'orders' === $key ) {
 				$new[ self::EP_LICENSES ]  = __( 'Licenses', 'subtleforms-license-server' );
 				$new[ self::EP_DOWNLOADS ] = __( 'Pro downloads', 'subtleforms-license-server' );
+				if ( $branding ) {
+					$new[ self::EP_BRANDING ] = __( 'Branding', 'subtleforms-license-server' );
+				}
 			}
 		}
 		if ( ! isset( $new[ self::EP_LICENSES ] ) ) {
@@ -78,6 +88,9 @@ final class SFLS_Account {
 			unset( $new['customer-logout'] );
 			$new[ self::EP_LICENSES ]  = __( 'Licenses', 'subtleforms-license-server' );
 			$new[ self::EP_DOWNLOADS ] = __( 'Pro downloads', 'subtleforms-license-server' );
+			if ( $branding ) {
+				$new[ self::EP_BRANDING ] = __( 'Branding', 'subtleforms-license-server' );
+			}
 			if ( $logout ) {
 				$new['customer-logout'] = $logout;
 			}
@@ -97,6 +110,13 @@ final class SFLS_Account {
 	 */
 	public function title_downloads(): string {
 		return __( 'Pro downloads', 'subtleforms-license-server' );
+	}
+
+	/**
+	 * Branding endpoint title.
+	 */
+	public function title_branding(): string {
+		return __( 'Branding', 'subtleforms-license-server' );
 	}
 
 	// ── Helpers ─────────────────────────────────────────────────────────
@@ -812,6 +832,381 @@ final class SFLS_Account {
 			exit;
 		}
 		wp_safe_redirect( SFLS_Releases::signed_url( $lic['license_key'], 'account', $release['version'] ) );
+		exit;
+	}
+
+	// ── Branding ────────────────────────────────────────────────────────
+
+	/**
+	 * Address of the branding screen for a license.
+	 *
+	 * @param int $license_id License ID (0 for the default).
+	 */
+	public static function branding_url( int $license_id = 0 ): string {
+		$url = wc_get_account_endpoint_url( self::EP_BRANDING );
+		return $license_id > 0 ? add_query_arg( 'license', $license_id, $url ) : $url;
+	}
+
+	/**
+	 * Short-lived storage for what a customer typed when saving failed, so
+	 * the form is filled in again.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	private static function draft_key( int $user_id ): string {
+		return 'sfls_branding_draft_' . $user_id;
+	}
+
+	/**
+	 * My Account › Branding.
+	 */
+	public function branding_page(): void {
+		SFLS_Assets::enqueue();
+		wp_enqueue_script( 'sfls-branding', SFLS_URL . 'assets/js/sfls-branding.js', array(), SFLS_VERSION, true );
+		$user     = wp_get_current_user();
+		$eligible = SFLS_Branding::eligible_licenses( $user );
+
+		echo '<div class="sfls sfls-account sfls-branding">';
+		if ( ! $eligible ) {
+			$owned = SFLS_Licenses::for_user( $user );
+			echo '<div class="sfls-card sfls-empty-card"><h3>' . esc_html__( 'Branding is part of the Agency plan', 'subtleforms-license-server' ) . '</h3>';
+			echo '<p>' . esc_html(
+				$owned
+					? __( 'With an active Agency license you can set your own plugin name, logo and links once, and every client site that uses your key shows them.', 'subtleforms-license-server' )
+					: __( 'Buy an Agency license to set your own plugin name, logo and links once and show them on every client site.', 'subtleforms-license-server' )
+			) . '</p>';
+			echo '<p><a class="sfls-btn sfls-btn--primary" href="' . esc_url( $owned ? wc_get_account_endpoint_url( self::EP_LICENSES ) : SFLS_Settings::pricing_url() ) . '">' . esc_html( $owned ? __( 'Go to licenses', 'subtleforms-license-server' ) : __( 'See plans', 'subtleforms-license-server' ) ) . '</a></p></div></div>';
+			return;
+		}
+
+		$wanted = absint( $_GET['license'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Only picks which of the customer's own licenses to show.
+		$lic    = $eligible[0];
+		foreach ( $eligible as $candidate ) {
+			if ( (int) $candidate['id'] === $wanted ) {
+				$lic = $candidate;
+			}
+		}
+		$id    = (int) $lic['id'];
+		$state = SFLS_Branding::get( $id );
+		$draft = get_transient( self::draft_key( $user->ID ) );
+		delete_transient( self::draft_key( $user->ID ) );
+		$draft = is_array( $draft ) && (int) ( $draft['license_id'] ?? 0 ) === $id ? $draft['input'] : null;
+
+		echo '<p class="sfls-intro">' . esc_html__( 'Set the name, logo and links your clients see in SubtleForms. Every site that uses this license key applies them, usually within a day.', 'subtleforms-license-server' ) . '</p>';
+
+		if ( count( $eligible ) > 1 ) {
+			echo '<nav class="sfls-license-switch" aria-label="' . esc_attr__( 'Choose a license', 'subtleforms-license-server' ) . '"><span class="sfls-muted">' . esc_html__( 'License', 'subtleforms-license-server' ) . '</span><ul>';
+			foreach ( $eligible as $candidate ) {
+				$label = SFLS_Plans::label( $candidate['plan'] ) . ' · ' . SFLS_Licenses::mask_key( $candidate['license_key'] );
+				echo '<li><a href="' . esc_url( self::branding_url( (int) $candidate['id'] ) ) . '"' . ( (int) $candidate['id'] === $id ? ' class="is-current" aria-current="page"' : '' ) . '>' . esc_html( $label ) . '</a></li>';
+			}
+			echo '</ul></nav>';
+		}
+
+		$profile = $draft ? SFLS_Branding::validate( $draft )['profile'] : ( $state ? $state['profile'] : SFLS_Branding::empty_profile() );
+		if ( $draft && $state && '' !== $state['logo_file'] ) {
+			$profile['logo_url'] = '';
+		}
+		$logo_now = $state ? SFLS_Branding::display_url( $state['profile']['logo_url'] ) : '';
+
+		$saved = $state ? $state['profile'] : SFLS_Branding::empty_profile();
+		$saved['logo_url'] = SFLS_Branding::display_url( $saved['logo_url'] );
+		$this->branding_preview( $saved, $state );
+		$this->branding_form( $lic, $profile, $state, $logo_now );
+		$this->branding_sites( $lic, $state );
+		$this->branding_revisions( $lic, $state );
+		echo '</div>';
+	}
+
+	/**
+	 * Preview of the plugin header, menu entry and Plugins screen row, from
+	 * the saved branding. A little script updates it while the form is edited.
+	 *
+	 * @param array      $profile Saved profile.
+	 * @param array|null $state   Stored state.
+	 */
+	private function branding_preview( array $profile, ?array $state ): void {
+		$name = '' !== $profile['name'] ? $profile['name'] : 'SubtleForms';
+		$menu = '' !== $profile['menu_name'] ? $profile['menu_name'] : $name;
+		$live = $state && $state['enabled'];
+
+		echo '<article class="sfls-card sfls-bp" data-default-name="SubtleForms" data-default-description="' . esc_attr__( 'A calm, fast form builder for WordPress.', 'subtleforms-license-server' ) . '">';
+		echo '<header class="sfls-bp-title"><h3>' . esc_html__( 'Preview', 'subtleforms-license-server' ) . '</h3>';
+		if ( $live ) {
+			/* translators: %d: branding version */
+			echo '<span class="sfls-tag sfls-tag--live">' . esc_html( sprintf( __( 'Live, version %d', 'subtleforms-license-server' ), $state['version'] ) ) . '</span>';
+		} else {
+			echo '<span class="sfls-tag">' . esc_html__( 'Not set, sites show SubtleForms', 'subtleforms-license-server' ) . '</span>';
+		}
+		echo '</header>';
+		echo '<p class="sfls-muted">' . esc_html__( 'This is how the saved branding looks on a client site. It updates as you type, and goes live when you save.', 'subtleforms-license-server' ) . '</p>';
+		echo '<div class="sfls-bp-grid">';
+
+		echo '<div class="sfls-bp-block"><span class="sfls-bp-label">' . esc_html__( 'App header', 'subtleforms-license-server' ) . '</span><div class="sfls-bp-header">';
+		echo '<span class="sfls-bp-logo" data-sfls-bp="logo">' . ( '' !== $profile['logo_url'] ? '<img src="' . esc_url( $profile['logo_url'] ) . '" alt="">' : '<span class="sfls-bp-mark" aria-hidden="true">S</span>' ) . '</span>';
+		echo '<strong class="sfls-bp-name" data-sfls-bp="name">' . esc_html( $name ) . '</strong></div></div>';
+
+		echo '<div class="sfls-bp-block"><span class="sfls-bp-label">' . esc_html__( 'Admin menu entry', 'subtleforms-license-server' ) . '</span><div class="sfls-bp-menu"><span class="sfls-bp-menu-item"><span class="sfls-bp-dot" aria-hidden="true"></span><span data-sfls-bp="menu">' . esc_html( $menu ) . '</span></span></div></div>';
+
+		echo '<div class="sfls-bp-block sfls-bp-block--wide"><span class="sfls-bp-label">' . esc_html__( 'Plugins screen', 'subtleforms-license-server' ) . '</span><div class="sfls-bp-plugin"><strong data-sfls-bp="name">' . esc_html( $name ) . '</strong>';
+		$by = '' !== $profile['author'] ? $profile['author'] : 'SubtleForms';
+		echo '<p data-sfls-bp="description">' . esc_html( '' !== $profile['description'] ? $profile['description'] : __( 'A calm, fast form builder for WordPress.', 'subtleforms-license-server' ) ) . '</p>';
+		echo '<span class="sfls-muted">' . esc_html__( 'By', 'subtleforms-license-server' ) . ' <span data-sfls-bp="author">' . esc_html( $by ) . '</span></span></div></div>';
+
+		echo '</div></article>';
+	}
+
+	/**
+	 * The branding form.
+	 *
+	 * @param array      $lic      License.
+	 * @param array      $profile  Values to show.
+	 * @param array|null $state    Stored state.
+	 * @param string     $logo_now Address of the saved logo.
+	 */
+	private function branding_form( array $lic, array $profile, ?array $state, string $logo_now ): void {
+		$id       = (int) $lic['id'];
+		$uploaded = $state && '' !== $state['logo_file'];
+		$limits   = SFLS_Branding::TEXT_FIELDS;
+		$field    = static function ( string $key, string $label, string $hint, string $type = 'text', string $extra = '' ) use ( $profile, $limits ): void {
+			$max = $limits[ $key ] ?? SFLS_Branding::URL_FIELDS[ $key ] ?? 0;
+			echo '<div class="sfls-field"><label for="sfls-b-' . esc_attr( $key ) . '">' . esc_html( $label ) . '</label>';
+			echo '<input type="' . esc_attr( $type ) . '" id="sfls-b-' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '" value="' . esc_attr( (string) $profile[ $key ] ) . '"' . ( $max ? ' maxlength="' . (int) $max . '"' : '' ) . ' ' . $extra . '>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Fixed attributes from this file.
+			echo '<span class="sfls-hint">' . esc_html( $hint ) . '</span></div>';
+		};
+
+		echo '<form method="post" class="sfls-card sfls-bform" enctype="multipart/form-data" action="' . esc_url( self::branding_url( $id ) ) . '">';
+		wp_nonce_field( 'sfls_branding_' . $id, '_sfls_branding_nonce', false );
+		echo '<input type="hidden" name="sfls_branding" value="save"><input type="hidden" name="license_id" value="' . esc_attr( (string) $id ) . '">';
+		echo '<h3>' . esc_html__( 'Branding', 'subtleforms-license-server' ) . '</h3>';
+
+		echo '<div class="sfls-form-grid">';
+		$field( 'name', __( 'Plugin name', 'subtleforms-license-server' ), __( 'Shown in the app header and wherever the plugin is named. Empty means SubtleForms. Up to 60 characters.', 'subtleforms-license-server' ), 'text', 'data-sfls-bind="name" placeholder="SubtleForms"' );
+		$field( 'menu_name', __( 'Menu name', 'subtleforms-license-server' ), __( 'The name in the WordPress admin menu. Empty uses the plugin name. Up to 40 characters.', 'subtleforms-license-server' ), 'text', 'data-sfls-bind="menu"' );
+		echo '</div>';
+
+		echo '<fieldset class="sfls-field sfls-logo-field"><legend>' . esc_html__( 'Logo', 'subtleforms-license-server' ) . '</legend>';
+		if ( '' !== $logo_now ) {
+			echo '<div class="sfls-logo-current"><img src="' . esc_url( $logo_now ) . '" alt="" class="sfls-logo-thumb"><label class="sfls-check"><input type="checkbox" name="remove_logo" value="1"> ' . esc_html__( 'Remove the current logo', 'subtleforms-license-server' ) . '</label></div>';
+		}
+		echo '<label class="sfls-sublabel" for="sfls-b-logo">' . esc_html__( 'Upload a logo', 'subtleforms-license-server' ) . '</label>';
+		echo '<input type="file" id="sfls-b-logo" name="logo" accept="image/png,image/jpeg,image/gif,image/webp" data-sfls-bind="logo-file">';
+		echo '<span class="sfls-hint">' . esc_html__( 'PNG, JPEG, GIF or WebP, up to 1 MB. A square image of at least 64 by 64 pixels works best.', 'subtleforms-license-server' ) . '</span>';
+		echo '<label class="sfls-sublabel" for="sfls-b-logo_url">' . esc_html__( 'Or use the https address of an image', 'subtleforms-license-server' ) . '</label>';
+		echo '<input type="url" id="sfls-b-logo_url" name="logo_url" value="' . esc_attr( $uploaded ? '' : (string) $profile['logo_url'] ) . '" maxlength="500" placeholder="https://" data-sfls-bind="logo-url">';
+		echo '<span class="sfls-hint">' . esc_html__( 'An uploaded file wins over an address. PNG, JPG, GIF, WebP or SVG.', 'subtleforms-license-server' ) . '</span></fieldset>';
+
+		echo '<div class="sfls-form-grid">';
+		$field( 'support_url', __( 'Support address', 'subtleforms-license-server' ), __( 'Where "Get support" goes on your clients\' sites. Empty uses the SubtleForms support page.', 'subtleforms-license-server' ), 'url', 'placeholder="https://"' );
+		echo '</div>';
+
+		echo '<div class="sfls-field"><label class="sfls-check"><input type="checkbox" name="hide_credits" value="1"' . checked( $profile['hide_credits'], true, false ) . '> ' . esc_html__( 'Hide SubtleForms credits, help links and upgrade prompts', 'subtleforms-license-server' ) . '</label></div>';
+		echo '<div class="sfls-field"><label class="sfls-check"><input type="checkbox" name="restrict_screens" value="1"' . checked( $profile['restrict_screens'], true, false ) . '> ' . esc_html__( 'Limit the License screen to the admin who activated the license on the client site', 'subtleforms-license-server' ) . '</label></div>';
+
+		echo '<h4 class="sfls-form-subhead">' . esc_html__( 'Plugins screen', 'subtleforms-license-server' ) . '</h4>';
+		echo '<div class="sfls-form-grid">';
+		$field( 'author', __( 'Author', 'subtleforms-license-server' ), __( 'Shown on the Plugins screen rows for SubtleForms and SubtleForms Pro. Up to 60 characters.', 'subtleforms-license-server' ), 'text', 'data-sfls-bind="author"' );
+		$field( 'author_url', __( 'Author address', 'subtleforms-license-server' ), __( 'Links the author name. http or https.', 'subtleforms-license-server' ), 'url', 'placeholder="https://"' );
+		echo '</div>';
+		echo '<div class="sfls-field"><label for="sfls-b-description">' . esc_html__( 'Description', 'subtleforms-license-server' ) . '</label><textarea id="sfls-b-description" name="description" rows="3" maxlength="200" data-sfls-bind="description">' . esc_textarea( (string) $profile['description'] ) . '</textarea><span class="sfls-hint">' . esc_html__( 'Up to 200 characters.', 'subtleforms-license-server' ) . '</span></div>';
+
+		echo '<div class="sfls-form-actions"><button type="submit" class="sfls-btn sfls-btn--primary">' . esc_html__( 'Save branding', 'subtleforms-license-server' ) . '</button>';
+		echo '<span class="sfls-muted">' . esc_html__( 'Saving publishes a new version. Connected sites pick it up on their next check.', 'subtleforms-license-server' ) . '</span></div>';
+		echo '</form>';
+
+		if ( $state && $state['enabled'] ) {
+			echo '<form method="post" class="sfls-inline-form sfls-reset-form" action="' . esc_url( self::branding_url( $id ) ) . '">';
+			wp_nonce_field( 'sfls_branding_' . $id, '_sfls_branding_nonce', false );
+			echo '<input type="hidden" name="sfls_branding" value="reset"><input type="hidden" name="license_id" value="' . esc_attr( (string) $id ) . '">';
+			echo '<button type="submit" class="sfls-btn sfls-btn--ghost sfls-btn--sm sfls-btn--danger" data-sfls-confirm="' . esc_attr__( 'Remove your branding? Your clients\' sites go back to the SubtleForms name and logo. You can restore it from the list of versions.', 'subtleforms-license-server' ) . '">' . esc_html__( 'Remove branding', 'subtleforms-license-server' ) . '</button></form>';
+		}
+	}
+
+	/**
+	 * Client sites and the branding version each last fetched.
+	 *
+	 * @param array      $lic   License.
+	 * @param array|null $state Stored state.
+	 */
+	private function branding_sites( array $lic, ?array $state ): void {
+		$sites   = SFLS_Branding::client_sites( (int) $lic['id'] );
+		$current = $state ? $state['version'] : 0;
+		echo '<article class="sfls-card sfls-bsites"><h3>' . esc_html__( 'Client sites', 'subtleforms-license-server' ) . '</h3>';
+		if ( ! $sites ) {
+			echo '<p class="sfls-muted">' . esc_html__( 'No sites use this license yet. Sites appear here after they fetch your branding.', 'subtleforms-license-server' ) . '</p></article>';
+			return;
+		}
+		echo '<ul class="sfls-site-list">';
+		foreach ( $sites as $site ) {
+			echo '<li class="sfls-site"><span class="sfls-site-icon">';
+			self::print_icon( 'globe' );
+			echo '</span><span class="sfls-site-main"><span class="sfls-site-domain">' . esc_html( $site['domain'] ) . '</span><span class="sfls-site-meta">';
+			if ( null === $site['fetched_at'] ) {
+				echo esc_html__( 'Has not fetched the branding yet', 'subtleforms-license-server' );
+			} else {
+				echo esc_html(
+					sprintf(
+						/* translators: 1: branding version, 2: human time difference */
+						__( 'Version %1$d, fetched %2$s ago', 'subtleforms-license-server' ),
+						$site['version'],
+						human_time_diff( strtotime( $site['fetched_at'] . ' UTC' ), time() )
+					)
+				);
+			}
+			echo '</span></span>';
+			if ( null !== $site['fetched_at'] && $current > 0 ) {
+				echo $site['version'] === $current
+					? '<span class="sfls-tag sfls-tag--live">' . esc_html__( 'Up to date', 'subtleforms-license-server' ) . '</span>'
+					: '<span class="sfls-tag">' . esc_html__( 'Update pending', 'subtleforms-license-server' ) . '</span>';
+			}
+			echo '</li>';
+		}
+		echo '</ul></article>';
+	}
+
+	/**
+	 * Earlier versions with a Restore button.
+	 *
+	 * @param array      $lic   License.
+	 * @param array|null $state Stored state.
+	 */
+	private function branding_revisions( array $lic, ?array $state ): void {
+		$id        = (int) $lic['id'];
+		$revisions = SFLS_Branding::revisions( $id );
+		if ( ! $revisions ) {
+			return;
+		}
+		$actions = array(
+			'save'    => __( 'Saved', 'subtleforms-license-server' ),
+			'restore' => __( 'Restored', 'subtleforms-license-server' ),
+			'reset'   => __( 'Removed', 'subtleforms-license-server' ),
+		);
+		$fmt     = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+		echo '<article class="sfls-card sfls-brevisions"><h3>' . esc_html__( 'Versions', 'subtleforms-license-server' ) . '</h3>';
+		/* translators: %d: number of versions kept */
+		echo '<p class="sfls-muted">' . esc_html( sprintf( __( 'The last %d versions are kept. Restoring one publishes it as a new version.', 'subtleforms-license-server' ), SFLS_Branding::MAX_REVISIONS ) ) . '</p>';
+		echo '<ul class="sfls-version-list">';
+		foreach ( $revisions as $rev ) {
+			$user    = $rev['updated_by'] ? get_userdata( $rev['updated_by'] ) : false;
+			$is_now  = $state && $rev['version'] === $state['version'];
+			$summary = 'reset' === $rev['action'] ? __( 'Default SubtleForms branding', 'subtleforms-license-server' ) : ( '' !== $rev['profile']['name'] ? $rev['profile']['name'] : 'SubtleForms' );
+			echo '<li class="sfls-version-row"><div class="sfls-version-main"><span class="sfls-version">' . esc_html( sprintf( /* translators: %d: version */ __( 'Version %d', 'subtleforms-license-server' ), $rev['version'] ) ) . '</span>';
+			if ( $is_now ) {
+				echo '<span class="sfls-tag sfls-tag--live">' . esc_html__( 'Current', 'subtleforms-license-server' ) . '</span>';
+			}
+			echo '<span class="sfls-muted">' . esc_html( $summary . ' · ' . ( $actions[ $rev['action'] ] ?? $rev['action'] ) . ( $user ? ' · ' . $user->display_name : '' ) . ' · ' . wp_date( $fmt, strtotime( $rev['updated_at'] . ' UTC' ) ) ) . '</span></div>';
+			if ( ! $is_now ) {
+				echo '<form method="post" class="sfls-inline-form" action="' . esc_url( self::branding_url( $id ) ) . '">';
+				wp_nonce_field( 'sfls_branding_' . $id, '_sfls_branding_nonce', false );
+				echo '<input type="hidden" name="sfls_branding" value="restore"><input type="hidden" name="license_id" value="' . esc_attr( (string) $id ) . '"><input type="hidden" name="revision_id" value="' . esc_attr( (string) $rev['id'] ) . '">';
+				echo '<button type="submit" class="sfls-btn sfls-btn--secondary sfls-btn--sm" data-sfls-confirm="' . esc_attr( sprintf( /* translators: %d: version */ __( 'Restore version %d? It is published as a new version.', 'subtleforms-license-server' ), $rev['version'] ) ) . '">' . esc_html__( 'Restore', 'subtleforms-license-server' ) . '</button></form>';
+			}
+			echo '</li>';
+		}
+		echo '</ul></article>';
+	}
+
+	/**
+	 * Save, restore and remove on My Account › Branding. Every action needs
+	 * the nonce of its license, a signed-in customer who owns that license,
+	 * and a license that is active on a plan with branding.
+	 */
+	public function handle_branding(): void {
+		if ( empty( $_POST['sfls_branding'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Checked below.
+			return;
+		}
+		$back = self::branding_url();
+		if ( ! is_user_logged_in() || ! current_user_can( 'read' ) ) {
+			wp_safe_redirect( wc_get_page_permalink( 'myaccount' ) );
+			exit;
+		}
+		$id    = absint( $_POST['license_id'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Checked next.
+		$nonce = sanitize_text_field( wp_unslash( $_POST['_sfls_branding_nonce'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- This is the nonce.
+		if ( ! wp_verify_nonce( $nonce, 'sfls_branding_' . $id ) ) {
+			wc_add_notice( __( 'Your session expired. Try again.', 'subtleforms-license-server' ), 'error' );
+			wp_safe_redirect( $back );
+			exit;
+		}
+		$user = wp_get_current_user();
+		$lic  = SFLS_Licenses::find( $id );
+		if ( ! $lic || ! SFLS_Licenses::user_owns( $lic, $user ) ) {
+			wc_add_notice( __( 'That license was not found in your account.', 'subtleforms-license-server' ), 'error' );
+			wp_safe_redirect( $back );
+			exit;
+		}
+		$back = self::branding_url( $id );
+		if ( ! SFLS_Branding::can_manage( $lic, $user ) ) {
+			wc_add_notice( __( 'Branding needs an active Agency license.', 'subtleforms-license-server' ), 'error' );
+			wp_safe_redirect( $back );
+			exit;
+		}
+
+		$do     = sanitize_key( wp_unslash( $_POST['sfls_branding'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$result = null;
+		switch ( $do ) {
+			case 'save':
+				$input = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Validated field by field in SFLS_Branding::validate().
+				$logo  = array( 'remove' => ! empty( $input['remove_logo'] ) );
+				if ( isset( $_FILES['logo'] ) && is_array( $_FILES['logo'] ) ) {
+					$logo['file'] = array(
+						'tmp_name' => (string) ( $_FILES['logo']['tmp_name'] ?? '' ), // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput -- A path PHP made; the content is checked in store_logo().
+						'error'    => (int) ( $_FILES['logo']['error'] ?? UPLOAD_ERR_NO_FILE ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+					);
+				}
+				$result = SFLS_Branding::save( $lic, is_array( $input ) ? $input : array(), $user->ID, $logo );
+				if ( is_wp_error( $result ) ) {
+					set_transient(
+						self::draft_key( $user->ID ),
+						array(
+							'license_id' => $id,
+							'input'      => array_diff_key( is_array( $input ) ? $input : array(), array( '_sfls_branding_nonce' => 1 ) ),
+						),
+						10 * MINUTE_IN_SECONDS
+					);
+					$fields = (array) ( $result->get_error_data()['fields'] ?? array() );
+					foreach ( $fields ? $fields : array( $result->get_error_message() ) as $message ) {
+						wc_add_notice( (string) $message, 'error' );
+					}
+					wp_safe_redirect( $back );
+					exit;
+				}
+				wc_add_notice(
+					sprintf(
+						/* translators: %d: branding version */
+						__( 'Branding saved as version %d. Connected sites pick it up on their next check.', 'subtleforms-license-server' ),
+						$result['version']
+					)
+				);
+				break;
+			case 'restore':
+				$restored = SFLS_Branding::restore( $lic, absint( $_POST['revision_id'] ?? 0 ), $user->ID ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				if ( is_wp_error( $restored ) ) {
+					wc_add_notice( $restored->get_error_message(), 'error' );
+					break;
+				}
+				wc_add_notice(
+					sprintf(
+						/* translators: %d: branding version */
+						__( 'Restored and published as version %d.', 'subtleforms-license-server' ),
+						$restored['state']['version']
+					)
+				);
+				if ( $restored['logo_lost'] ) {
+					wc_add_notice( __( 'The logo file for this version is no longer available; upload it again.', 'subtleforms-license-server' ), 'notice' );
+				}
+				break;
+			case 'reset':
+				$state = SFLS_Branding::reset( $lic, $user->ID );
+				wc_add_notice(
+					sprintf(
+						/* translators: %d: branding version */
+						__( 'Branding removed (version %d). Your clients\' sites show the SubtleForms name and logo again.', 'subtleforms-license-server' ),
+						$state['version']
+					)
+				);
+				break;
+		}
+		wp_safe_redirect( $back );
 		exit;
 	}
 

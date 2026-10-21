@@ -26,6 +26,13 @@ Private plugin for subtleforms.com. See README.md for setup.
 
 == Changelog ==
 
+= Unreleased =
+* New: My Account > Branding lets a customer with an active Agency license set the plugin name, menu name, logo, support address, credits, License screen restriction and Plugins screen details once for all client sites, with a live preview, the client sites and the version each fetched, and the last ten versions with Restore.
+* New: The license screen in wp-admin shows the branding version, the client sites that fetched it and its revisions for support.
+* New: Branding is stored per license (profile, version and the last ten revisions), and sites fetch it with POST /sfls/v1/branding. License validation and status answers include branding_version so a site learns about changes in its daily check.
+* New: The plan table lists "MCP server for AI assistants" with the items every Pro plan includes, and the Agency plan mentions the branding portal for clients' sites.
+* Fix: A valid license key can activate a new site while it has free seats even after others sent failing requests for the key from other addresses and sites. Failures are now budgeted per key, address and site, with a separate high ceiling per key.
+
 = 1.7.0 - 2026-10-20 =
 * Change: License status and update checks also accept POST, so SubtleForms Pro 2.4.1 sends the license key in the request body instead of the address.
 * Fix: A Paddle purchase made with the email of an existing account is no longer linked to that account until its owner confirms the address.

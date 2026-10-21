@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-19T17:33:34+00:00\n"
+"POT-Creation-Date: 2026-10-21T13:40:31+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: subtleforms-license-server\n"
@@ -35,313 +35,326 @@ msgstr ""
 msgid "SubtleForms"
 msgstr ""
 
-#: includes/class-sfls-account.php:72
 #: includes/class-sfls-account.php:79
-#: includes/class-sfls-account.php:92
+#: includes/class-sfls-account.php:89
+#: includes/class-sfls-account.php:105
 #: includes/class-sfls-admin.php:57
 #: includes/class-sfls-admin.php:252
 msgid "Licenses"
 msgstr ""
 
-#: includes/class-sfls-account.php:73
 #: includes/class-sfls-account.php:80
-#: includes/class-sfls-account.php:99
+#: includes/class-sfls-account.php:90
+#: includes/class-sfls-account.php:112
 msgid "Pro downloads"
 msgstr ""
 
-#: includes/class-sfls-account.php:173
+#. translators: %d: branding version
+#: includes/class-sfls-account.php:82
+#: includes/class-sfls-account.php:92
+#: includes/class-sfls-account.php:119
+#: includes/class-sfls-account.php:981
+#: includes/class-sfls-admin.php:549
+#: includes/class-sfls-admin.php:641
+msgid "Branding"
+msgstr ""
+
+#: includes/class-sfls-account.php:193
 msgid "Coming soon"
 msgstr ""
 
-#: includes/class-sfls-account.php:257
+#: includes/class-sfls-account.php:277
 msgid "No licenses yet"
 msgstr ""
 
-#: includes/class-sfls-account.php:257
+#: includes/class-sfls-account.php:277
 msgid "Buy SubtleForms Pro and your license key shows up here, ready to connect to your sites."
 msgstr ""
 
-#: includes/class-sfls-account.php:257
-#: includes/class-sfls-account.php:355
-#: includes/class-sfls-account.php:690
-#: includes/class-sfls-account.php:692
-#: includes/class-sfls-account.php:870
-#: includes/class-sfls-billing-emails.php:362
+#: includes/class-sfls-account.php:277
+#: includes/class-sfls-account.php:375
+#: includes/class-sfls-account.php:710
+#: includes/class-sfls-account.php:712
+#: includes/class-sfls-account.php:878
+#: includes/class-sfls-account.php:1265
+#: includes/class-sfls-billing-emails.php:363
 #: includes/class-sfls-connect.php:510
-#: includes/class-sfls-reminders.php:311
+#: includes/class-sfls-reminders.php:312
 msgid "See plans"
 msgstr ""
 
-#: includes/class-sfls-account.php:261
+#: includes/class-sfls-account.php:281
 msgid "Connect a site from SubtleForms › Settings › License in WordPress, or paste the key there. Local and staging sites never count towards your limit."
 msgstr ""
 
-#: includes/class-sfls-account.php:273
+#: includes/class-sfls-account.php:293
 msgid "The Pro download appears here as soon as the first release is published."
 msgstr ""
 
-#: includes/class-sfls-account.php:299
-#: includes/class-sfls-admin.php:564
-#: includes/class-sfls-admin.php:789
-#: includes/class-sfls-admin.php:795
+#: includes/class-sfls-account.php:319
+#: includes/class-sfls-admin.php:570
+#: includes/class-sfls-admin.php:847
+#: includes/class-sfls-admin.php:853
 #: includes/class-sfls-woo-paddle.php:451
 #: includes/class-sfls-woo-paddle.php:471
 msgid "Free trial"
 msgstr ""
 
-#: includes/class-sfls-account.php:305
-#: includes/class-sfls-billing-emails.php:222
+#: includes/class-sfls-account.php:325
+#: includes/class-sfls-billing-emails.php:223
 #: includes/class-sfls-checkout-paddle.php:378
 #: includes/class-sfls-delivery.php:258
 #: includes/class-sfls-delivery.php:488
 msgid "Download Pro"
 msgstr ""
 
-#: includes/class-sfls-account.php:310
-#: includes/class-sfls-account.php:690
+#: includes/class-sfls-account.php:330
+#: includes/class-sfls-account.php:710
 msgid "Renew"
 msgstr ""
 
 #. translators: 1: plan name, 2: price
-#: includes/class-sfls-account.php:316
+#: includes/class-sfls-account.php:336
 #, php-format
 msgid "Upgrade to %1$s for %2$s today. Same key, more sites."
 msgstr ""
 
 #. translators: %s: plan name
-#: includes/class-sfls-account.php:323
 #: includes/class-sfls-account.php:343
+#: includes/class-sfls-account.php:363
 #, php-format
 msgid "Upgrade to %s"
 msgstr ""
 
 #. translators: 1: plan name, 2: sites
-#: includes/class-sfls-account.php:335
+#: includes/class-sfls-account.php:355
 #, php-format
 msgid "Upgrade to %1$s (%2$s)? You pay the prorated difference for the rest of this billing year now, and the new limits apply right away. Same key."
 msgstr ""
 
 #. translators: %s: plan name
-#: includes/class-sfls-account.php:338
+#: includes/class-sfls-account.php:358
 #, php-format
 msgid "Switch your trial to %s? Nothing is charged now. When the trial ends you are billed for the new plan."
 msgstr ""
 
-#: includes/class-sfls-account.php:355
+#: includes/class-sfls-account.php:375
 msgid "This subscription has ended. Pick a plan to turn Pro back on."
 msgstr ""
 
-#: includes/class-sfls-account.php:358
+#: includes/class-sfls-account.php:378
 msgid "This license has expired. Pro keeps working for a short grace period. Renew now to keep updates and support."
 msgstr ""
 
-#: includes/class-sfls-account.php:360
+#: includes/class-sfls-account.php:380
 msgid "This license has expired. Renew it to turn Pro features and updates back on."
 msgstr ""
 
-#: includes/class-sfls-account.php:362
+#: includes/class-sfls-account.php:382
 msgid "This license is suspended. Contact support if you think this is a mistake."
 msgstr ""
 
-#: includes/class-sfls-account.php:366
+#: includes/class-sfls-account.php:386
 #: includes/class-sfls-checkout-paddle.php:350
 #: includes/class-sfls-checkout-paddle.php:373
 #: includes/class-sfls-delivery.php:250
 msgid "Copied"
 msgstr ""
 
-#: includes/class-sfls-account.php:368
+#: includes/class-sfls-account.php:388
 #: includes/class-sfls-checkout-paddle.php:373
 #: includes/class-sfls-delivery.php:250
 msgid "Copy"
 msgstr ""
 
-#: includes/class-sfls-account.php:376
+#: includes/class-sfls-account.php:396
 msgid "Term"
 msgstr ""
 
-#: includes/class-sfls-account.php:376
-#: includes/class-sfls-account.php:482
-#: includes/class-sfls-admin.php:594
+#: includes/class-sfls-account.php:396
+#: includes/class-sfls-account.php:502
+#: includes/class-sfls-admin.php:600
 #: includes/class-sfls-billing-emails.php:217
 msgid "Renews"
 msgstr ""
 
-#: includes/class-sfls-account.php:376
+#: includes/class-sfls-account.php:396
 #: includes/class-sfls-admin.php:398
-#: includes/class-sfls-licenses.php:639
-#: includes/class-sfls-reminders.php:300
+#: includes/class-sfls-licenses.php:640
+#: includes/class-sfls-reminders.php:301
 msgid "Expired"
 msgstr ""
 
-#: includes/class-sfls-account.php:378
+#: includes/class-sfls-account.php:398
 #: includes/class-sfls-admin-releases.php:294
 #: includes/class-sfls-admin.php:320
-#: includes/class-sfls-admin.php:674
-#: includes/class-sfls-admin.php:713
-#: includes/class-sfls-admin.php:725
-#: includes/class-sfls-admin.php:754
+#: includes/class-sfls-admin.php:732
+#: includes/class-sfls-admin.php:771
+#: includes/class-sfls-admin.php:783
+#: includes/class-sfls-admin.php:812
 #: includes/class-sfls-billing-emails.php:215
-#: includes/class-sfls-billing-emails.php:273
-#: includes/class-sfls-reminders.php:301
+#: includes/class-sfls-billing-emails.php:274
+#: includes/class-sfls-reminders.php:302
 #: includes/class-sfls-woo.php:343
 msgid "Sites"
 msgstr ""
 
-#: includes/class-sfls-account.php:378
+#: includes/class-sfls-account.php:398
 msgid "Unlimited"
 msgstr ""
 
-#: includes/class-sfls-account.php:379
+#: includes/class-sfls-account.php:399
 msgid "Purchased"
 msgstr ""
 
-#: includes/class-sfls-account.php:389
+#: includes/class-sfls-account.php:409
 msgid "Connected sites"
 msgstr ""
 
-#: includes/class-sfls-account.php:391
+#: includes/class-sfls-account.php:411
 msgid "No sites yet. In WordPress, go to SubtleForms › Settings › License and click Connect account."
 msgstr ""
 
-#: includes/class-sfls-account.php:409
+#: includes/class-sfls-account.php:429
 msgid "Staging, free"
 msgstr ""
 
 #. translators: %s: human time difference
-#: includes/class-sfls-account.php:415
+#: includes/class-sfls-account.php:435
 #, php-format
 msgid "Last seen %s ago"
 msgstr ""
 
 #. translators: %s: version
-#: includes/class-sfls-account.php:421
+#: includes/class-sfls-account.php:441
 #: includes/class-sfls-connect.php:498
 #, php-format
 msgid "Pro %s"
 msgstr ""
 
 #. translators: %s: domain
-#: includes/class-sfls-account.php:425
+#: includes/class-sfls-account.php:445
 #, php-format
 msgid "Disconnect %s? Pro stops working there until it is connected again."
 msgstr ""
 
 #. translators: %s: domain
-#: includes/class-sfls-account.php:425
+#: includes/class-sfls-account.php:445
 #: includes/class-sfls-admin.php:527
 msgid "Deactivate"
 msgstr ""
 
-#: includes/class-sfls-account.php:473
+#: includes/class-sfls-account.php:493
 msgid "Ended"
 msgstr ""
 
-#: includes/class-sfls-account.php:476
+#: includes/class-sfls-account.php:496
 msgid "Ends"
 msgstr ""
 
-#: includes/class-sfls-account.php:479
-#: includes/class-sfls-admin.php:593
+#: includes/class-sfls-account.php:499
+#: includes/class-sfls-admin.php:599
 #: includes/class-sfls-billing-emails.php:216
 msgid "Trial ends"
 msgstr ""
 
-#: includes/class-sfls-account.php:484
+#: includes/class-sfls-account.php:504
 msgid "Paid until"
 msgstr ""
 
 #. translators: %s: sites of the full plan, e.g. "5 sites"
-#: includes/class-sfls-account.php:509
+#: includes/class-sfls-account.php:529
 #, php-format
 msgid "Trial covers 1 site. After the first payment it covers %s."
 msgstr ""
 
-#: includes/class-sfls-account.php:518
-#: includes/class-sfls-billing-emails.php:333
+#: includes/class-sfls-account.php:538
+#: includes/class-sfls-billing-emails.php:334
 msgid "Update payment method"
 msgstr ""
 
-#: includes/class-sfls-account.php:522
+#: includes/class-sfls-account.php:542
 #: includes/class-sfls-admin.php:354
-#: includes/class-sfls-billing-emails.php:352
+#: includes/class-sfls-billing-emails.php:353
 msgid "Resume"
 msgstr ""
 
-#: includes/class-sfls-account.php:526
+#: includes/class-sfls-account.php:546
 msgid "Cancel auto-renew? Pro keeps working until the trial ends and you will not be charged."
 msgstr ""
 
-#: includes/class-sfls-account.php:527
+#: includes/class-sfls-account.php:547
 msgid "Cancel auto-renew? Pro keeps working until the end of the period you paid for. You can resume before then."
 msgstr ""
 
-#: includes/class-sfls-account.php:528
+#: includes/class-sfls-account.php:548
 msgid "Cancel auto-renew"
 msgstr ""
 
-#: includes/class-sfls-account.php:547
+#: includes/class-sfls-account.php:567
+#: includes/class-sfls-account.php:1126
 msgid "Your session expired. Try again."
 msgstr ""
 
-#: includes/class-sfls-account.php:553
-#: includes/class-sfls-account.php:633
+#: includes/class-sfls-account.php:573
+#: includes/class-sfls-account.php:653
+#: includes/class-sfls-account.php:1133
 #: includes/class-sfls-woo.php:123
 #: includes/class-sfls-woo.php:427
 msgid "That license was not found in your account."
 msgstr ""
 
 #. translators: %s: date
-#: includes/class-sfls-account.php:586
+#: includes/class-sfls-account.php:606
 #, php-format
 msgid "Auto-renew is off. Pro keeps working until %s, and you can resume before then."
 msgstr ""
 
-#: includes/class-sfls-account.php:592
+#: includes/class-sfls-account.php:612
 msgid "Auto-renew is back on. Nothing else changes."
 msgstr ""
 
-#: includes/class-sfls-account.php:598
+#: includes/class-sfls-account.php:618
 msgid "That plan is not available as an upgrade."
 msgstr ""
 
 #. translators: 1: plan, 2: sites
-#: includes/class-sfls-account.php:606
+#: includes/class-sfls-account.php:626
 #, php-format
 msgid "Upgraded to %1$s. Same key, now %2$s."
 msgstr ""
 
 #. translators: %s: domain
-#: includes/class-sfls-account.php:640
+#: includes/class-sfls-account.php:660
 #, php-format
 msgid "%s was disconnected. You can use the key on another site now."
 msgstr ""
 
-#: includes/class-sfls-account.php:674
+#: includes/class-sfls-account.php:694
 msgid "No releases yet"
 msgstr ""
 
-#: includes/class-sfls-account.php:674
+#: includes/class-sfls-account.php:694
 msgid "The first SubtleForms Pro release will be available here."
 msgstr ""
 
-#: includes/class-sfls-account.php:689
+#: includes/class-sfls-account.php:709
 msgid "Your license is not active, so new versions are not available. You can still download the versions released while it was active."
 msgstr ""
 
-#: includes/class-sfls-account.php:692
-#: includes/class-sfls-account.php:807
+#: includes/class-sfls-account.php:712
+#: includes/class-sfls-account.php:827
 msgid "Downloads need an active license."
 msgstr ""
 
-#: includes/class-sfls-account.php:698
+#: includes/class-sfls-account.php:718
 msgid "Latest release"
 msgstr ""
 
 #. translators: %s: version
 #. translators: %s: plan name
-#: includes/class-sfls-account.php:700
-#: includes/class-sfls-admin.php:1360
+#: includes/class-sfls-account.php:720
+#: includes/class-sfls-admin.php:1418
 #: includes/class-sfls-products.php:428
 #: includes/class-sfls-woo-paddle.php:693
 #, php-format
@@ -349,46 +362,46 @@ msgid "SubtleForms Pro %s"
 msgstr ""
 
 #. translators: %s: WordPress version
-#: includes/class-sfls-account.php:705
+#: includes/class-sfls-account.php:725
 #, php-format
 msgid "WordPress %s+"
 msgstr ""
 
 #. translators: %s: PHP version
-#: includes/class-sfls-account.php:707
+#: includes/class-sfls-account.php:727
 #, php-format
 msgid "PHP %s+"
 msgstr ""
 
-#: includes/class-sfls-account.php:715
+#: includes/class-sfls-account.php:735
 #: includes/class-sfls-admin-releases.php:332
 #: includes/class-sfls-admin-releases.php:496
 msgid "Download zip"
 msgstr ""
 
-#: includes/class-sfls-account.php:723
+#: includes/class-sfls-account.php:743
 msgid "What is new"
 msgstr ""
 
-#: includes/class-sfls-account.php:725
+#: includes/class-sfls-account.php:745
 msgid "Install it in WordPress from Plugins › Add New › Upload Plugin. Connected sites also get updates automatically in Dashboard › Updates."
 msgstr ""
 
-#: includes/class-sfls-account.php:727
+#: includes/class-sfls-account.php:747
 #: includes/class-sfls-admin-releases.php:292
 #: includes/class-sfls-admin-releases.php:492
 msgid "SHA-256"
 msgstr ""
 
-#: includes/class-sfls-account.php:733
+#: includes/class-sfls-account.php:753
 msgid "Older versions"
 msgstr ""
 
-#: includes/class-sfls-account.php:734
+#: includes/class-sfls-account.php:754
 msgid "Every version stays available. Use an older one to roll back a site or to test an upgrade."
 msgstr ""
 
-#: includes/class-sfls-account.php:739
+#: includes/class-sfls-account.php:759
 #: includes/class-sfls-admin-releases.php:161
 #: includes/class-sfls-admin-releases.php:386
 #: includes/class-sfls-shortcodes.php:242
@@ -396,81 +409,364 @@ msgid "Beta"
 msgstr ""
 
 #. translators: %s: version
-#: includes/class-sfls-account.php:743
+#: includes/class-sfls-account.php:763
 #, php-format
 msgid "Download version %s"
 msgstr ""
 
-#: includes/class-sfls-account.php:745
-#: includes/class-sfls-account.php:864
+#: includes/class-sfls-account.php:765
+#: includes/class-sfls-account.php:1259
 msgid "Download"
 msgstr ""
 
-#: includes/class-sfls-account.php:748
+#: includes/class-sfls-account.php:768
 msgid "Not available"
 msgstr ""
 
-#: includes/class-sfls-account.php:752
+#: includes/class-sfls-account.php:772
 msgid "What changed"
 msgstr ""
 
-#: includes/class-sfls-account.php:773
+#: includes/class-sfls-account.php:793
 msgid "Not available yet"
 msgstr ""
 
-#: includes/class-sfls-account.php:776
+#: includes/class-sfls-account.php:796
 msgid "Renew to download"
 msgstr ""
 
-#: includes/class-sfls-account.php:799
+#: includes/class-sfls-account.php:819
 msgid "That version is not available for download."
 msgstr ""
 
-#: includes/class-sfls-account.php:808
-#: includes/class-sfls-rest.php:284
+#: includes/class-sfls-account.php:828
+#: includes/class-sfls-rest.php:352
 msgid "This version was released after your license expired. Renew to download it."
 msgstr ""
 
-#: includes/class-sfls-account.php:845
-#: includes/class-sfls-account.php:846
-#: includes/class-sfls-admin.php:1360
+#: includes/class-sfls-account.php:872
+msgid "Branding is part of the Agency plan"
+msgstr ""
+
+#: includes/class-sfls-account.php:875
+msgid "With an active Agency license you can set your own plugin name, logo and links once, and every client site that uses your key shows them."
+msgstr ""
+
+#: includes/class-sfls-account.php:876
+msgid "Buy an Agency license to set your own plugin name, logo and links once and show them on every client site."
+msgstr ""
+
+#: includes/class-sfls-account.php:878
+msgid "Go to licenses"
+msgstr ""
+
+#: includes/class-sfls-account.php:895
+msgid "Set the name, logo and links your clients see in SubtleForms. Every site that uses this license key applies them, usually within a day."
+msgstr ""
+
+#: includes/class-sfls-account.php:898
+msgid "Choose a license"
+msgstr ""
+
+#: includes/class-sfls-account.php:898
+#: includes/class-sfls-admin.php:1224
+#: includes/class-sfls-billing-emails.php:273
+#: includes/class-sfls-billing-emails.php:310
+#: includes/class-sfls-connect.php:524
+#: includes/class-sfls-reminders.php:300
+msgid "License"
+msgstr ""
+
+#: includes/class-sfls-account.php:933
+#: includes/class-sfls-account.php:953
+msgid "A calm, fast form builder for WordPress."
+msgstr ""
+
+#: includes/class-sfls-account.php:934
+msgid "Preview"
+msgstr ""
+
+#. translators: %d: branding version
+#: includes/class-sfls-account.php:937
+#, php-format
+msgid "Live, version %d"
+msgstr ""
+
+#: includes/class-sfls-account.php:939
+msgid "Not set, sites show SubtleForms"
+msgstr ""
+
+#: includes/class-sfls-account.php:942
+msgid "This is how the saved branding looks on a client site. It updates as you type, and goes live when you save."
+msgstr ""
+
+#: includes/class-sfls-account.php:945
+msgid "App header"
+msgstr ""
+
+#: includes/class-sfls-account.php:949
+msgid "Admin menu entry"
+msgstr ""
+
+#: includes/class-sfls-account.php:951
+#: includes/class-sfls-account.php:1006
+msgid "Plugins screen"
+msgstr ""
+
+#: includes/class-sfls-account.php:954
+#: includes/class-sfls-admin.php:670
+#: includes/class-sfls-admin.php:702
+msgid "By"
+msgstr ""
+
+#: includes/class-sfls-account.php:984
+#: includes/class-sfls-branding.php:564
+msgid "Plugin name"
+msgstr ""
+
+#: includes/class-sfls-account.php:984
+msgid "Shown in the app header and wherever the plugin is named. Empty means SubtleForms. Up to 60 characters."
+msgstr ""
+
+#: includes/class-sfls-account.php:985
+#: includes/class-sfls-branding.php:565
+msgid "Menu name"
+msgstr ""
+
+#: includes/class-sfls-account.php:985
+msgid "The name in the WordPress admin menu. Empty uses the plugin name. Up to 40 characters."
+msgstr ""
+
+#: includes/class-sfls-account.php:988
+msgid "Logo"
+msgstr ""
+
+#: includes/class-sfls-account.php:990
+msgid "Remove the current logo"
+msgstr ""
+
+#: includes/class-sfls-account.php:992
+msgid "Upload a logo"
+msgstr ""
+
+#: includes/class-sfls-account.php:994
+msgid "PNG, JPEG, GIF or WebP, up to 1 MB. A square image of at least 64 by 64 pixels works best."
+msgstr ""
+
+#: includes/class-sfls-account.php:995
+msgid "Or use the https address of an image"
+msgstr ""
+
+#: includes/class-sfls-account.php:997
+msgid "An uploaded file wins over an address. PNG, JPG, GIF, WebP or SVG."
+msgstr ""
+
+#: includes/class-sfls-account.php:1000
+#: includes/class-sfls-branding.php:567
+msgid "Support address"
+msgstr ""
+
+#: includes/class-sfls-account.php:1000
+msgid "Where \"Get support\" goes on your clients' sites. Empty uses the SubtleForms support page."
+msgstr ""
+
+#: includes/class-sfls-account.php:1003
+msgid "Hide SubtleForms credits, help links and upgrade prompts"
+msgstr ""
+
+#: includes/class-sfls-account.php:1004
+msgid "Limit the License screen to the admin who activated the license on the client site"
+msgstr ""
+
+#: includes/class-sfls-account.php:1008
+#: includes/class-sfls-branding.php:570
+msgid "Author"
+msgstr ""
+
+#: includes/class-sfls-account.php:1008
+msgid "Shown on the Plugins screen rows for SubtleForms and SubtleForms Pro. Up to 60 characters."
+msgstr ""
+
+#: includes/class-sfls-account.php:1009
+#: includes/class-sfls-branding.php:571
+msgid "Author address"
+msgstr ""
+
+#: includes/class-sfls-account.php:1009
+msgid "Links the author name. http or https."
+msgstr ""
+
+#: includes/class-sfls-account.php:1011
+#: includes/class-sfls-branding.php:572
+#: includes/class-sfls-gateway-paddle.php:80
+msgid "Description"
+msgstr ""
+
+#: includes/class-sfls-account.php:1011
+msgid "Up to 200 characters."
+msgstr ""
+
+#: includes/class-sfls-account.php:1013
+msgid "Save branding"
+msgstr ""
+
+#: includes/class-sfls-account.php:1014
+msgid "Saving publishes a new version. Connected sites pick it up on their next check."
+msgstr ""
+
+#: includes/class-sfls-account.php:1021
+msgid "Remove your branding? Your clients' sites go back to the SubtleForms name and logo. You can restore it from the list of versions."
+msgstr ""
+
+#: includes/class-sfls-account.php:1021
+msgid "Remove branding"
+msgstr ""
+
+#: includes/class-sfls-account.php:1034
+msgid "Client sites"
+msgstr ""
+
+#: includes/class-sfls-account.php:1036
+msgid "No sites use this license yet. Sites appear here after they fetch your branding."
+msgstr ""
+
+#: includes/class-sfls-account.php:1045
+msgid "Has not fetched the branding yet"
+msgstr ""
+
+#. translators: 1: branding version, 2: human time difference
+#: includes/class-sfls-account.php:1050
+#, php-format
+msgid "Version %1$d, fetched %2$s ago"
+msgstr ""
+
+#: includes/class-sfls-account.php:1059
+msgid "Up to date"
+msgstr ""
+
+#: includes/class-sfls-account.php:1060
+msgid "Update pending"
+msgstr ""
+
+#: includes/class-sfls-account.php:1080
+#: includes/class-sfls-admin.php:666
+msgid "Saved"
+msgstr ""
+
+#: includes/class-sfls-account.php:1081
+#: includes/class-sfls-admin.php:667
+msgid "Restored"
+msgstr ""
+
+#: includes/class-sfls-account.php:1082
+#: includes/class-sfls-admin.php:651
+#: includes/class-sfls-admin.php:668
+msgid "Removed"
+msgstr ""
+
+#: includes/class-sfls-account.php:1085
+msgid "Versions"
+msgstr ""
+
+#. translators: %d: number of versions kept
+#: includes/class-sfls-account.php:1087
+#, php-format
+msgid "The last %d versions are kept. Restoring one publishes it as a new version."
+msgstr ""
+
+#: includes/class-sfls-account.php:1092
+msgid "Default SubtleForms branding"
+msgstr ""
+
+#. translators: %d: version
+#. translators: %d: branding version
+#: includes/class-sfls-account.php:1093
+#: includes/class-sfls-admin.php:549
+#, php-format
+msgid "Version %d"
+msgstr ""
+
+#: includes/class-sfls-account.php:1095
+msgid "Current"
+msgstr ""
+
+#. translators: %d: version
+#: includes/class-sfls-account.php:1102
+#, php-format
+msgid "Restore version %d? It is published as a new version."
+msgstr ""
+
+#. translators: %d: version
+#: includes/class-sfls-account.php:1102
+msgid "Restore"
+msgstr ""
+
+#: includes/class-sfls-account.php:1139
+msgid "Branding needs an active Agency license."
+msgstr ""
+
+#. translators: %d: branding version
+#: includes/class-sfls-account.php:1176
+#, php-format
+msgid "Branding saved as version %d. Connected sites pick it up on their next check."
+msgstr ""
+
+#. translators: %d: branding version
+#: includes/class-sfls-account.php:1190
+#, php-format
+msgid "Restored and published as version %d."
+msgstr ""
+
+#: includes/class-sfls-account.php:1195
+msgid "The logo file for this version is no longer available; upload it again."
+msgstr ""
+
+#. translators: %d: branding version
+#: includes/class-sfls-account.php:1203
+#, php-format
+msgid "Branding removed (version %d). Your clients' sites show the SubtleForms name and logo again."
+msgstr ""
+
+#: includes/class-sfls-account.php:1240
+#: includes/class-sfls-account.php:1241
+#: includes/class-sfls-admin.php:1418
 #: includes/class-sfls-products.php:425
 msgid "SubtleForms Pro"
 msgstr ""
 
-#: includes/class-sfls-account.php:846
+#: includes/class-sfls-account.php:1241
 #: includes/class-sfls-checkout-paddle.php:380
 #: includes/class-sfls-delivery.php:264
 msgid "Manage licenses"
 msgstr ""
 
-#: includes/class-sfls-account.php:849
+#: includes/class-sfls-account.php:1244
 #: includes/class-sfls-admin.php:257
 msgid "Active licenses"
 msgstr ""
 
-#: includes/class-sfls-account.php:854
-#: includes/class-sfls-admin.php:751
-#: includes/class-sfls-licenses.php:661
+#: includes/class-sfls-account.php:1249
+#: includes/class-sfls-admin.php:809
+#: includes/class-sfls-licenses.php:662
 #: includes/class-sfls-shortcodes.php:112
 msgid "Lifetime"
 msgstr ""
 
-#: includes/class-sfls-account.php:856
+#: includes/class-sfls-account.php:1251
 #: assets/js/sfls-blocks-editor.js:54
 msgid "None"
 msgstr ""
 
-#: includes/class-sfls-account.php:858
-#: includes/class-sfls-billing-emails.php:310
+#: includes/class-sfls-account.php:1253
+#: includes/class-sfls-billing-emails.php:311
 msgid "Next renewal"
 msgstr ""
 
-#: includes/class-sfls-account.php:860
+#: includes/class-sfls-account.php:1255
 msgid "Latest Pro version"
 msgstr ""
 
-#: includes/class-sfls-account.php:870
+#: includes/class-sfls-account.php:1265
 msgid "You do not have a license yet."
 msgstr ""
 
@@ -479,12 +775,12 @@ msgid "Copy it now. It is stored hashed or masked and will not be shown again."
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:147
-#: includes/class-sfls-admin.php:829
+#: includes/class-sfls-admin.php:887
 msgid "Published"
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:148
-#: includes/class-sfls-admin.php:830
+#: includes/class-sfls-admin.php:888
 msgid "Draft"
 msgstr ""
 
@@ -510,7 +806,7 @@ msgid "GitHub"
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:174
-#: includes/class-sfls-admin.php:636
+#: includes/class-sfls-admin.php:694
 msgid "WP-CLI"
 msgstr ""
 
@@ -569,6 +865,9 @@ msgid "Unpin"
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:287
+#: includes/class-sfls-admin.php:652
+#: includes/class-sfls-admin.php:658
+#: includes/class-sfls-admin.php:670
 msgid "Version"
 msgstr ""
 
@@ -583,8 +882,8 @@ msgstr ""
 #: includes/class-sfls-admin-releases.php:717
 #: includes/class-sfls-admin.php:319
 #: includes/class-sfls-admin.php:499
-#: includes/class-sfls-admin.php:592
-#: includes/class-sfls-admin.php:754
+#: includes/class-sfls-admin.php:598
+#: includes/class-sfls-admin.php:812
 msgid "Status"
 msgstr ""
 
@@ -600,7 +899,7 @@ msgstr ""
 
 #: includes/class-sfls-admin-releases.php:295
 #: includes/class-sfls-admin-releases.php:478
-#: includes/class-sfls-admin.php:589
+#: includes/class-sfls-admin.php:595
 msgid "Source"
 msgstr ""
 
@@ -664,7 +963,7 @@ msgstr ""
 #: includes/class-sfls-admin-releases.php:347
 #: includes/class-sfls-admin-releases.php:513
 #: includes/class-sfls-admin.php:355
-#: includes/class-sfls-admin.php:550
+#: includes/class-sfls-admin.php:556
 msgid "Delete"
 msgstr ""
 
@@ -960,6 +1259,7 @@ msgstr ""
 
 #: includes/class-sfls-admin-releases.php:717
 #: includes/class-sfls-admin-releases.php:735
+#: includes/class-sfls-admin.php:670
 msgid "Name"
 msgstr ""
 
@@ -968,7 +1268,7 @@ msgid "Token"
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:717
-#: includes/class-sfls-admin.php:543
+#: includes/class-sfls-admin.php:544
 msgid "Created"
 msgstr ""
 
@@ -992,8 +1292,8 @@ msgstr ""
 #: includes/class-sfls-admin-releases.php:722
 #: includes/class-sfls-admin.php:396
 #: includes/class-sfls-admin.php:500
-#: includes/class-sfls-admin.php:565
-#: includes/class-sfls-licenses.php:637
+#: includes/class-sfls-admin.php:571
+#: includes/class-sfls-licenses.php:638
 msgid "Active"
 msgstr ""
 
@@ -1076,7 +1376,7 @@ msgstr ""
 
 #. translators: %s: last four characters
 #: includes/class-sfls-admin-releases.php:772
-#: includes/class-sfls-admin.php:990
+#: includes/class-sfls-admin.php:1048
 #, php-format
 msgid "Saved, ends in %s. Leave empty to keep it."
 msgstr ""
@@ -1088,7 +1388,7 @@ msgstr ""
 
 #. translators: %s: last four characters
 #: includes/class-sfls-admin-releases.php:773
-#: includes/class-sfls-admin.php:1074
+#: includes/class-sfls-admin.php:1132
 msgid "Webhook secret"
 msgstr ""
 
@@ -1117,7 +1417,7 @@ msgid "When off, imported releases are saved as drafts."
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:782
-#: includes/class-sfls-admin.php:1075
+#: includes/class-sfls-admin.php:1133
 msgid "Webhook URL"
 msgstr ""
 
@@ -1142,7 +1442,7 @@ msgid "Replace the webhook secret? Deliveries fail until you paste the new secre
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:790
-#: includes/class-sfls-admin.php:1082
+#: includes/class-sfls-admin.php:1140
 msgid "Test connection"
 msgstr ""
 
@@ -1164,18 +1464,19 @@ msgid "None yet. When the webhook is added, GitHub sends a ping that shows up he
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:827
-#: includes/class-sfls-admin.php:1166
+#: includes/class-sfls-admin.php:1224
 msgid "Received"
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:827
-#: includes/class-sfls-admin.php:644
-#: includes/class-sfls-admin.php:1166
+#: includes/class-sfls-admin.php:670
+#: includes/class-sfls-admin.php:702
+#: includes/class-sfls-admin.php:1224
 msgid "Event"
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:827
-#: includes/class-sfls-admin.php:1166
+#: includes/class-sfls-admin.php:1224
 msgid "Result"
 msgstr ""
 
@@ -1234,13 +1535,13 @@ msgstr ""
 
 #: includes/class-sfls-admin.php:59
 #: includes/class-sfls-admin.php:252
-#: includes/class-sfls-admin.php:663
-#: includes/class-sfls-admin.php:680
+#: includes/class-sfls-admin.php:721
+#: includes/class-sfls-admin.php:738
 msgid "Issue license"
 msgstr ""
 
 #: includes/class-sfls-admin.php:60
-#: includes/class-sfls-admin.php:691
+#: includes/class-sfls-admin.php:749
 msgid "Products"
 msgstr ""
 
@@ -1261,22 +1562,22 @@ msgid "Trial"
 msgstr ""
 
 #: includes/class-sfls-admin.php:184
-#: includes/class-sfls-admin.php:566
+#: includes/class-sfls-admin.php:572
 msgid "Past due"
 msgstr ""
 
 #: includes/class-sfls-admin.php:186
-#: includes/class-sfls-admin.php:595
+#: includes/class-sfls-admin.php:601
 msgid "Cancels"
 msgstr ""
 
 #: includes/class-sfls-admin.php:188
-#: includes/class-sfls-admin.php:568
+#: includes/class-sfls-admin.php:574
 msgid "Canceled"
 msgstr ""
 
 #: includes/class-sfls-admin.php:190
-#: includes/class-sfls-admin.php:972
+#: includes/class-sfls-admin.php:1030
 #: includes/class-sfls-gateway-paddle.php:34
 msgid "Paddle"
 msgstr ""
@@ -1361,31 +1662,31 @@ msgid "Key"
 msgstr ""
 
 #: includes/class-sfls-admin.php:317
-#: includes/class-sfls-admin.php:597
+#: includes/class-sfls-admin.php:603
 msgid "Customer"
 msgstr ""
 
 #: includes/class-sfls-admin.php:318
 #: includes/class-sfls-admin.php:489
-#: includes/class-sfls-admin.php:669
-#: includes/class-sfls-admin.php:712
-#: includes/class-sfls-admin.php:754
-#: includes/class-sfls-admin.php:789
-#: includes/class-sfls-admin.php:1104
+#: includes/class-sfls-admin.php:727
+#: includes/class-sfls-admin.php:770
+#: includes/class-sfls-admin.php:812
+#: includes/class-sfls-admin.php:847
+#: includes/class-sfls-admin.php:1162
 #: includes/class-sfls-billing-emails.php:214
-#: includes/class-sfls-reminders.php:298
+#: includes/class-sfls-reminders.php:299
 #: includes/class-sfls-woo.php:336
 msgid "Plan"
 msgstr ""
 
 #: includes/class-sfls-admin.php:321
 #: includes/class-sfls-admin.php:497
-#: includes/class-sfls-reminders.php:300
+#: includes/class-sfls-reminders.php:301
 msgid "Expires"
 msgstr ""
 
 #: includes/class-sfls-admin.php:322
-#: includes/class-sfls-admin.php:546
+#: includes/class-sfls-admin.php:552
 msgid "Order"
 msgstr ""
 
@@ -1406,7 +1707,7 @@ msgid "Suspend"
 msgstr ""
 
 #: includes/class-sfls-admin.php:355
-#: includes/class-sfls-admin.php:551
+#: includes/class-sfls-admin.php:557
 msgid "Delete this license permanently?"
 msgstr ""
 
@@ -1424,7 +1725,7 @@ msgstr ""
 
 #: includes/class-sfls-admin.php:399
 #: includes/class-sfls-admin.php:501
-#: includes/class-sfls-licenses.php:640
+#: includes/class-sfls-licenses.php:641
 msgid "Suspended"
 msgstr ""
 
@@ -1434,8 +1735,8 @@ msgid "Edit license"
 msgstr ""
 
 #: includes/class-sfls-admin.php:470
-#: includes/class-sfls-admin.php:1489
-#: includes/class-sfls-admin.php:1546
+#: includes/class-sfls-admin.php:1548
+#: includes/class-sfls-admin.php:1605
 msgid "License not found."
 msgstr ""
 
@@ -1456,7 +1757,7 @@ msgid "Leave empty for a lifetime license."
 msgstr ""
 
 #: includes/class-sfls-admin.php:504
-#: includes/class-sfls-admin.php:668
+#: includes/class-sfls-admin.php:726
 msgid "Customer email"
 msgstr ""
 
@@ -1472,7 +1773,7 @@ msgid "View user"
 msgstr ""
 
 #: includes/class-sfls-admin.php:511
-#: includes/class-sfls-admin.php:677
+#: includes/class-sfls-admin.php:735
 msgid "Notes"
 msgstr ""
 
@@ -1489,7 +1790,8 @@ msgid "Not active on any site yet."
 msgstr ""
 
 #: includes/class-sfls-admin.php:520
-#: includes/class-sfls-admin.php:644
+#: includes/class-sfls-admin.php:658
+#: includes/class-sfls-admin.php:702
 msgid "Site"
 msgstr ""
 
@@ -1498,7 +1800,7 @@ msgid "Pro version"
 msgstr ""
 
 #: includes/class-sfls-admin.php:520
-#: includes/class-sfls-admin.php:628
+#: includes/class-sfls-admin.php:686
 msgid "Activated"
 msgstr ""
 
@@ -1518,779 +1820,797 @@ msgstr ""
 msgid "Deactivate all sites"
 msgstr ""
 
-#: includes/class-sfls-admin.php:538
+#: includes/class-sfls-admin.php:539
 msgid "License key"
 msgstr ""
 
-#: includes/class-sfls-admin.php:539
+#: includes/class-sfls-admin.php:540
 msgid "Replace this key with a new one? Sites using the old key stop validating until the new key is entered."
 msgstr ""
 
-#: includes/class-sfls-admin.php:539
+#: includes/class-sfls-admin.php:540
 msgid "Regenerate key"
 msgstr ""
 
-#: includes/class-sfls-admin.php:541
+#: includes/class-sfls-admin.php:542
 msgid "History"
 msgstr ""
 
-#: includes/class-sfls-admin.php:544
+#: includes/class-sfls-admin.php:545
 msgid "Updated"
 msgstr ""
 
-#: includes/class-sfls-admin.php:550
+#: includes/class-sfls-admin.php:556
 msgid "Removes the key and all its activations. This cannot be undone."
 msgstr ""
 
-#: includes/class-sfls-admin.php:551
+#: includes/class-sfls-admin.php:557
 msgid "Delete license"
 msgstr ""
 
-#: includes/class-sfls-admin.php:567
+#: includes/class-sfls-admin.php:573
 msgid "Paused"
 msgstr ""
 
-#: includes/class-sfls-admin.php:581
+#: includes/class-sfls-admin.php:587
 msgid "Paddle subscription"
 msgstr ""
 
-#: includes/class-sfls-admin.php:582
+#: includes/class-sfls-admin.php:588
 msgid "WooCommerce order"
 msgstr ""
 
-#: includes/class-sfls-admin.php:583
+#: includes/class-sfls-admin.php:589
 msgid "Issued by hand"
 msgstr ""
 
-#: includes/class-sfls-admin.php:588
+#: includes/class-sfls-admin.php:594
 msgid "Billing"
 msgstr ""
 
-#: includes/class-sfls-admin.php:596
+#: includes/class-sfls-admin.php:602
 msgid "Amount"
 msgstr ""
 
-#: includes/class-sfls-admin.php:603
+#: includes/class-sfls-admin.php:609
 msgid "Subscription"
 msgstr ""
 
 #. translators: %s: list of emails, domains and sites
-#: includes/class-sfls-admin.php:611
+#: includes/class-sfls-admin.php:617
 #, php-format
 msgid "Used a free trial for: %s."
 msgstr ""
 
-#: includes/class-sfls-admin.php:615
+#: includes/class-sfls-admin.php:621
 msgid "Let this customer, company and site start another free trial?"
 msgstr ""
 
-#: includes/class-sfls-admin.php:615
+#: includes/class-sfls-admin.php:621
 msgid "Allow another trial"
 msgstr ""
 
-#: includes/class-sfls-admin.php:629
-msgid "Deactivated"
+#: includes/class-sfls-admin.php:643
+msgid "The plan of this license has no branding, so sites get the default SubtleForms branding. The saved branding is kept and applies again on an Agency plan."
 msgstr ""
 
-#: includes/class-sfls-admin.php:632
-msgid "Plugin (API)"
+#: includes/class-sfls-admin.php:646
+msgid "The customer has not saved any branding yet."
 msgstr ""
 
-#: includes/class-sfls-admin.php:633
-msgid "Connect account"
+#: includes/class-sfls-admin.php:651
+msgid "State"
 msgstr ""
 
-#: includes/class-sfls-admin.php:634
-msgid "Customer, My Account"
+#: includes/class-sfls-admin.php:651
+#: includes/class-sfls-admin.php:1129
+msgid "Live"
 msgstr ""
 
-#: includes/class-sfls-admin.php:635
-msgid "Admin"
+#: includes/class-sfls-admin.php:653
+msgid "Changed"
 msgstr ""
 
-#: includes/class-sfls-admin.php:638
-msgid "Activity"
+#: includes/class-sfls-admin.php:658
+msgid "Sites that fetched it"
 msgstr ""
 
-#: includes/class-sfls-admin.php:640
-msgid "No activations or deactivations recorded yet. Logging started with version 1.3.0."
+#: includes/class-sfls-admin.php:658
+msgid "Fetched"
 msgstr ""
 
-#: includes/class-sfls-admin.php:644
+#: includes/class-sfls-admin.php:670
+msgid "Revisions"
+msgstr ""
+
+#: includes/class-sfls-admin.php:670
+#: includes/class-sfls-admin.php:702
 msgid "Time"
 msgstr ""
 
-#: includes/class-sfls-admin.php:644
+#: includes/class-sfls-admin.php:687
+msgid "Deactivated"
+msgstr ""
+
+#: includes/class-sfls-admin.php:690
+msgid "Plugin (API)"
+msgstr ""
+
+#: includes/class-sfls-admin.php:691
+msgid "Connect account"
+msgstr ""
+
+#: includes/class-sfls-admin.php:692
+msgid "Customer, My Account"
+msgstr ""
+
+#: includes/class-sfls-admin.php:693
+msgid "Admin"
+msgstr ""
+
+#: includes/class-sfls-admin.php:696
+msgid "Activity"
+msgstr ""
+
+#: includes/class-sfls-admin.php:698
+msgid "No activations or deactivations recorded yet. Logging started with version 1.3.0."
+msgstr ""
+
+#: includes/class-sfls-admin.php:702
 msgid "IP address"
 msgstr ""
 
-#: includes/class-sfls-admin.php:644
-msgid "By"
-msgstr ""
-
-#: includes/class-sfls-admin.php:664
+#: includes/class-sfls-admin.php:722
 msgid "For complimentary, partner, support or test keys. Paid keys are issued automatically when a WooCommerce order completes."
 msgstr ""
 
-#: includes/class-sfls-admin.php:668
+#: includes/class-sfls-admin.php:726
 msgid "If an account uses this email, the key appears in its My Account › Licenses."
 msgstr ""
 
-#: includes/class-sfls-admin.php:674
+#: includes/class-sfls-admin.php:732
 msgid "plan"
 msgstr ""
 
-#: includes/class-sfls-admin.php:674
+#: includes/class-sfls-admin.php:732
 msgid "Empty for the plan default, 0 for unlimited."
 msgstr ""
 
-#: includes/class-sfls-admin.php:675
+#: includes/class-sfls-admin.php:733
 #: includes/class-sfls-woo.php:352
 msgid "Duration (months)"
 msgstr ""
 
-#: includes/class-sfls-admin.php:675
+#: includes/class-sfls-admin.php:733
 msgid "0 for lifetime."
 msgstr ""
 
-#: includes/class-sfls-admin.php:676
+#: includes/class-sfls-admin.php:734
 msgid "How many"
 msgstr ""
 
-#: includes/class-sfls-admin.php:678
+#: includes/class-sfls-admin.php:736
 msgid "Email"
 msgstr ""
 
-#: includes/class-sfls-admin.php:678
+#: includes/class-sfls-admin.php:736
 msgid "Email the key to the customer"
 msgstr ""
 
-#: includes/class-sfls-admin.php:678
+#: includes/class-sfls-admin.php:736
 msgid "Sends the key and a link to the license page and Pro download (valid for 30 days, no account needed). Leave it off for test keys."
 msgstr ""
 
-#: includes/class-sfls-admin.php:694
+#: includes/class-sfls-admin.php:752
 msgid "WooCommerce is required to sell licenses."
 msgstr ""
 
-#: includes/class-sfls-admin.php:694
+#: includes/class-sfls-admin.php:752
 msgid "Install and activate WooCommerce, then come back here to create the products in one step."
 msgstr ""
 
-#: includes/class-sfls-admin.php:696
+#: includes/class-sfls-admin.php:754
 msgid "Install WooCommerce"
 msgstr ""
 
-#: includes/class-sfls-admin.php:706
+#: includes/class-sfls-admin.php:764
 msgid "Set your prices and save. The license products are created for you: virtual, sold one at a time, and wired to issue keys. Saving again updates the same products."
 msgstr ""
 
 #. translators: %s: currency code
-#: includes/class-sfls-admin.php:715
+#: includes/class-sfls-admin.php:773
 #, php-format
 msgid "Yearly price (%s)"
 msgstr ""
 
 #. translators: %s: currency code
-#: includes/class-sfls-admin.php:717
+#: includes/class-sfls-admin.php:775
 #, php-format
 msgid "Renewal price (%s)"
 msgstr ""
 
 #. translators: %s: currency code
-#: includes/class-sfls-admin.php:719
+#: includes/class-sfls-admin.php:777
 #, php-format
 msgid "Lifetime price (%s)"
 msgstr ""
 
 #. translators: %s: currency code
-#: includes/class-sfls-admin.php:719
-#: includes/class-sfls-admin.php:1104
+#: includes/class-sfls-admin.php:777
+#: includes/class-sfls-admin.php:1162
 msgid "optional"
 msgstr ""
 
-#: includes/class-sfls-admin.php:725
+#: includes/class-sfls-admin.php:783
 msgid "sites"
 msgstr ""
 
-#: includes/class-sfls-admin.php:725
+#: includes/class-sfls-admin.php:783
 msgid "0 = unlimited"
 msgstr ""
 
-#: includes/class-sfls-admin.php:727
-#: includes/class-sfls-admin.php:789
-#: includes/class-sfls-admin.php:1104
-#: includes/class-sfls-admin.php:1116
+#: includes/class-sfls-admin.php:785
+#: includes/class-sfls-admin.php:847
+#: includes/class-sfls-admin.php:1162
+#: includes/class-sfls-admin.php:1174
 msgid "Yearly price"
 msgstr ""
 
-#: includes/class-sfls-admin.php:728
+#: includes/class-sfls-admin.php:786
 msgid "Renewal price"
 msgstr ""
 
-#: includes/class-sfls-admin.php:729
+#: includes/class-sfls-admin.php:787
 msgid "Lifetime price"
 msgstr ""
 
-#: includes/class-sfls-admin.php:731
+#: includes/class-sfls-admin.php:789
 msgid "not sold"
 msgstr ""
 
-#: includes/class-sfls-admin.php:738
+#: includes/class-sfls-admin.php:796
 msgid "Renewal products are hidden from the shop; customers reach them from the Renew button in their account. Clearing a price moves that product to draft so it is no longer sold. Under each price you see the WooCommerce product it maps to. Saving again updates those products and never creates a second one; a product marked Missing was deleted and is created again."
 msgstr ""
 
-#: includes/class-sfls-admin.php:739
+#: includes/class-sfls-admin.php:797
 msgid "Save products"
 msgstr ""
 
-#: includes/class-sfls-admin.php:745
+#: includes/class-sfls-admin.php:803
 msgid "License products"
 msgstr ""
 
-#: includes/class-sfls-admin.php:747
+#: includes/class-sfls-admin.php:805
 msgid "None yet. Fill in the prices above and save."
 msgstr ""
 
-#: includes/class-sfls-admin.php:750
+#: includes/class-sfls-admin.php:808
 #: includes/class-sfls-shortcodes.php:111
 msgid "Yearly"
 msgstr ""
 
-#: includes/class-sfls-admin.php:752
+#: includes/class-sfls-admin.php:810
 #: includes/class-sfls-woo.php:362
 msgid "Renewal"
 msgstr ""
 
-#: includes/class-sfls-admin.php:754
+#: includes/class-sfls-admin.php:812
 msgid "Product"
 msgstr ""
 
-#: includes/class-sfls-admin.php:754
+#: includes/class-sfls-admin.php:812
 msgid "Type"
 msgstr ""
 
-#: includes/class-sfls-admin.php:754
+#: includes/class-sfls-admin.php:812
 msgid "Price"
 msgstr ""
 
-#: includes/class-sfls-admin.php:765
+#: includes/class-sfls-admin.php:823
 msgid "Show prices on your site"
 msgstr ""
 
-#: includes/class-sfls-admin.php:766
+#: includes/class-sfls-admin.php:824
 msgid "Pricing cards with Buy buttons that go straight to checkout. Add period=\"lifetime\" to open on lifetime prices."
 msgstr ""
 
-#: includes/class-sfls-admin.php:767
+#: includes/class-sfls-admin.php:825
 msgid "Every Pro release with its changes."
 msgstr ""
 
-#: includes/class-sfls-admin.php:768
+#: includes/class-sfls-admin.php:826
 msgid "The current Pro version number."
 msgstr ""
 
-#: includes/class-sfls-admin.php:769
+#: includes/class-sfls-admin.php:827
 msgid "In the block editor, search for SubtleForms to add the same pricing, changelog and version as blocks, plus the Account link block for your header."
 msgstr ""
 
-#: includes/class-sfls-admin.php:780
+#: includes/class-sfls-admin.php:838
 msgid "Paddle products and prices"
 msgstr ""
 
-#: includes/class-sfls-admin.php:782
+#: includes/class-sfls-admin.php:840
 msgid "To sell with Paddle, add your API key in Licenses › Settings › Paddle. This panel can then create a Paddle product per plan with a yearly price and an optional 7 or 14 day free trial."
 msgstr ""
 
-#: includes/class-sfls-admin.php:785
+#: includes/class-sfls-admin.php:843
 msgid "Creates one Paddle product per plan with a yearly price at the yearly price above, plus a second yearly price with a free trial that requires a payment method. Plans that are already mapped are left alone. Saving the WooCommerce products never changes Paddle."
 msgstr ""
 
-#: includes/class-sfls-admin.php:789
+#: includes/class-sfls-admin.php:847
 msgid "In Paddle"
 msgstr ""
 
-#: includes/class-sfls-admin.php:793
+#: includes/class-sfls-admin.php:851
 msgid "No yearly price"
 msgstr ""
 
-#: includes/class-sfls-admin.php:797
-#: includes/class-sfls-admin.php:1118
-#: includes/class-sfls-admin.php:1140
+#: includes/class-sfls-admin.php:855
+#: includes/class-sfls-admin.php:1176
+#: includes/class-sfls-admin.php:1198
 msgid "No trial"
 msgstr ""
 
-#: includes/class-sfls-admin.php:798
-#: includes/class-sfls-admin.php:1141
+#: includes/class-sfls-admin.php:856
+#: includes/class-sfls-admin.php:1199
 msgid "7 days"
 msgstr ""
 
-#: includes/class-sfls-admin.php:799
-#: includes/class-sfls-admin.php:1142
+#: includes/class-sfls-admin.php:857
+#: includes/class-sfls-admin.php:1200
 msgid "14 days"
 msgstr ""
 
-#: includes/class-sfls-admin.php:805
+#: includes/class-sfls-admin.php:863
 msgid "Mapped"
 msgstr ""
 
-#: includes/class-sfls-admin.php:810
-#: includes/class-sfls-admin.php:834
+#: includes/class-sfls-admin.php:868
+#: includes/class-sfls-admin.php:892
 msgid "Not created"
 msgstr ""
 
-#: includes/class-sfls-admin.php:816
+#: includes/class-sfls-admin.php:874
 msgid "Currency"
 msgstr ""
 
-#: includes/class-sfls-admin.php:816
+#: includes/class-sfls-admin.php:874
 msgid "Paddle converts to local currencies at checkout."
 msgstr ""
 
-#: includes/class-sfls-admin.php:817
+#: includes/class-sfls-admin.php:875
 msgid "Create in Paddle"
 msgstr ""
 
-#: includes/class-sfls-admin.php:831
+#: includes/class-sfls-admin.php:889
 msgid "Private"
 msgstr ""
 
-#: includes/class-sfls-admin.php:832
+#: includes/class-sfls-admin.php:890
 msgid "Pending"
 msgstr ""
 
-#: includes/class-sfls-admin.php:833
+#: includes/class-sfls-admin.php:891
 msgid "Missing"
 msgstr ""
 
 #. translators: %s: product name
-#: includes/class-sfls-admin.php:843
+#: includes/class-sfls-admin.php:901
 #, php-format
 msgid "Edit %s"
 msgstr ""
 
-#: includes/class-sfls-admin.php:868
+#: includes/class-sfls-admin.php:926
 msgid "License settings"
 msgstr ""
 
-#: includes/class-sfls-admin.php:888
+#: includes/class-sfls-admin.php:946
 msgid "Pricing page URL"
 msgstr ""
 
-#: includes/class-sfls-admin.php:888
+#: includes/class-sfls-admin.php:946
 msgid "Where \"See plans\" links point. Leave empty for /pricing/."
 msgstr ""
 
-#: includes/class-sfls-admin.php:890
-#: includes/class-sfls-admin.php:951
+#: includes/class-sfls-admin.php:948
+#: includes/class-sfls-admin.php:1009
 msgid "Renewal reminders"
 msgstr ""
 
-#: includes/class-sfls-admin.php:890
+#: includes/class-sfls-admin.php:948
 msgid "Days before expiry to email the customer, separated by commas. Leave empty to turn reminders off."
 msgstr ""
 
-#: includes/class-sfls-admin.php:892
-#: includes/class-sfls-admin.php:951
+#: includes/class-sfls-admin.php:950
+#: includes/class-sfls-admin.php:1009
 msgid "After expiry"
 msgstr ""
 
-#: includes/class-sfls-admin.php:892
+#: includes/class-sfls-admin.php:950
 msgid "Send one more reminder the day after a license expires"
 msgstr ""
 
-#: includes/class-sfls-admin.php:895
+#: includes/class-sfls-admin.php:953
 msgid "Support email"
 msgstr ""
 
-#: includes/class-sfls-admin.php:895
+#: includes/class-sfls-admin.php:953
 msgid "Shown to customers and used as Reply-To on every license email (order emails with keys and reminders). When it is on this site's domain it is also the From address."
 msgstr ""
 
 #. translators: %s: email address
-#: includes/class-sfls-admin.php:900
+#: includes/class-sfls-admin.php:958
 #, php-format
 msgid "Not set, so customers see the site admin address %s. Enter an address on your own domain."
 msgstr ""
 
 #. translators: %s: email address
-#: includes/class-sfls-admin.php:909
+#: includes/class-sfls-admin.php:967
 #, php-format
 msgid "%s is a free mail address. Customers see it on receipts, reminders and the connect page, and mail this site sends from it is often marked as spam. Use an address on your own domain instead."
 msgstr ""
 
-#: includes/class-sfls-admin.php:916
+#: includes/class-sfls-admin.php:974
 msgid "Staging hosts"
 msgstr ""
 
-#: includes/class-sfls-admin.php:916
+#: includes/class-sfls-admin.php:974
 msgid "Sites on these hosts do not use a seat. One per line. *.example.com matches every subdomain of example.com, staging.* matches a staging subdomain of any site, and a * inside a name matches any letters, as in *stg.wpengine.com. Production hosts such as *.wpengine.com and *.kinsta.cloud should not be listed. localhost, *.local, *.test, *.example and *.invalid are always free."
 msgstr ""
 
-#: includes/class-sfls-admin.php:918
+#: includes/class-sfls-admin.php:976
 msgid "My Account"
 msgstr ""
 
-#: includes/class-sfls-admin.php:918
+#: includes/class-sfls-admin.php:976
 msgid "Simplify My Account for license-only stores"
 msgstr ""
 
-#: includes/class-sfls-admin.php:918
+#: includes/class-sfls-admin.php:976
 msgid "Hides the Addresses and Downloads tabs for customers whose orders only contain license products. Orders, Licenses, Pro downloads, Payment methods and Account details stay."
 msgstr ""
 
-#: includes/class-sfls-admin.php:920
+#: includes/class-sfls-admin.php:978
 msgid "Checkout"
 msgstr ""
 
-#: includes/class-sfls-admin.php:920
+#: includes/class-sfls-admin.php:978
 msgid "Ask only for name, email and country when the cart holds only licenses"
 msgstr ""
 
-#: includes/class-sfls-admin.php:920
+#: includes/class-sfls-admin.php:978
 msgid "Street, city, postcode, state, company and phone are hidden. Country stays because tax depends on it."
 msgstr ""
 
-#: includes/class-sfls-admin.php:922
+#: includes/class-sfls-admin.php:980
 msgid "Keep activity for"
 msgstr ""
 
-#: includes/class-sfls-admin.php:922
+#: includes/class-sfls-admin.php:980
 msgid "days"
 msgstr ""
 
-#: includes/class-sfls-admin.php:922
+#: includes/class-sfls-admin.php:980
 msgid "The activation log (with IP addresses) and handled Paddle webhook events older than this are deleted every day. 0 keeps them forever."
 msgstr ""
 
-#: includes/class-sfls-admin.php:924
+#: includes/class-sfls-admin.php:982
 msgid "Uninstall"
 msgstr ""
 
-#: includes/class-sfls-admin.php:924
+#: includes/class-sfls-admin.php:982
 msgid "Delete all licenses, activations and release files when the plugin is deleted"
 msgstr ""
 
-#: includes/class-sfls-admin.php:927
+#: includes/class-sfls-admin.php:985
 msgid "Save settings"
 msgstr ""
 
-#: includes/class-sfls-admin.php:931
+#: includes/class-sfls-admin.php:989
 msgid "Reminder schedule"
 msgstr ""
 
 #. translators: %s: date and time
-#: includes/class-sfls-admin.php:935
+#: includes/class-sfls-admin.php:993
 #, php-format
 msgid "Reminders are checked daily. Next check: %s."
 msgstr ""
 
-#: includes/class-sfls-admin.php:936
+#: includes/class-sfls-admin.php:994
 msgid "The daily check is not scheduled. Deactivate and activate the plugin to schedule it."
 msgstr ""
 
-#: includes/class-sfls-admin.php:941
+#: includes/class-sfls-admin.php:999
 msgid "Send due reminders now"
 msgstr ""
 
-#: includes/class-sfls-admin.php:945
+#: includes/class-sfls-admin.php:1003
 msgid "Test reminder"
 msgstr ""
 
-#: includes/class-sfls-admin.php:945
+#: includes/class-sfls-admin.php:1003
 msgid "Sends an example renewal reminder or Paddle billing email so you can check how it looks. No license is changed and no customer is emailed."
 msgstr ""
 
-#: includes/class-sfls-admin.php:949
+#: includes/class-sfls-admin.php:1007
 msgid "Send to"
 msgstr ""
 
-#: includes/class-sfls-admin.php:950
+#: includes/class-sfls-admin.php:1008
 msgid "Reminder"
 msgstr ""
 
-#: includes/class-sfls-admin.php:951
+#: includes/class-sfls-admin.php:1009
 msgid "Before expiry"
 msgstr ""
 
-#: includes/class-sfls-admin.php:952
+#: includes/class-sfls-admin.php:1010
 msgid "Paddle billing emails"
 msgstr ""
 
-#: includes/class-sfls-admin.php:957
+#: includes/class-sfls-admin.php:1015
 msgid "Send test reminder"
 msgstr ""
 
-#: includes/class-sfls-admin.php:971
+#: includes/class-sfls-admin.php:1029
 msgid "General"
 msgstr ""
 
-#: includes/class-sfls-admin.php:973
+#: includes/class-sfls-admin.php:1031
 #: assets/js/sfls-blocks-editor.js:121
 msgid "Releases"
 msgstr ""
 
-#: includes/class-sfls-admin.php:975
+#: includes/class-sfls-admin.php:1033
 msgid "Settings sections"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1004
-#: includes/class-sfls-admin.php:1072
+#: includes/class-sfls-admin.php:1062
+#: includes/class-sfls-admin.php:1130
 msgid "API key"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1007
+#: includes/class-sfls-admin.php:1065
 msgid "client-side token"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1010
+#: includes/class-sfls-admin.php:1068
 msgid "webhook secret"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1013
+#: includes/class-sfls-admin.php:1071
 msgid "a price for at least one plan"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1018
+#: includes/class-sfls-admin.php:1076
 msgid "Pay with Paddle gateway settings"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1020
+#: includes/class-sfls-admin.php:1078
 msgid "Paddle is selected but not ready, so licenses are still sold through WooCommerce with your other payment methods."
 msgstr ""
 
 #. translators: %s: list of missing settings
-#: includes/class-sfls-admin.php:1023
+#: includes/class-sfls-admin.php:1081
 #, php-format
 msgid "Missing: %s."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1028
+#: includes/class-sfls-admin.php:1086
 msgid "The Pay with Paddle payment method is turned off in WooCommerce, so license carts cannot be paid with Paddle."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1032
+#: includes/class-sfls-admin.php:1090
 msgid "Selling through the WooCommerce checkout with Paddle payments (live). Pricing buttons go to the cart, and license-only carts are paid with Paddle."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1033
+#: includes/class-sfls-admin.php:1091
 msgid "Selling through the WooCommerce checkout with Paddle payments in the sandbox. No real money is taken. Switch the environment to Live when your tests pass."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1038
+#: includes/class-sfls-admin.php:1096
 msgid "Selling with the legacy Paddle overlay (live). Purchases do not create WooCommerce orders."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1039
+#: includes/class-sfls-admin.php:1097
 msgid "Selling with the legacy Paddle overlay in the sandbox. No real money is taken."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1046
+#: includes/class-sfls-admin.php:1104
 msgid "Selling"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1047
+#: includes/class-sfls-admin.php:1105
 msgid "Sell licenses with"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1050
+#: includes/class-sfls-admin.php:1108
 msgid "WooCommerce checkout with Paddle payments (recommended)"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1051
+#: includes/class-sfls-admin.php:1109
 msgid "Customers use the WooCommerce cart and checkout, and pay with Pay with Paddle: card, PayPal, Apple Pay or Google Pay. Every purchase, renewal and refund is a WooCommerce order. Paddle is the merchant of record, adds sales tax or VAT, and renews yearly subscriptions automatically, with optional 7 or 14 day free trials."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1054
+#: includes/class-sfls-admin.php:1112
 msgid "WooCommerce with other gateways"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1055
+#: includes/class-sfls-admin.php:1113
 msgid "The license products from Licenses › Products, paid with your other WooCommerce payment methods once per year, with manual renewals and WooCommerce tax."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1058
+#: includes/class-sfls-admin.php:1116
 msgid "Paddle overlay (legacy)"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1059
+#: includes/class-sfls-admin.php:1117
 msgid "The 1.4 flow: pricing buttons open the Paddle overlay directly and the license is issued without a WooCommerce order. Kept for existing setups."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1066
+#: includes/class-sfls-admin.php:1124
 msgid "Trial ending email"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1066
+#: includes/class-sfls-admin.php:1124
 msgid "days before the trial ends"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1066
+#: includes/class-sfls-admin.php:1124
 msgid "Tells the customer the amount, the date and how to cancel. 0 turns it off."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1067
+#: includes/class-sfls-admin.php:1125
 msgid "Renewal emails"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1067
+#: includes/class-sfls-admin.php:1125
 msgid "Days before each yearly renewal, separated by commas."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1070
+#: includes/class-sfls-admin.php:1128
 msgid "Connection"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1071
+#: includes/class-sfls-admin.php:1129
 msgid "Environment"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1071
+#: includes/class-sfls-admin.php:1129
 msgid "Sandbox (test payments)"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1071
-msgid "Live"
-msgstr ""
-
-#: includes/class-sfls-admin.php:1071
+#: includes/class-sfls-admin.php:1129
 msgid "Sandbox and live accounts have different keys, tokens, prices and webhook secrets."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1072
+#: includes/class-sfls-admin.php:1130
 msgid "Paddle › Developer tools › Authentication › API keys. Permissions: subscription read and write, customer read and write, address write, customer portal session write, transaction read and write, adjustment write, product and price read and write."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1073
+#: includes/class-sfls-admin.php:1131
 msgid "Client-side token"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1073
+#: includes/class-sfls-admin.php:1131
 msgid "Paddle › Developer tools › Authentication › Client-side tokens. Used by the checkout in the browser."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1074
+#: includes/class-sfls-admin.php:1132
 msgid "The secret key of the notification destination below."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1075
+#: includes/class-sfls-admin.php:1133
 msgid "In Paddle › Developer tools › Notifications, add a destination with this URL, type Webhook, and subscribe to: subscription.created, subscription.trialing, subscription.activated, subscription.updated, subscription.past_due, subscription.paused, subscription.resumed, subscription.canceled, transaction.completed, transaction.payment_failed, adjustment.created, adjustment.updated."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1077
+#: includes/class-sfls-admin.php:1135
 msgid "Save Paddle settings"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1080
+#: includes/class-sfls-admin.php:1138
 msgid "Check and sync"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1080
+#: includes/class-sfls-admin.php:1138
 msgid "Test connection checks the API key against the selected environment. Sync products lists your Paddle products and prices so you can map them to plans below."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1083
+#: includes/class-sfls-admin.php:1141
 msgid "Sync products"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1096
+#: includes/class-sfls-admin.php:1154
 #: assets/js/sfls-blocks-editor.js:49
 msgid "Plans"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1097
+#: includes/class-sfls-admin.php:1155
 msgid "Each plan needs a yearly price without a trial (for Buy now and upgrades). Add a second yearly price with a 7 or 14 day trial that requires a payment method to offer a free trial. Prices without a product in the list can be pasted as pri_ IDs."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1099
+#: includes/class-sfls-admin.php:1157
 msgid "With the WooCommerce checkout, keep each yearly license product in Licenses › Products at the same price as its Paddle price. Paddle charges the Paddle price, and Place order is refused when the two differ."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1102
+#: includes/class-sfls-admin.php:1160
 msgid "Click Sync products to pick prices from a list."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1104
-#: includes/class-sfls-admin.php:1116
+#: includes/class-sfls-admin.php:1162
+#: includes/class-sfls-admin.php:1174
 msgid "Trial price"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1104
-#: includes/class-sfls-admin.php:1138
+#: includes/class-sfls-admin.php:1162
+#: includes/class-sfls-admin.php:1196
 msgid "Trial days"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1108
+#: includes/class-sfls-admin.php:1166
 #: includes/class-sfls-checkout-paddle.php:239
 #: includes/class-sfls-shortcodes.php:147
 msgid "/year"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1118
+#: includes/class-sfls-admin.php:1176
 msgid "Not sold"
 msgstr ""
 
 #. translators: %d: number of days
-#: includes/class-sfls-admin.php:1146
+#: includes/class-sfls-admin.php:1204
 #, php-format
 msgid "%d day"
 msgid_plural "%d days"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-admin.php:1154
+#: includes/class-sfls-admin.php:1212
 msgid "Trial days are read from the trial price when you save and are shown on the pricing page. Paddle decides the real length, so keep them the same. Licenses › Products can also create these products and prices in Paddle for you."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1155
+#: includes/class-sfls-admin.php:1213
 msgid "Save plans"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1160
+#: includes/class-sfls-admin.php:1218
 msgid "Recent webhook events"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1162
+#: includes/class-sfls-admin.php:1220
 msgid "None yet. After a sandbox checkout, the events Paddle sends show up here."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1166
-#: includes/class-sfls-billing-emails.php:272
-#: includes/class-sfls-billing-emails.php:309
-#: includes/class-sfls-connect.php:524
-#: includes/class-sfls-reminders.php:299
-msgid "License"
-msgstr ""
-
-#: includes/class-sfls-admin.php:1166
+#: includes/class-sfls-admin.php:1224
 msgid "Note"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1185
+#: includes/class-sfls-admin.php:1243
 #: includes/class-sfls-shortcodes.php:145
 msgid "one-time"
 msgstr ""
 
 #. translators: %d: number of days
-#: includes/class-sfls-admin.php:1190
+#: includes/class-sfls-admin.php:1248
 #, php-format
 msgid "%d day trial"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1222
+#: includes/class-sfls-admin.php:1280
 msgid "Paddle settings saved."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1239
+#: includes/class-sfls-admin.php:1297
 msgid "Connected to Paddle (live)."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1240
+#: includes/class-sfls-admin.php:1298
 msgid "Connected to the Paddle sandbox."
 msgstr ""
 
 #. translators: %d: number of prices
-#: includes/class-sfls-admin.php:1261
+#: includes/class-sfls-admin.php:1319
 #, php-format
 msgid "Found %d active price in Paddle. Pick the prices for each plan below."
 msgid_plural "Found %d active prices in Paddle. Pick the prices for each plan below."
@@ -2298,35 +2618,35 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: plan name
-#: includes/class-sfls-admin.php:1308
+#: includes/class-sfls-admin.php:1366
 #, php-format
 msgid "The %s yearly price has a trial. Pick a price without a trial for Buy now and upgrades."
 msgstr ""
 
 #. translators: %s: plan name
-#: includes/class-sfls-admin.php:1312
+#: includes/class-sfls-admin.php:1370
 #, php-format
 msgid "The %s price does not renew yearly."
 msgstr ""
 
 #. translators: %s: plan name
-#: includes/class-sfls-admin.php:1322
+#: includes/class-sfls-admin.php:1380
 #, php-format
 msgid "The %s trial price has no trial period in Paddle."
 msgstr ""
 
 #. translators: %s: plan name
-#: includes/class-sfls-admin.php:1326
+#: includes/class-sfls-admin.php:1384
 #, php-format
 msgid "The %s trial price does not require a payment method, so Paddle cannot charge when the trial ends."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1335
+#: includes/class-sfls-admin.php:1393
 msgid "Plans saved."
 msgstr ""
 
 #. translators: %d: number of prices
-#: includes/class-sfls-admin.php:1403
+#: includes/class-sfls-admin.php:1461
 #, php-format
 msgid "%d price created in Paddle and mapped to its plan."
 msgid_plural "%d prices created in Paddle and mapped to their plans."
@@ -2334,106 +2654,106 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: keys
-#: includes/class-sfls-admin.php:1423
+#: includes/class-sfls-admin.php:1481
 #, php-format
 msgid "Issued: %s"
 msgstr ""
 
 #. translators: %s: email address
-#: includes/class-sfls-admin.php:1427
+#: includes/class-sfls-admin.php:1485
 #, php-format
 msgid "Emailed to %s."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1430
+#: includes/class-sfls-admin.php:1488
 msgid "The email could not be sent; copy the key to the customer by hand."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1431
+#: includes/class-sfls-admin.php:1489
 msgid "No email was sent: enter a customer email to send the key."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1486
+#: includes/class-sfls-admin.php:1545
 msgid "License updated."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1497
+#: includes/class-sfls-admin.php:1556
 msgid "License extended by one year."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1501
+#: includes/class-sfls-admin.php:1560
 msgid "License suspended."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1505
+#: includes/class-sfls-admin.php:1564
 msgid "License resumed."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1509
+#: includes/class-sfls-admin.php:1568
 msgid "All sites deactivated."
 msgstr ""
 
 #. translators: %s: domain
-#: includes/class-sfls-admin.php:1515
+#: includes/class-sfls-admin.php:1574
 #, php-format
 msgid "%s deactivated."
 msgstr ""
 
 #. translators: %s: key
-#: includes/class-sfls-admin.php:1520
+#: includes/class-sfls-admin.php:1579
 #, php-format
 msgid "New key: %s"
 msgstr ""
 
-#: includes/class-sfls-admin.php:1524
+#: includes/class-sfls-admin.php:1583
 msgid "This customer can start another free trial."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1528
+#: includes/class-sfls-admin.php:1587
 msgid "License deleted."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1566
+#: includes/class-sfls-admin.php:1625
 msgid "The expiry date was not understood, so it was left unchanged."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1576
+#: includes/class-sfls-admin.php:1635
 msgid "License saved."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1597
+#: includes/class-sfls-admin.php:1656
 msgid "WooCommerce is required."
 msgstr ""
 
 #. translators: 1: created count, 2: updated count
-#: includes/class-sfls-admin.php:1612
+#: includes/class-sfls-admin.php:1671
 #, php-format
 msgid "Products saved: %1$d created, %2$d updated."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1645
+#: includes/class-sfls-admin.php:1704
 msgid "Settings saved."
 msgstr ""
 
 #. translators: %d: number of emails
-#: includes/class-sfls-admin.php:1658
+#: includes/class-sfls-admin.php:1717
 #, php-format
 msgid "%d reminder sent."
 msgid_plural "%d reminders sent."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-admin.php:1678
+#: includes/class-sfls-admin.php:1737
 msgid "Enter a valid email address for the test."
 msgstr ""
 
 #. translators: %s: email address
-#: includes/class-sfls-admin.php:1681
+#: includes/class-sfls-admin.php:1740
 #, php-format
 msgid "Test reminder sent to %s."
 msgstr ""
 
-#: includes/class-sfls-admin.php:1683
+#: includes/class-sfls-admin.php:1742
 msgid "The test reminder could not be sent. Check that this site can send email."
 msgstr ""
 
@@ -2480,7 +2800,7 @@ msgstr ""
 
 #. translators: %s: first name
 #: includes/class-sfls-billing-emails.php:182
-#: includes/class-sfls-reminders.php:304
+#: includes/class-sfls-reminders.php:305
 #, php-format
 msgid "Hi %s,"
 msgstr ""
@@ -2488,14 +2808,14 @@ msgstr ""
 #. translators: %s: first name
 #: includes/class-sfls-billing-emails.php:182
 #: includes/class-sfls-delivery.php:172
-#: includes/class-sfls-reminders.php:304
+#: includes/class-sfls-reminders.php:305
 msgid "Hi,"
 msgstr ""
 
 #. translators: %s: support email
 #: includes/class-sfls-billing-emails.php:186
 #: includes/class-sfls-delivery.php:189
-#: includes/class-sfls-reminders.php:315
+#: includes/class-sfls-reminders.php:316
 #, php-format
 msgid "Questions? Reply to this email or write to %s."
 msgstr ""
@@ -2531,8 +2851,8 @@ msgid "Your free trial of SubtleForms Pro %1$s is ready. It covers 1 site and en
 msgstr ""
 
 #: includes/class-sfls-billing-emails.php:207
-#: includes/class-sfls-billing-emails.php:245
-#: includes/class-sfls-billing-emails.php:266
+#: includes/class-sfls-billing-emails.php:246
+#: includes/class-sfls-billing-emails.php:267
 msgid "the plan price"
 msgstr ""
 
@@ -2540,7 +2860,7 @@ msgstr ""
 msgid "Thanks for buying SubtleForms Pro. Here is your license key."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:224
+#: includes/class-sfls-billing-emails.php:225
 #: includes/class-sfls-delivery.php:93
 #: includes/class-sfls-delivery.php:181
 #: includes/class-sfls-delivery.php:471
@@ -2548,150 +2868,150 @@ msgstr ""
 msgid "How to install Pro"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:230
+#: includes/class-sfls-billing-emails.php:231
 msgid "We created an account for you with this email address. A separate email has a link to set your password, so you can sign in to download Pro and manage your license."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:232
+#: includes/class-sfls-billing-emails.php:233
 msgid "Paddle, our payment provider, sends the receipt for the payment separately."
 msgstr ""
 
 #. translators: %s: date
-#: includes/class-sfls-billing-emails.php:238
+#: includes/class-sfls-billing-emails.php:239
 #, php-format
 msgid "Your SubtleForms Pro trial ends on %s"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:239
+#: includes/class-sfls-billing-emails.php:240
 msgid "Your free trial ends soon"
 msgstr ""
 
 #. translators: 1: date, 2: amount, 3: tax note, 4: plan, 5: sites
-#: includes/class-sfls-billing-emails.php:243
+#: includes/class-sfls-billing-emails.php:244
 #, php-format
 msgid "Your SubtleForms Pro free trial ends on %1$s. On that day your card is charged %2$s (%3$s) for a year of the %4$s plan, and your license grows from 1 site to %5$s. You do not need to do anything to keep Pro."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:251
+#: includes/class-sfls-billing-emails.php:252
 msgid "Not for you? Cancel before the trial ends in My Account › Licenses with Cancel auto-renew, and you will not be charged."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:252
-#: includes/class-sfls-billing-emails.php:277
+#: includes/class-sfls-billing-emails.php:253
+#: includes/class-sfls-billing-emails.php:278
 msgid "Manage billing"
 msgstr ""
 
 #. translators: %s: date
-#: includes/class-sfls-billing-emails.php:258
+#: includes/class-sfls-billing-emails.php:259
 #, php-format
 msgid "SubtleForms Pro renews on %s"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:259
+#: includes/class-sfls-billing-emails.php:260
 msgid "Your yearly renewal is coming up"
 msgstr ""
 
 #. translators: 1: plan, 2: date, 3: amount, 4: tax note
-#: includes/class-sfls-billing-emails.php:263
+#: includes/class-sfls-billing-emails.php:264
 #, php-format
 msgid "Your SubtleForms Pro %1$s license renews automatically on %2$s. We will charge %3$s (%4$s) to the card on file, and Pro keeps running with updates and support for another year."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:276
+#: includes/class-sfls-billing-emails.php:277
 msgid "To change the card, or to stop the renewal, open My Account › Licenses and use Update payment method or Cancel auto-renew."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:281
+#: includes/class-sfls-billing-emails.php:282
 msgid "Payment received for SubtleForms Pro"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:282
+#: includes/class-sfls-billing-emails.php:283
 msgid "Thanks, your payment went through"
 msgstr ""
 
 #. translators: 1: amount, 2: plan, 3: sites
-#: includes/class-sfls-billing-emails.php:286
+#: includes/class-sfls-billing-emails.php:287
 #, php-format
 msgid "Your free trial is over and we received %1$s. Your %2$s license now covers %3$s."
 msgstr ""
 
 #. translators: 1: amount, 2: plan
-#: includes/class-sfls-billing-emails.php:294
+#: includes/class-sfls-billing-emails.php:295
 #, php-format
 msgid "We received %1$s for your upgrade. Your license is now on the %2$s plan with the same key."
 msgstr ""
 
 #. translators: 1: amount, 2: plan
-#: includes/class-sfls-billing-emails.php:301
+#: includes/class-sfls-billing-emails.php:302
 #, php-format
 msgid "We received %1$s and renewed your SubtleForms Pro %2$s license for another year."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:313
+#: includes/class-sfls-billing-emails.php:314
 msgid "Paddle, our payment provider, emails the receipt separately."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:317
+#: includes/class-sfls-billing-emails.php:318
 msgid "Payment failed for SubtleForms Pro"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:318
+#: includes/class-sfls-billing-emails.php:319
 msgid "We could not charge your card"
 msgstr ""
 
 #. translators: %s: plan
-#: includes/class-sfls-billing-emails.php:322
+#: includes/class-sfls-billing-emails.php:323
 #, php-format
 msgid "The payment for your SubtleForms Pro %s license did not go through. Paddle will try again over the next days."
 msgstr ""
 
 #. translators: %s: date
-#: includes/class-sfls-billing-emails.php:329
+#: includes/class-sfls-billing-emails.php:330
 #, php-format
 msgid "Pro keeps working until %s. Update your payment method to keep it running without a break."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:338
+#: includes/class-sfls-billing-emails.php:339
 msgid "Auto-renew is off for SubtleForms Pro"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:339
+#: includes/class-sfls-billing-emails.php:340
 msgid "Your subscription is canceled"
 msgstr ""
 
 #. translators: %s: date
-#: includes/class-sfls-billing-emails.php:343
+#: includes/class-sfls-billing-emails.php:344
 #, php-format
 msgid "Your free trial will not turn into a paid plan. Pro keeps working until %s and you will not be charged."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:344
+#: includes/class-sfls-billing-emails.php:345
 msgid "Your free trial is canceled and you will not be charged."
 msgstr ""
 
 #. translators: %s: date
-#: includes/class-sfls-billing-emails.php:347
+#: includes/class-sfls-billing-emails.php:348
 #, php-format
 msgid "Auto-renew is off. Your license stays active until %s, the end of the period you paid for, and then Pro stops on your sites."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:351
+#: includes/class-sfls-billing-emails.php:352
 msgid "Changed your mind? Click Resume in My Account › Licenses before that date and nothing changes."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:358
+#: includes/class-sfls-billing-emails.php:359
 msgid "We could not start your SubtleForms Pro trial"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:359
+#: includes/class-sfls-billing-emails.php:360
 msgid "Your free trial was not started"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:360
+#: includes/class-sfls-billing-emails.php:361
 msgid "Each customer, company and site can try SubtleForms Pro for free once, so we canceled the new subscription before any charge. You have not been billed."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:361
+#: includes/class-sfls-billing-emails.php:362
 msgid "You can buy SubtleForms Pro straight away from the pricing page."
 msgstr ""
 
@@ -2799,6 +3119,78 @@ msgstr ""
 #: includes/class-sfls-blocks.php:184
 #: assets/js/sfls-blocks-editor.js:190
 msgid "My licenses"
+msgstr ""
+
+#: includes/class-sfls-branding.php:320
+#: includes/class-sfls-branding.php:384
+msgid "Branding is part of the Agency plan."
+msgstr ""
+
+#: includes/class-sfls-branding.php:388
+msgid "That version was not found."
+msgstr ""
+
+#. translators: 1: field name, 2: maximum characters
+#: includes/class-sfls-branding.php:476
+#, php-format
+msgid "%1$s can have up to %2$d characters."
+msgstr ""
+
+#. translators: %d: maximum characters
+#: includes/class-sfls-branding.php:522
+#, php-format
+msgid "can have up to %d characters."
+msgstr ""
+
+#: includes/class-sfls-branding.php:529
+msgid "must be an https address."
+msgstr ""
+
+#: includes/class-sfls-branding.php:529
+msgid "must be an http or https address."
+msgstr ""
+
+#: includes/class-sfls-branding.php:534
+msgid "is not a valid address."
+msgstr ""
+
+#: includes/class-sfls-branding.php:539
+msgid "must point to a png, jpg, gif, webp or svg image."
+msgstr ""
+
+#: includes/class-sfls-branding.php:566
+msgid "Logo address"
+msgstr ""
+
+#: includes/class-sfls-branding.php:568
+msgid "Hide SubtleForms credits"
+msgstr ""
+
+#: includes/class-sfls-branding.php:569
+msgid "Restrict the License screen"
+msgstr ""
+
+#: includes/class-sfls-branding.php:621
+#: includes/class-sfls-branding.php:631
+msgid "The logo is larger than 1 MB."
+msgstr ""
+
+#: includes/class-sfls-branding.php:624
+msgid "The logo could not be uploaded. Try again."
+msgstr ""
+
+#: includes/class-sfls-branding.php:628
+msgid "The logo file is empty."
+msgstr ""
+
+#: includes/class-sfls-branding.php:651
+#: includes/class-sfls-branding.php:656
+msgid "The logo must be a PNG, JPEG, GIF or WebP image."
+msgstr ""
+
+#: includes/class-sfls-branding.php:661
+#: includes/class-sfls-branding.php:674
+msgid "The logo could not be stored. Try again later."
 msgstr ""
 
 #: includes/class-sfls-checkout-paddle.php:120
@@ -3330,10 +3722,6 @@ msgstr ""
 msgid "The payment method name customers see at checkout."
 msgstr ""
 
-#: includes/class-sfls-gateway-paddle.php:80
-msgid "Description"
-msgstr ""
-
 #: includes/class-sfls-gateway-paddle.php:82
 msgid "Shown under the payment method at checkout."
 msgstr ""
@@ -3529,37 +3917,39 @@ msgstr ""
 msgid "This license is in your account."
 msgstr ""
 
-#: includes/class-sfls-licenses.php:291
-#: includes/class-sfls-rest.php:455
+#: includes/class-sfls-licenses.php:292
+#: includes/class-sfls-rest.php:523
 msgid "license_key and site_url are required."
 msgstr ""
 
-#: includes/class-sfls-licenses.php:299
+#: includes/class-sfls-licenses.php:300
+#: includes/class-sfls-rest.php:191
 msgid "This license has expired. Renew it from your SubtleForms account."
 msgstr ""
 
-#: includes/class-sfls-licenses.php:300
+#: includes/class-sfls-licenses.php:301
+#: includes/class-sfls-rest.php:192
 msgid "This license is not active. Contact SubtleForms support."
 msgstr ""
 
-#: includes/class-sfls-licenses.php:309
+#: includes/class-sfls-licenses.php:310
 msgid "This site already had a SubtleForms Pro free trial. Buy a license to use Pro here, or start the trial on a site that has not had one."
 msgstr ""
 
 #. translators: %d: number of sites
-#: includes/class-sfls-licenses.php:319
+#: includes/class-sfls-licenses.php:320
 #, php-format
 msgid "This license is already active on %d site. Deactivate it there, or upgrade your plan."
 msgid_plural "This license is already active on %d sites. Deactivate one, or upgrade your plan."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-licenses.php:638
+#: includes/class-sfls-licenses.php:639
 msgid "Grace period"
 msgstr ""
 
 #. translators: %d: sites used
-#: includes/class-sfls-licenses.php:676
+#: includes/class-sfls-licenses.php:677
 #, php-format
 msgid "%d site used, unlimited"
 msgid_plural "%d sites used, unlimited"
@@ -3567,7 +3957,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: sites used, 2: sites allowed
-#: includes/class-sfls-licenses.php:679
+#: includes/class-sfls-licenses.php:680
 #, php-format
 msgid "%1$d of %2$d site used"
 msgid_plural "%1$d of %2$d sites used"
@@ -3659,7 +4049,7 @@ msgid "Advanced conditional logic"
 msgstr ""
 
 #: includes/class-sfls-plans.php:129
-msgid "White label and WPML/Polylang translation"
+msgid "Branding portal for your clients' sites, white label and WPML/Polylang translation"
 msgstr ""
 
 #: includes/class-sfls-plans.php:184
@@ -3687,6 +4077,10 @@ msgid "Pro templates"
 msgstr ""
 
 #: includes/class-sfls-plans.php:190
+msgid "MCP server for AI assistants"
+msgstr ""
+
+#: includes/class-sfls-plans.php:191
 msgid "Updates and priority support"
 msgstr ""
 
@@ -3863,114 +4257,119 @@ msgstr ""
 msgid "Version %1$s is lower than the current release %2$s. Publish a higher version, or re-upload %2$s to replace its package."
 msgstr ""
 
-#: includes/class-sfls-reminders.php:275
+#: includes/class-sfls-reminders.php:276
 msgid "Your SubtleForms Pro license has ended"
 msgstr ""
 
-#: includes/class-sfls-reminders.php:276
+#: includes/class-sfls-reminders.php:277
 msgid "Your license has ended"
 msgstr ""
 
-#: includes/class-sfls-reminders.php:278
+#: includes/class-sfls-reminders.php:279
 msgid "Your SubtleForms Pro free trial has ended and nothing was charged. Pro features and updates have stopped on your sites. Your forms and entries are safe. Pick a plan any time to turn Pro back on."
 msgstr ""
 
-#: includes/class-sfls-reminders.php:279
+#: includes/class-sfls-reminders.php:280
 msgid "Your SubtleForms Pro subscription has ended, so Pro features, updates and support stop on your sites. Your forms and entries are safe. Subscribe again any time to turn Pro back on with the same key."
 msgstr ""
 
-#: includes/class-sfls-reminders.php:281
+#: includes/class-sfls-reminders.php:282
 msgid "Your SubtleForms Pro license has expired"
 msgstr ""
 
-#: includes/class-sfls-reminders.php:282
+#: includes/class-sfls-reminders.php:283
 msgid "Your license has expired"
 msgstr ""
 
 #. translators: %d: grace period days
-#: includes/class-sfls-reminders.php:285
+#: includes/class-sfls-reminders.php:286
 #, php-format
 msgid "Your SubtleForms Pro license expired yesterday. Pro keeps working for %d days, after which Pro features, updates and support stop on your sites. Renew now to keep everything running."
 msgstr ""
 
-#: includes/class-sfls-reminders.php:290
+#: includes/class-sfls-reminders.php:291
 msgid "Your SubtleForms Pro license expires tomorrow"
 msgstr ""
 
 #. translators: %d: days
-#: includes/class-sfls-reminders.php:292
+#: includes/class-sfls-reminders.php:293
 #, php-format
 msgid "Your SubtleForms Pro license expires in %d day"
 msgid_plural "Your SubtleForms Pro license expires in %d days"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-reminders.php:293
+#: includes/class-sfls-reminders.php:294
 msgid "Time to renew SubtleForms Pro"
 msgstr ""
 
-#: includes/class-sfls-reminders.php:294
+#: includes/class-sfls-reminders.php:295
 msgid "Your SubtleForms Pro license is coming up for renewal. Renew it to keep getting updates, new features and priority support without a gap."
 msgstr ""
 
-#: includes/class-sfls-reminders.php:311
+#: includes/class-sfls-reminders.php:312
 msgid "Renew your license"
 msgstr ""
 
-#: includes/class-sfls-reminders.php:320
+#: includes/class-sfls-reminders.php:321
 msgid "This is a test of the renewal reminder. The license shown is an example and no customer received this email."
 msgstr ""
 
 #. translators: %s: email subject
-#: includes/class-sfls-reminders.php:355
+#: includes/class-sfls-reminders.php:356
 #, php-format
 msgid "[Test] %s"
 msgstr ""
 
-#: includes/class-sfls-rest.php:119
-#: includes/class-sfls-rest.php:277
+#: includes/class-sfls-rest.php:122
+#: includes/class-sfls-rest.php:196
+#: includes/class-sfls-rest.php:345
 msgid "This site is not activated for this license."
 msgstr ""
 
-#: includes/class-sfls-rest.php:274
-#: includes/class-sfls-rest.php:374
+#: includes/class-sfls-rest.php:182
+msgid "version must be a whole number."
+msgstr ""
+
+#: includes/class-sfls-rest.php:342
+#: includes/class-sfls-rest.php:442
 msgid "An active license is required to download updates."
 msgstr ""
 
-#: includes/class-sfls-rest.php:281
-#: includes/class-sfls-rest.php:377
+#: includes/class-sfls-rest.php:349
+#: includes/class-sfls-rest.php:445
 msgid "No package is available."
 msgstr ""
 
-#: includes/class-sfls-rest.php:369
+#: includes/class-sfls-rest.php:437
 msgid "This download link has expired. Check for updates again."
 msgstr ""
 
-#: includes/class-sfls-rest.php:380
+#: includes/class-sfls-rest.php:448
 msgid "This download link was already used. Check for updates again to get a new one."
 msgstr ""
 
-#: includes/class-sfls-rest.php:409
+#: includes/class-sfls-rest.php:477
 msgid "This connection code is invalid or has expired. Connect the site again."
 msgstr ""
 
-#: includes/class-sfls-rest.php:458
+#: includes/class-sfls-rest.php:526
 msgid "license_key is required."
 msgstr ""
 
-#: includes/class-sfls-rest.php:461
+#: includes/class-sfls-rest.php:529
 msgid "site_url is required."
 msgstr ""
 
-#: includes/class-sfls-rest.php:464
+#: includes/class-sfls-rest.php:532
 msgid "site_url must be the address of a website, such as https://example.com."
 msgstr ""
 
-#: includes/class-sfls-rest.php:469
+#: includes/class-sfls-rest.php:537
 msgid "That license key was not found. Check it in your SubtleForms account."
 msgstr ""
 
-#: includes/class-sfls-rest.php:617
+#: includes/class-sfls-rest.php:712
 msgid "Too many requests. Try again in a few minutes."
 msgstr ""
 

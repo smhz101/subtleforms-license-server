@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '6';
+	const SCHEMA_VERSION = '7';
 
 	/**
 	 * Set once licenses were tied to the customer of the order that issued
@@ -85,6 +85,30 @@ final class SFLS_DB {
 	}
 
 	/**
+	 * Branding of each license (1.8.0).
+	 */
+	public static function branding(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_branding';
+	}
+
+	/**
+	 * Branding revisions, the newest ten per license (1.8.0).
+	 */
+	public static function branding_revisions(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_branding_revisions';
+	}
+
+	/**
+	 * Client sites that fetched the branding (1.8.0).
+	 */
+	public static function branding_sites(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_branding_sites';
+	}
+
+	/**
 	 * Create or upgrade the tables and the private release folder.
 	 */
 	public static function install(): void {
@@ -100,6 +124,9 @@ final class SFLS_DB {
 		$events   = self::paddle_events();
 		$releases = self::releases();
 		$hooks    = self::github_deliveries();
+		$brand    = self::branding();
+		$brev     = self::branding_revisions();
+		$bsites   = self::branding_sites();
 
 		dbDelta(
 			"CREATE TABLE {$licenses} (
@@ -262,6 +289,49 @@ final class SFLS_DB {
 ) {$charset};"
 		);
 
+		// Schema 7 (1.8.0): white-label branding per license, its last ten
+		// revisions and the client sites that fetched it. Existing sites get
+		// the tables on the next load (maybe_upgrade), nothing needs copying.
+		dbDelta(
+			"CREATE TABLE {$brand} (
+  license_id bigint(20) unsigned NOT NULL,
+  version int(11) unsigned NOT NULL DEFAULT 0,
+  enabled tinyint(1) NOT NULL DEFAULT 0,
+  profile longtext NULL,
+  logo_file varchar(190) NOT NULL DEFAULT '',
+  updated_at datetime NOT NULL,
+  updated_by bigint(20) unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY  (license_id)
+) {$charset};"
+		);
+
+		dbDelta(
+			"CREATE TABLE {$brev} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  license_id bigint(20) unsigned NOT NULL,
+  version int(11) unsigned NOT NULL DEFAULT 0,
+  enabled tinyint(1) NOT NULL DEFAULT 0,
+  profile longtext NULL,
+  logo_file varchar(190) NOT NULL DEFAULT '',
+  action varchar(20) NOT NULL DEFAULT 'save',
+  user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY license_id (license_id)
+) {$charset};"
+		);
+
+		dbDelta(
+			"CREATE TABLE {$bsites} (
+  license_id bigint(20) unsigned NOT NULL,
+  domain varchar(190) NOT NULL,
+  site_url varchar(255) NOT NULL DEFAULT '',
+  version int(11) unsigned NOT NULL DEFAULT 0,
+  fetched_at datetime NOT NULL,
+  PRIMARY KEY  (license_id,domain)
+) {$charset};"
+		);
+
 		self::backfill_billing();
 
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
@@ -389,6 +459,8 @@ final class SFLS_DB {
 	public static function maybe_upgrade(): void {
 		if ( get_option( 'sfls_schema_version' ) !== self::SCHEMA_VERSION ) {
 			self::install();
+			// A new schema can come with new My Account endpoints (Branding, 1.8.0).
+			update_option( 'sfls_flush_rewrite', 1 );
 		}
 		if ( get_option( 'sfls_version' ) !== SFLS_VERSION ) {
 			$previous = (string) get_option( 'sfls_version', '' );

@@ -24,6 +24,9 @@ $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_trial_claims" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_paddle_events" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_releases" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_github_deliveries" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding_revisions" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding_sites" );
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfls\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfls\\_%'" );
 // phpcs:enable
 
@@ -58,13 +61,15 @@ SFLS_DB::remove_leftovers();
 
 wp_clear_scheduled_hook( 'sfls_daily' );
 
-// Release packages in uploads/sfls-private.
+// Release packages in uploads/sfls-private and uploaded logos in uploads/sfls-branding.
 $sfls_uploads = wp_upload_dir( null, false );
-$sfls_dir     = trailingslashit( $sfls_uploads['basedir'] ) . 'sfls-private';
-if ( is_dir( $sfls_dir ) ) {
-	require_once ABSPATH . 'wp-admin/includes/file.php';
-	if ( WP_Filesystem() ) {
-		global $wp_filesystem;
-		$wp_filesystem->rmdir( $sfls_dir, true );
+foreach ( array( 'sfls-private', 'sfls-branding' ) as $sfls_folder ) {
+	$sfls_dir = trailingslashit( $sfls_uploads['basedir'] ) . $sfls_folder;
+	if ( is_dir( $sfls_dir ) ) {
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		if ( WP_Filesystem() ) {
+			global $wp_filesystem;
+			$wp_filesystem->rmdir( $sfls_dir, true );
+		}
 	}
 }

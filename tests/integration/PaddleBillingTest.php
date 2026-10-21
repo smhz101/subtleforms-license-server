@@ -230,7 +230,7 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 	 */
 	public function test_payload_fields(): void {
 		$old = array( 'valid', 'status', 'plan', 'features', 'expires_at', 'grace_period_ends_at', 'sites_allowed', 'sites_used', 'check_again_in', 'is_local' );
-		$new = array( 'billing', 'billing_status', 'trial', 'trial_ends_at', 'renews_at', 'cancels_at', 'renewal_amount', 'manage_url' );
+		$new = array( 'billing', 'billing_status', 'trial', 'trial_ends_at', 'renews_at', 'cancels_at', 'renewal_amount', 'manage_url', 'branding_version' );
 
 		$manual = SFLS_Licenses::payload( $this->make_license() );
 		foreach ( array_merge( $old, $new ) as $key ) {

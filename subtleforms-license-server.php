@@ -24,6 +24,7 @@ require_once SFLS_DIR . 'includes/class-sfls-settings.php';
 require_once SFLS_DIR . 'includes/class-sfls-plans.php';
 require_once SFLS_DIR . 'includes/class-sfls-db.php';
 require_once SFLS_DIR . 'includes/class-sfls-licenses.php';
+require_once SFLS_DIR . 'includes/class-sfls-branding.php';
 require_once SFLS_DIR . 'includes/class-sfls-claims.php';
 require_once SFLS_DIR . 'includes/class-sfls-guest.php';
 require_once SFLS_DIR . 'includes/class-sfls-releases.php';

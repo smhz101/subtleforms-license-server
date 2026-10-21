@@ -93,18 +93,31 @@ class SFLS_Rest_Api_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * Per key: one key hammered from many IPs is limited too, and status
-	 * (GET) shares the bucket with validate.
+	 * Per key: failing requests for one key from many IPs and sites hit the
+	 * key's ceiling, and status (GET) shares the bucket with validate. The
+	 * ceiling is ten times the limit.
 	 */
 	public function test_rate_limit_per_key(): void {
-		$this->limit( 3 );
-		$lic = $this->make_license();
-		foreach ( array( 1, 2, 3 ) as $n ) {
+		$this->filter( 'sfls_rate_limit_enabled', '__return_true' );
+		$this->filter(
+			'sfls_rate_limit',
+			static fn( $conf, $type = '' ) => array(
+				'limit'  => 'ceiling' === $type ? 1 : 100,
+				'window' => 600,
+			),
+			10,
+			2
+		);
+		$params = array(
+			'license_key' => 'SFLS-NOPE-NOPE-NOPE',
+			'site_url'    => 'https://shop.example.com',
+		);
+		foreach ( range( 1, 10 ) as $n ) {
 			$_SERVER['REMOTE_ADDR'] = '192.0.2.' . $n;
-			$this->assertNotSame( 429, $this->rest( 'POST', '/sfls/v1/license/validate', $this->params( $lic ) )->get_status() );
+			$this->assertSame( 404, $this->rest( 'POST', '/sfls/v1/license/validate', $params )->get_status() );
 		}
 		$_SERVER['REMOTE_ADDR'] = '192.0.2.99';
-		$response               = $this->rest( 'GET', '/sfls/v1/license/status', $this->params( $lic ) );
+		$response               = $this->rest( 'GET', '/sfls/v1/license/status', $params );
 		$this->assertSame( 429, $response->get_status() );
 		$this->assertArrayHasKey( 'Retry-After', $response->get_headers() );
 
@@ -121,7 +134,7 @@ class SFLS_Rest_Api_Test extends SFLS_Test_Case {
 		$lic                    = $this->make_license();
 		$this->rest( 'POST', '/sfls/v1/license/validate', $this->params( $lic ) );
 		$this->assertSame( 429, $this->rest( 'POST', '/sfls/v1/license/validate', $this->params( $lic ) )->get_status() );
-		foreach ( array( 'ip' => '203.0.113.50', 'key' => strtoupper( $lic['license_key'] ) ) as $type => $value ) {
+		foreach ( array( 'ip' => '203.0.113.50', 'pair' => strtoupper( $lic['license_key'] ) . '|203.0.113.50|shop.example.com' ) as $type => $value ) {
 			set_transient(
 				'sfls_rl_' . $type . '_' . md5( $value ),
 				array(

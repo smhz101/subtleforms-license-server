@@ -57,6 +57,21 @@ class SFLS_Plans_And_Version_Test extends SFLS_Test_Case {
 	}
 
 	/**
+	 * Every pricing card lists the MCP server as a common item; only the
+	 * Agency card mentions the branding portal.
+	 */
+	public function test_mcp_common_item_and_agency_branding_portal(): void {
+		$this->assertContains( 'MCP server for AI assistants', SFLS_Plans::common_items() );
+		$html  = ( new SFLS_Shortcodes() )->pricing( array() );
+		$cards = preg_match_all( '/<div class="sfls-plan[ "]/', $html );
+		$this->assertGreaterThan( 0, $cards );
+		$this->assertSame( $cards, substr_count( $html, 'MCP server for AI assistants' ), 'Once per card.' );
+		$this->assertStringContainsString( "Branding portal for your clients' sites", SFLS_Plans::feature_line( 'agency' ) );
+		$this->assertStringNotContainsString( 'Branding portal', SFLS_Plans::feature_line( 'pro' ) );
+		$this->assertStringNotContainsString( 'Branding portal', SFLS_Plans::feature_line( 'starter' ) );
+	}
+
+	/**
 	 * With no release the shortcode, block and dashboard say "Coming soon".
 	 */
 	public function test_latest_version_fallback(): void {

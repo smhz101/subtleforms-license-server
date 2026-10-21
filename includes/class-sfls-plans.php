@@ -126,7 +126,7 @@ final class SFLS_Plans {
 				'webhooks'          => __( 'Webhooks with retries', 'subtleforms-license-server' ),
 				'integrations'      => __( 'WooCommerce checkout, Mailchimp, Brevo, Kit, HubSpot and Zapier', 'subtleforms-license-server' ),
 				'conditional_logic' => __( 'Advanced conditional logic', 'subtleforms-license-server' ),
-				'white_label'       => __( 'White label and WPML/Polylang translation', 'subtleforms-license-server' ),
+				'white_label'       => __( "Branding portal for your clients' sites, white label and WPML/Polylang translation", 'subtleforms-license-server' ),
 			)
 		);
 	}
@@ -187,6 +187,7 @@ final class SFLS_Plans {
 				__( 'Multi-file uploads', 'subtleforms-license-server' ),
 				__( 'Entry PDFs and form analytics', 'subtleforms-license-server' ),
 				__( 'Pro templates', 'subtleforms-license-server' ),
+				__( 'MCP server for AI assistants', 'subtleforms-license-server' ),
 				__( 'Updates and priority support', 'subtleforms-license-server' ),
 			)
 		);
