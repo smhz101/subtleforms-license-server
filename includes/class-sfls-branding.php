@@ -669,11 +669,11 @@ final class SFLS_Branding {
 
 		$name = 'license-' . $license_id . '-' . strtolower( wp_generate_password( 12, false, false ) ) . '.' . $types[ $type ][0];
 		$path = $dir . '/' . $name;
-		$ok   = is_uploaded_file( $tmp ) ? move_uploaded_file( $tmp, $path ) : copy( $tmp, $path );
+		$ok   = is_uploaded_file( $tmp ) ? move_uploaded_file( $tmp, $path ) : copy( $tmp, $path ); // phpcs:ignore Generic.PHP.ForbiddenFunctions.Found -- The file is checked with is_uploaded_file() first.
 		if ( ! $ok ) {
 			return new WP_Error( 'sfls_logo_dir', __( 'The logo could not be stored. Try again later.', 'subtleforms-license-server' ) );
 		}
-		chmod( $path, 0644 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.chmod_chmod
+		chmod( $path, 0644 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- A plain file mode in the logo folder.
 		return $name;
 	}
 
