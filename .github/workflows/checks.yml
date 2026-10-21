@@ -62,6 +62,7 @@ jobs:
           --health-retries=20
     env:
       WP_DIR: /tmp/wordpress
+      WC_VERSION: '10.2.1'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -99,7 +100,10 @@ jobs:
       - name: Install WooCommerce and activate the plugin
         run: |
           fail() { echo "$1" | tail -15 | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
-          out=$(wp plugin install woocommerce --activate --path="$WP_DIR" 2>&1) || fail "$out"
+          # Pinned to the WooCommerce version the suite is verified against.
+          # Raise it on purpose (see docs/dev/BRANCH_PROTECTION.md), do not
+          # follow latest: newer releases reject the meta_query order lookup.
+          out=$(wp plugin install woocommerce --version="$WC_VERSION" --activate --path="$WP_DIR" 2>&1) || fail "$out"
           ln -s "$GITHUB_WORKSPACE/plugin" "$WP_DIR/wp-content/plugins/subtleforms-license-server"
           out=$(wp plugin activate subtleforms-license-server --path="$WP_DIR" 2>&1) || fail "$out"
           wp plugin list --path="$WP_DIR"

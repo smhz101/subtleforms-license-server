@@ -32,9 +32,10 @@ All four come from `.github/workflows/checks.yml`:
 
 - `PHPUnit` installs a fresh WordPress and WooCommerce on the runner (MySQL
   service container), links this repository in as the plugin and runs
-  `phpunit -c phpunit.xml` with `SFLS_WP_PATH`. WooCommerce is installed at its
-  latest version, so a WooCommerce release can fail this check for reasons
-  outside the pull request.
+  `phpunit -c phpunit.xml` with `SFLS_WP_PATH`. WooCommerce is pinned in the
+  workflow (`WC_VERSION`) to the version the suite is verified against, so a
+  WooCommerce release cannot fail this check by surprise. Raise the pin on
+  purpose, in its own pull request, after running the suite on the new version.
 - `POT freshness check` is strict only for pull requests from `release/*`
   branches. On every other pull request a stale POT is a warning.
 - The workflow has no paths filter on purpose. A required check that is skipped
