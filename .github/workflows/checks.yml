@@ -131,7 +131,20 @@ jobs:
               );
           }
           // One license, as on the verified site (a test reads the first row).
-          SFLS_Licenses::create( array( 'plan' => 'pro', 'customer_email' => 'seed@sfls-test.invalid' ) );
+          // The address is not on the tests' own domain, which they clean up.
+          SFLS_Licenses::create( array( 'plan' => 'pro', 'customer_email' => 'seed@example.com' ) );
+          // One published Pro release, so update checks have something to offer.
+          $zip_path = wp_tempnam( 'seed-release.zip' );
+          $zip      = new ZipArchive();
+          $zip->open( $zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+          $zip->addFromString( 'subtleforms-pro/subtleforms-pro.php', "<?php\n/**\n * Plugin Name: SubtleForms Pro\n * Version: 2.4.2\n * Requires at least: 6.5\n * Requires PHP: 8.1\n */\n" );
+          $zip->addFromString( 'subtleforms-pro/readme.txt', "=== SubtleForms Pro ===\nTested up to: 7.1\nStable tag: 2.4.2\n" );
+          $zip->close();
+          $stored = SFLS_Releases::ingest( $zip_path, array( 'publish' => true ) );
+          if ( is_wp_error( $stored ) ) {
+              echo 'release seed failed: ' . $stored->get_error_message() . "\n";
+              exit( 1 );
+          }
           $result = SFLS_Products::save_wizard( $rows );
           echo wp_json_encode( $result ), "\n";
           PHP
