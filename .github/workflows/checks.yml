@@ -118,15 +118,20 @@ jobs:
           wp option update woocommerce_cheque_settings '{"enabled":"yes","title":"Check payments"}' --format=json --path="$WP_DIR"
           cat > "$RUNNER_TEMP/seed.php" <<'PHP'
           <?php
+          // Higher plans cost more, so upgrades have a price difference.
           $rows = array();
+          $step = 0;
           foreach ( SFLS_Plans::all() as $plan => $def ) {
+              ++$step;
               $rows[ $plan ] = array(
-                  'yearly'   => '59',
-                  'renewal'  => '39',
-                  'lifetime' => '199',
+                  'yearly'   => (string) ( 40 * $step ),
+                  'renewal'  => (string) ( 30 * $step ),
+                  'lifetime' => (string) ( 150 * $step ),
                   'sites'    => (string) $def['sites'],
               );
           }
+          // One license, as on the verified site (a test reads the first row).
+          SFLS_Licenses::create( array( 'plan' => 'pro', 'customer_email' => 'seed@sfls-test.invalid' ) );
           $result = SFLS_Products::save_wizard( $rows );
           echo wp_json_encode( $result ), "\n";
           PHP
@@ -169,8 +174,8 @@ jobs:
               for tc in ET.parse(sys.argv[1]).iter('testcase'):
                   for kind in ('failure', 'error'):
                       for el in tc.findall(kind):
-                          first = ((el.text or el.get('type') or '').strip().splitlines() or [''])[0:3]
-                          lines.append('%s::%s %s' % (tc.get('class') or '', tc.get('name'), ' | '.join(first)[:200]))
+                          first = ((el.text or el.get('type') or '').strip().splitlines() or [''])[0:12]
+                          lines.append('%s::%s %s' % (tc.get('class') or '', tc.get('name'), ' | '.join(first)[:1200]))
                           n += 1
           except Exception as e:
               print('::error::could not read junit: %s' % e)
