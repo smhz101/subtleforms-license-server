@@ -36,9 +36,11 @@ class SFLS_Paddle_Woo_Gateway_Test extends SFLS_Test_Case {
 	private function refunds_of( WC_Order $order ): array {
 		return wc_get_orders(
 			array(
-				'type'   => 'shop_order_refund',
-				'parent' => $order->get_id(),
-				'limit'  => 20,
+				'type'    => 'shop_order_refund',
+				'parent'  => $order->get_id(),
+				'limit'   => 20,
+				'orderby' => 'ID',
+				'order'   => 'DESC',
 			)
 		);
 	}
