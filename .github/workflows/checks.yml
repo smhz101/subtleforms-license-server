@@ -99,9 +99,10 @@ jobs:
 
       - name: Install WooCommerce and activate the plugin
         run: |
-          wp plugin install woocommerce --activate --path="$WP_DIR"
+          fail() { echo "$1" | tail -15 | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
+          out=$(wp plugin install woocommerce --activate --path="$WP_DIR" 2>&1) || fail "$out"
           ln -s "$GITHUB_WORKSPACE/plugin" "$WP_DIR/wp-content/plugins/subtleforms-license-server"
-          wp plugin activate subtleforms-license-server --path="$WP_DIR"
+          out=$(wp plugin activate subtleforms-license-server --path="$WP_DIR" 2>&1) || fail "$out"
           wp plugin list --path="$WP_DIR"
 
       - name: PHPUnit (integration)
