@@ -10,11 +10,12 @@
  *   GET  /wp-json/sfls/v1/update/package      ?lid&ptoken&site_url[&channel][&version], or ?license_key&site_url (redirects to a fresh signed link)
  *   GET  /wp-json/sfls/v1/update/download     ?lid&site&expires&token&sig[&version] (15 minutes, single use)
  *   GET  /wp-json/sfls/v1/update/versions     ?license_key&site_url[&channel=beta] (versions this license may download)
+ *   POST /wp-json/sfls/v1/branding            { license_key, site_url[, version] } (white-label profile, Agency plan)
  *   POST /wp-json/sfls/v1/connect/exchange    { code, site_url }
  *
  * Every response is JSON except download. Errors use a 4xx status with
  * { error, reason }, which is what the Pro client maps to a license state.
- * activate, validate, status, package and versions are limited per IP (30
+ * activate, validate, status, package, versions and branding are limited per IP (30
  * requests per 10 minutes). Requests from a site the valid key is activated
  * on are also limited per key and site; every other request is checked
  * against a budget of failed requests per key, address and site, and a
@@ -54,6 +55,7 @@ final class SFLS_REST {
 		register_rest_route( self::NS, '/update/package', array( 'methods' => 'GET', 'callback' => array( $this, 'package' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/download', array( 'methods' => 'GET', 'callback' => array( $this, 'download' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/update/versions', array( 'methods' => 'GET', 'callback' => array( $this, 'versions' ), 'permission_callback' => $open ) );
+		register_rest_route( self::NS, '/branding', array( 'methods' => 'POST', 'callback' => array( $this, 'branding' ), 'permission_callback' => $open ) );
 		register_rest_route( self::NS, '/connect/exchange', array( 'methods' => 'POST', 'callback' => array( $this, 'exchange' ), 'permission_callback' => $open ) );
 	}
 
@@ -124,7 +126,7 @@ final class SFLS_REST {
 					'reason'  => 'domain_not_activated',
 					'error'   => $text,
 					'message' => $text,
-				) + array_diff_key( $payload, array( 'valid' => 1, 'status' => 1 ) )
+				) + array_diff_key( self::with_data( $payload ), array( 'valid' => 1, 'status' => 1 ) )
 			);
 		}
 
@@ -134,7 +136,72 @@ final class SFLS_REST {
 			$payload['reason'] = $payload['status'];
 		}
 
-		return rest_ensure_response( $payload );
+		return rest_ensure_response( self::with_data( $payload ) );
+	}
+
+	/**
+	 * Add the `data` object that carries the branding version (1.8.0). The
+	 * flat field stays for Pro versions that read the license fields from the
+	 * top level of the answer.
+	 *
+	 * @param array $payload License payload.
+	 */
+	private static function with_data( array $payload ): array {
+		$payload['data'] = array( 'branding_version' => (int) ( $payload['branding_version'] ?? 0 ) );
+		return $payload;
+	}
+
+	/**
+	 * Branding endpoint: the white-label profile of the license (Agency
+	 * plan) for a site the key is activated on.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function branding( WP_REST_Request $req ) {
+		return $this->guarded( $req, array( $this, 'branding_now' ) );
+	}
+
+	/**
+	 * Branding endpoint after the rate limit. Answers like validate does for
+	 * a missing or unknown key, and refuses a license that is not active or a
+	 * site that is not activated with the same error shape. The site's
+	 * `version` is the one it applied last; when it is the current one the
+	 * answer has `unchanged` and no profile.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function branding_now( WP_REST_Request $req ) {
+		[ $lic, $domain, $error ] = $this->resolve( $req );
+		if ( $error ) {
+			return $error;
+		}
+		$sent = $req->get_param( 'version' );
+		if ( null !== $sent && '' !== $sent && ( is_bool( $sent ) || ! is_numeric( $sent ) || (float) $sent < 0 || (float) $sent !== (float) (int) $sent ) ) {
+			return $this->error( 400, 'invalid_version', __( 'version must be a whole number.', 'subtleforms-license-server' ) );
+		}
+		$sent  = null === $sent || '' === $sent ? null : (int) $sent;
+		$state = SFLS_Licenses::state( $lic );
+		if ( ! $state['valid'] ) {
+			return $this->error(
+				403,
+				$state['status'],
+				'expired' === $state['status']
+					? __( 'This license has expired. Renew it from your SubtleForms account.', 'subtleforms-license-server' )
+					: __( 'This license is not active. Contact SubtleForms support.', 'subtleforms-license-server' )
+			);
+		}
+		if ( ! SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
+			return $this->error( 403, 'domain_not_activated', __( 'This site is not activated for this license.', 'subtleforms-license-server' ) );
+		}
+		SFLS_Licenses::touch_activation( (int) $lic['id'], $domain );
+		return rest_ensure_response(
+			array(
+				'success' => true,
+				'data'    => SFLS_Branding::answer( $lic, $domain, sanitize_text_field( (string) $req->get_param( 'site_url' ) ), $sent ),
+			)
+		);
 	}
 
 	/**

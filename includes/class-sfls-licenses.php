@@ -148,7 +148,7 @@ final class SFLS_Licenses {
 	}
 
 	/**
-	 * Delete a license and its activations.
+	 * Delete a license, its activations and its branding.
 	 *
 	 * @param int $id License ID.
 	 */
@@ -156,6 +156,7 @@ final class SFLS_Licenses {
 		global $wpdb;
 		$wpdb->delete( SFLS_DB::activations(), array( 'license_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->delete( SFLS_DB::activation_log(), array( 'license_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		SFLS_Branding::purge( $id );
 		$wpdb->delete( SFLS_DB::licenses(), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
@@ -712,6 +713,9 @@ final class SFLS_Licenses {
 			'cancels_at'           => self::iso( $lic['cancels_at'] ?? null ),
 			'renewal_amount'       => self::renewal_amount( $lic ),
 			'manage_url'           => self::manage_url(),
+			// Branding (1.8.0): lets a site learn from its daily check that
+			// the agency changed the branding. 0 when there is none.
+			'branding_version'     => SFLS_Branding::version_for( $lic ),
 		);
 	}
 
