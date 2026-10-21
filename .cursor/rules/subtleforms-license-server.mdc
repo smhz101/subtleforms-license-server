@@ -27,7 +27,10 @@ You work on ONE package at a time. The package file in docs/dev/packages/ is you
 ## Done means
 1. Every bug ID in the package is fixed at its cause, with a regression test in `tests/integration` that failed before and passes now.
 2. The integration suite passes: `SFLS_WP_PATH=/path/to/wordpress phpunit -c phpunit.xml` on a disposable WordPress with WooCommerce and this plugin active. If you cannot run it, say so in the report.
-3. readme.txt changelog: add one plain sentence per user-visible fix under the release version named in the package file, grouped as Fix / New / Change.
+3. Changelog: add ONE new file `docs/dev/changes/unreleased/<short-branch-slug>.md` with the first line `type: Added|Changed|Fixed|Security` and one plain sentence below it (format in docs/dev/changes/README.md). A pull request with no user-visible change adds none.
+
+## Files only a release pull request edits
+Feature and fix pull requests must NOT edit `readme.txt`, `docs/dev/releases/`, the version in `subtleforms-license-server.php`, or `languages/*.pot`. Two pull requests that edit those lines conflict on every merge. The release pull request (`release/<version>`) bumps the version, runs `bin/compile-changes.sh <version> --apply` and regenerates the POT as its last step. The exact commands are in docs/dev/RELEASING.md. There is no CI here, so this is a rule for the author and the reviewer.
 
 ## Report (keep it short; this is the only thing to write back)
 ```
