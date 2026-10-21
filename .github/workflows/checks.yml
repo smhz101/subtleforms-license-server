@@ -127,6 +127,23 @@ jobs:
           # Block outbound requests only now that WordPress.org downloads are done.
           wp config set WP_HTTP_BLOCK_EXTERNAL true --raw --path="$WP_DIR"
 
+      - name: Diagnose schema
+        run: |
+          cat > "$RUNNER_TEMP/diag.php" <<'PHP'
+          <?php
+          global $wpdb;
+          $wpdb->show_errors( false );
+          echo 'schema=' . get_option( 'sfls_schema_version' ) . ' mysql=' . $wpdb->db_version() . "\n";
+          SFLS_DB::install();
+          echo 'install last_error=' . $wpdb->last_error . "\n";
+          foreach ( array( SFLS_DB::licenses(), SFLS_DB::paddle_events() ) as $t ) {
+              echo $t . ': ' . implode( ',', $wpdb->get_col( "SHOW COLUMNS FROM `$t`" ) ) . "\n";
+          }
+          echo 'sql_mode=' . $wpdb->get_var( 'SELECT @@sql_mode' ) . "\n";
+          PHP
+          out=$(wp eval-file "$RUNNER_TEMP/diag.php" --path="$WP_DIR" 2>&1)
+          echo "$out" | while IFS= read -r l; do echo "::warning::$l"; done
+
       - name: PHPUnit (integration)
         working-directory: plugin
         env:
