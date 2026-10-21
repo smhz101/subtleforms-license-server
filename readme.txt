@@ -27,6 +27,7 @@ Private plugin for subtleforms.com. See README.md for setup.
 == Changelog ==
 
 = Unreleased =
+* New: The plan table lists "MCP server for AI assistants" with the items every Pro plan includes, and the Agency plan mentions the branding portal for clients' sites.
 * Fix: A valid license key can activate a new site while it has free seats even after others sent failing requests for the key from other addresses and sites. Failures are now budgeted per key, address and site, with a separate high ceiling per key.
 
 = 1.7.0 - 2026-10-20 =
