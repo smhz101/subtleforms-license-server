@@ -7,7 +7,11 @@ A pull request is merged only when all of these are true:
 1. The integration suite passes on a disposable WordPress with WooCommerce:
    `SFLS_WP_PATH=<wordpress> phpunit -c phpunit.xml`, with no new failures
    against the base branch, and Plugin Check on the zip reports no errors.
-   Once this repository has GitHub Actions, every check must also be green.
+   Every GitHub Actions check of the `Checks` workflow must also be green: PHP lint,
+   PHPUnit, Build zip and POT freshness check (exact names and the branch protection
+   steps are in docs/dev/BRANCH_PROTECTION.md). A cancelled or skipped run is not a
+   pass. The POT freshness check fails only on `release/*` pull requests; elsewhere
+   a stale POT is a warning.
 2. GitHub shows no conflicts with the base branch. Conflicts are resolved on the
    pull request branch, never during the merge, and the suites run again.
 3. Every review comment (people, Codex, CodeRabbit) is either fixed on the

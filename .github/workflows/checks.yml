@@ -1,0 +1,181 @@
+name: Checks
+
+# The suites that run locally before a pull request, now run on every pull
+# request and on every push to main: PHP syntax lint, the PHPUnit integration
+# suite on WordPress with WooCommerce, a release zip build and the POT
+# freshness check. Job names are the required check names, see
+# docs/dev/BRANCH_PROTECTION.md. Do not rename a job without updating that file
+# and the branch protection rule.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same pull request cancels the older run. Runs on main
+# are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: PHP lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+
+      - name: PHP syntax check
+        run: |
+          set -euo pipefail
+          status=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" > /dev/null || status=1
+          done < <(find . -name '*.php' -not -path './.git/*' -print0)
+          exit $status
+
+  phpunit:
+    name: PHPUnit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wp
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      WP_DIR: /tmp/wordpress
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: mysqli, mbstring, zip, gd, curl, intl, xml
+          tools: phpunit:9, wp-cli
+
+      # A disposable WordPress with WooCommerce, the plugin linked in and
+      # activated. The tests create their own users, products and orders.
+      - name: Install WordPress
+        run: |
+          set -euo pipefail
+          mkdir -p "$WP_DIR"
+          wp core download --path="$WP_DIR" --quiet
+          wp config create --path="$WP_DIR" --dbname=wp --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --quiet
+          wp config set WP_DEBUG true --raw --path="$WP_DIR"
+          wp config set WP_DEBUG_LOG true --raw --path="$WP_DIR"
+          wp config set WP_DEBUG_DISPLAY false --raw --path="$WP_DIR"
+          wp config set WP_ENVIRONMENT_TYPE local --path="$WP_DIR"
+          wp config set DISABLE_WP_CRON true --raw --path="$WP_DIR"
+          wp config set AUTOMATIC_UPDATER_DISABLED true --raw --path="$WP_DIR"
+          wp config set WP_HTTP_BLOCK_EXTERNAL true --raw --path="$WP_DIR"
+          wp core install --path="$WP_DIR" --url=http://localhost:8899 --title="SFLS tests" \
+            --admin_user=admin --admin_password=password --admin_email=admin@example.test --skip-email
+          wp plugin install woocommerce --activate --path="$WP_DIR"
+          ln -s "$GITHUB_WORKSPACE/plugin" "$WP_DIR/wp-content/plugins/subtleforms-license-server"
+          wp plugin activate subtleforms-license-server --path="$WP_DIR"
+          wp plugin list --path="$WP_DIR"
+
+      - name: PHPUnit (integration)
+        working-directory: plugin
+        env:
+          SFLS_WP_PATH: /tmp/wordpress
+          SFLS_WP_CLI: /usr/local/bin/wp
+        run: phpunit -c phpunit.xml
+
+  build:
+    name: Build zip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # There is no build step for assets. This builds the zip the way a
+      # release does and checks that it holds a valid plugin whose Version
+      # header and SFLS_VERSION agree.
+      - name: Build the release zip
+        run: |
+          set -euo pipefail
+          mkdir -p dist stage/subtleforms-license-server
+          rsync -a --exclude='.git' --exclude='.github' --exclude='dist' --exclude='stage' \
+            --exclude='tests' --exclude='docs' --exclude='bin' --exclude='phpunit.xml' \
+            --exclude='.cursor' --exclude='.gitattributes' ./ stage/subtleforms-license-server/
+          (cd stage && zip -qr ../dist/subtleforms-license-server.zip subtleforms-license-server)
+
+      - name: Check the zip
+        run: |
+          set -euo pipefail
+          unzip -l dist/subtleforms-license-server.zip | grep -q 'subtleforms-license-server/subtleforms-license-server.php'
+          unzip -l dist/subtleforms-license-server.zip | grep -q 'subtleforms-license-server/readme.txt'
+          ! unzip -l dist/subtleforms-license-server.zip | grep -qE 'subtleforms-license-server/(tests|docs|bin|\.github)/'
+          header=$(sed -nE 's/^ \* Version:[[:space:]]*([0-9][^[:space:]]*).*/\1/p' subtleforms-license-server.php | head -1)
+          const=$(sed -nE "s/.*define\( 'SFLS_VERSION', '([^']+)' \).*/\1/p" subtleforms-license-server.php | head -1)
+          stable=$(sed -nE 's/^Stable tag:[[:space:]]*([0-9][^[:space:]]*).*/\1/p' readme.txt | head -1)
+          echo "header=$header constant=$const stable=$stable"
+          test -n "$header"
+          test "$header" = "$const"
+          test "$header" = "$stable"
+
+  pot:
+    name: POT freshness check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Install WP-CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o wp-cli.phar
+          php wp-cli.phar --info
+          chmod +x wp-cli.phar
+          sudo mv wp-cli.phar /usr/local/bin/wp
+
+      # Extraction must succeed on every run, release or not.
+      - name: Generate the POT
+        run: |
+          wp i18n make-pot . "$RUNNER_TEMP/subtleforms-license-server.pot" --domain=subtleforms-license-server \
+            --exclude=node_modules,vendor,tests,docs,bin,assets/vendor \
+            --headers='{"Report-Msgid-Bugs-To":"https://wordpress.org/support/plugin/subtleforms-license-server"}'
+
+      # The committed POT is regenerated by the release pull request, not by
+      # every feature pull request. A stale file therefore fails only for pull
+      # requests from a release/* branch. Elsewhere it is a warning.
+      - name: Compare with the committed POT
+        env:
+          IS_RELEASE: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/') }}
+        run: |
+          strip() { grep -v -e '^"POT-Creation-Date:' -e '^"X-Generator:' "$1"; }
+          strip languages/subtleforms-license-server.pot > "$RUNNER_TEMP/committed.pot"
+          strip "$RUNNER_TEMP/subtleforms-license-server.pot" > "$RUNNER_TEMP/generated.pot"
+          if diff -q "$RUNNER_TEMP/committed.pot" "$RUNNER_TEMP/generated.pot" > /dev/null; then
+            echo "languages/subtleforms-license-server.pot is current."
+          elif [ "$IS_RELEASE" = "true" ]; then
+            diff "$RUNNER_TEMP/committed.pot" "$RUNNER_TEMP/generated.pot" | head -40 || true
+            echo "::error::languages/subtleforms-license-server.pot is out of date. Run wp i18n make-pot as in docs/dev/RELEASING.md and commit it."
+            exit 1
+          else
+            echo "::warning::languages/subtleforms-license-server.pot is stale. This is fine here; the release pull request regenerates it."
+          fi
