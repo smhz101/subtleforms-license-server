@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.7.0
+Stable tag: 1.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,7 +26,7 @@ Private plugin for subtleforms.com. See README.md for setup.
 
 == Changelog ==
 
-= Unreleased =
+= 1.8.0 - 2026-10-21 =
 * New: My Account > Branding lets a customer with an active Agency license set the plugin name, menu name, logo, support address, credits, License screen restriction and Plugins screen details once for all client sites, with a live preview, the client sites and the version each fetched, and the last ten versions with Restore.
 * New: The license screen in wp-admin shows the branding version, the client sites that fetched it and its revisions for support.
 * New: Branding is stored per license (profile, version and the last ten revisions), and sites fetch it with POST /sfls/v1/branding. License validation and status answers include branding_version so a site learns about changes in its daily check.
