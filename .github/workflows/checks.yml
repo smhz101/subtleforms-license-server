@@ -102,7 +102,7 @@ jobs:
           fail() { echo "$1" | tail -15 | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
           # Pinned to the WooCommerce version the suite is verified against.
           # Raise it on purpose (see docs/dev/BRANCH_PROTECTION.md), do not
-          # follow latest: newer releases reject the meta_query order lookup.
+          # follow latest.
           out=$(wp plugin install woocommerce --version="$WC_VERSION" --activate --path="$WP_DIR" 2>&1) || fail "$out"
           ln -s "$GITHUB_WORKSPACE/plugin" "$WP_DIR/wp-content/plugins/subtleforms-license-server"
           out=$(wp plugin activate subtleforms-license-server --path="$WP_DIR" 2>&1) || fail "$out"
@@ -110,10 +110,10 @@ jobs:
 
           # Site state the tests expect: pretty permalinks, the check payment
           # method on, and the license products the Products wizard creates.
-          # The suite was written against the classic order storage. A new
-          # WooCommerce defaults to HPOS, which rejects meta_query order lookups.
-          wp option update woocommerce_custom_orders_table_enabled no --path="$WP_DIR"
-          wp option update woocommerce_custom_orders_table_data_sync_enabled no --path="$WP_DIR"
+          # The suite looks orders up by meta_query, which WooCommerce supports
+          # only with High-Performance Order Storage (the setup it is verified on).
+          out=$(wp wc hpos enable --path="$WP_DIR" 2>&1) || fail "$out"
+          wp option get woocommerce_custom_orders_table_enabled --path="$WP_DIR"
           wp rewrite structure '/%postname%/' --path="$WP_DIR"
           wp option update woocommerce_cheque_settings '{"enabled":"yes","title":"Check payments"}' --format=json --path="$WP_DIR"
           cat > "$RUNNER_TEMP/seed.php" <<'PHP'
