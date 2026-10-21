@@ -264,9 +264,7 @@ final class SFLS_Branding {
 		}
 		// phpcs:enable
 
-		if ( $current && '' !== $current['logo_file'] && $current['logo_file'] !== $logo_file ) {
-			self::delete_logo_file( $current['logo_file'] );
-		}
+		self::sweep_logo_files( $license_id );
 		/**
 		 * Fires after a license's branding changed.
 		 *
@@ -276,6 +274,31 @@ final class SFLS_Branding {
 		 */
 		do_action( 'sfls_branding_changed', $license_id, $version, $action );
 		return (array) self::get( $license_id );
+	}
+
+	/**
+	 * Delete the uploaded logo files of a license that neither its current
+	 * state nor a kept revision refers to. A file lives as long as one of the
+	 * last ten revisions uses it, so restoring still brings the logo back.
+	 *
+	 * @param int $license_id License ID.
+	 */
+	public static function sweep_logo_files( int $license_id ): void {
+		$keep    = array();
+		$current = self::get( $license_id );
+		if ( $current && '' !== $current['logo_file'] ) {
+			$keep[] = $current['logo_file'];
+		}
+		foreach ( self::revisions( $license_id ) as $rev ) {
+			if ( '' !== $rev['logo_file'] ) {
+				$keep[] = $rev['logo_file'];
+			}
+		}
+		foreach ( (array) glob( self::logo_dir() . '/license-' . $license_id . '-*' ) as $path ) {
+			if ( ! in_array( basename( $path ), $keep, true ) ) {
+				self::delete_logo_file( basename( $path ) );
+			}
+		}
 	}
 
 	/**
@@ -368,7 +391,7 @@ final class SFLS_Branding {
 		$file      = $revision['logo_file'];
 		$logo_lost = false;
 		if ( '' !== $file && ! is_file( self::logo_dir() . '/' . $file ) ) {
-			// Replaced logos are deleted, so an old state may have lost its file.
+			// Files go when the last revision that used them is pruned.
 			$file      = '';
 			$logo_lost = true;
 			if ( self::logo_url( $revision['logo_file'] ) === $profile['logo_url'] ) {
@@ -782,9 +805,9 @@ final class SFLS_Branding {
 	 */
 	public static function purge( int $license_id ): void {
 		global $wpdb;
-		$row = self::get( $license_id );
-		if ( $row && '' !== $row['logo_file'] ) {
-			self::delete_logo_file( $row['logo_file'] );
+		// Every file of the license, current or kept for a revision.
+		foreach ( (array) glob( self::logo_dir() . '/license-' . $license_id . '-*' ) as $path ) {
+			self::delete_logo_file( basename( $path ) );
 		}
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->delete( SFLS_DB::branding(), array( 'license_id' => $license_id ) );

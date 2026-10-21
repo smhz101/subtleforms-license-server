@@ -234,6 +234,32 @@ class SFLS_Branding_Test extends SFLS_Test_Case {
 	}
 
 	/**
+	 * Deleting a license also removes the files only kept for revisions.
+	 */
+	public function test_license_delete_removes_files_kept_for_revisions(): void {
+		[ $lic, $owner ] = $this->agency();
+		$one             = SFLS_Branding::save( $lic, array( 'name' => 'One' ), $owner->ID, array( 'file' => array( 'tmp_name' => $this->temp( $this->png() ), 'error' => UPLOAD_ERR_OK ) ) );
+		SFLS_Branding::save( $lic, array( 'name' => 'Two' ), $owner->ID, array( 'remove' => true ) );
+		$path = SFLS_Branding::logo_dir() . '/' . $one['logo_file'];
+		$this->assertFileExists( $path );
+		SFLS_Licenses::delete( (int) $lic['id'] );
+		$this->assertFileDoesNotExist( $path );
+	}
+
+	/**
+	 * The uninstall cleanup drops the branding tables and the logo folder
+	 * (every logo file lives in it).
+	 */
+	public function test_uninstall_cleans_branding(): void {
+		$source = (string) file_get_contents( SFLS_DIR . 'uninstall.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		foreach ( array( 'sfls_branding', 'sfls_branding_revisions', 'sfls_branding_sites' ) as $table ) {
+			$this->assertStringContainsString( '{$wpdb->prefix}' . $table . '"', $source, $table );
+		}
+		$this->assertStringContainsString( "'sfls-branding'", $source );
+		$this->assertStringContainsString( SFLS_Branding::LOGO_DIR, 'sfls-branding' );
+	}
+
+	/**
 	 * The schema carries the new tables.
 	 */
 	public function test_schema_has_branding_tables(): void {
@@ -296,7 +322,7 @@ class SFLS_Branding_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * Replacing or removing the logo deletes the old file; an address replaces
+	 * Replacing or removing the logo keeps the old file while a revision uses it; an address replaces
 	 * an uploaded logo; saving without a logo choice keeps it.
 	 */
 	public function test_logo_replace_remove_and_keep(): void {
@@ -312,31 +338,78 @@ class SFLS_Branding_Test extends SFLS_Test_Case {
 
 		$second = SFLS_Branding::save( $lic, array( 'name' => 'C' ), $owner->ID, $upload( $this->temp( $this->png() ) ) );
 		$this->assertNotSame( $first['logo_file'], $second['logo_file'] );
-		$this->assertFileDoesNotExist( $first_path, 'The replaced file is removed.' );
+		$this->assertFileExists( $first_path, 'A kept revision still uses the replaced file.' );
 		$second_path = SFLS_Branding::logo_dir() . '/' . $second['logo_file'];
 		$this->assertFileExists( $second_path );
 
 		$external = SFLS_Branding::save( $lic, array( 'name' => 'D', 'logo_url' => 'https://cdn.example.com/logo.webp' ), $owner->ID );
 		$this->assertSame( '', $external['logo_file'] );
 		$this->assertSame( 'https://cdn.example.com/logo.webp', $external['profile']['logo_url'] );
-		$this->assertFileDoesNotExist( $second_path );
+		$this->assertFileExists( $second_path );
 
 		$third      = SFLS_Branding::save( $lic, array( 'name' => 'E' ), $owner->ID, $upload( $this->temp( $this->png() ) ) );
 		$third_path = SFLS_Branding::logo_dir() . '/' . $third['logo_file'];
 		$removed    = SFLS_Branding::save( $lic, array( 'name' => 'F' ), $owner->ID, array( 'remove' => true ) );
 		$this->assertSame( '', $removed['logo_file'] );
 		$this->assertSame( '', $removed['profile']['logo_url'] );
-		$this->assertFileDoesNotExist( $third_path );
+		$this->assertFileExists( $third_path );
 	}
 
 	/**
-	 * Restoring a state whose uploaded logo was deleted keeps the rest and
-	 * says the logo is gone.
+	 * Remove then restore, and replace then restore, bring the logo back.
 	 */
-	public function test_restore_with_a_deleted_logo(): void {
+	public function test_restore_brings_back_the_logo(): void {
 		[ $lic, $owner ] = $this->agency();
-		SFLS_Branding::save( $lic, array( 'name' => 'With logo' ), $owner->ID, array( 'file' => array( 'tmp_name' => $this->temp( $this->png() ), 'error' => UPLOAD_ERR_OK ) ) );
+		$id              = (int) $lic['id'];
+		$upload          = fn() => array( 'file' => array( 'tmp_name' => $this->temp( $this->png() ), 'error' => UPLOAD_ERR_OK ) );
+		$by_version      = static function ( int $version ) use ( $id ) {
+			return array_values( array_filter( SFLS_Branding::revisions( $id ), static fn( $r ) => $version === $r['version'] ) )[0];
+		};
+
+		$one  = SFLS_Branding::save( $lic, array( 'name' => 'One' ), $owner->ID, $upload() );
+		$path = SFLS_Branding::logo_dir() . '/' . $one['logo_file'];
+		SFLS_Branding::save( $lic, array( 'name' => 'Two' ), $owner->ID, array( 'remove' => true ) );
+		$this->assertFileExists( $path, 'Removing the logo keeps the file for the revision.' );
+		$result = SFLS_Branding::restore( $lic, $by_version( 1 )['id'], $owner->ID );
+		$this->assertFalse( $result['logo_lost'] );
+		$this->assertSame( $one['logo_file'], $result['state']['logo_file'] );
+		$this->assertSame( SFLS_Branding::logo_url( $one['logo_file'] ), $result['state']['profile']['logo_url'] );
+
+		$two = SFLS_Branding::save( $lic, array( 'name' => 'Three' ), $owner->ID, $upload() );
+		$this->assertNotSame( $one['logo_file'], $two['logo_file'] );
+		$this->assertFileExists( $path, 'Replacing the logo keeps the old file for the revision.' );
+		$result = SFLS_Branding::restore( $lic, $by_version( 3 )['id'], $owner->ID );
+		$this->assertFalse( $result['logo_lost'] );
+		$this->assertSame( $one['logo_file'], $result['state']['logo_file'] );
+		$this->assertFileExists( SFLS_Branding::logo_dir() . '/' . $two['logo_file'], 'Still used by a kept revision.' );
+	}
+
+	/**
+	 * A file goes when the last revision that uses it is pruned, never before.
+	 */
+	public function test_pruned_revisions_delete_orphaned_logo_files(): void {
+		[ $lic, $owner ] = $this->agency();
+		$first           = SFLS_Branding::save( $lic, array( 'name' => 'Logo' ), $owner->ID, array( 'file' => array( 'tmp_name' => $this->temp( $this->png() ), 'error' => UPLOAD_ERR_OK ) ) );
+		$path            = SFLS_Branding::logo_dir() . '/' . $first['logo_file'];
+		SFLS_Branding::save( $lic, array( 'name' => 'Gone' ), $owner->ID, array( 'remove' => true ) );
+		// Versions 3 to 10 keep version 1 inside the last ten.
+		for ( $n = 3; $n <= 10; $n++ ) {
+			SFLS_Branding::save( $lic, array( 'name' => 'N' . $n ), $owner->ID );
+			$this->assertFileExists( $path, "Version 1 is still kept at version $n." );
+		}
+		SFLS_Branding::save( $lic, array( 'name' => 'N11' ), $owner->ID );
+		$this->assertSame( 2, SFLS_Branding::revisions( (int) $lic['id'] )[9]['version'], 'Version 1 was pruned.' );
+		$this->assertFileDoesNotExist( $path, 'The orphaned file is deleted with its last revision.' );
+	}
+
+	/**
+	 * When the file is truly gone, restore says so.
+	 */
+	public function test_restore_with_a_missing_logo_file(): void {
+		[ $lic, $owner ] = $this->agency();
+		$one             = SFLS_Branding::save( $lic, array( 'name' => 'With logo' ), $owner->ID, array( 'file' => array( 'tmp_name' => $this->temp( $this->png() ), 'error' => UPLOAD_ERR_OK ) ) );
 		SFLS_Branding::save( $lic, array( 'name' => 'No logo' ), $owner->ID, array( 'remove' => true ) );
+		unlink( SFLS_Branding::logo_dir() . '/' . $one['logo_file'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
 		$old = array_values( array_filter( SFLS_Branding::revisions( (int) $lic['id'] ), static fn( $r ) => 1 === $r['version'] ) )[0];
 
 		$result = SFLS_Branding::restore( $lic, $old['id'], $owner->ID );

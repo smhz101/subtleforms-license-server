@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-21T12:48:09+00:00\n"
+"POT-Creation-Date: 2026-10-21T13:40:31+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: subtleforms-license-server\n"
@@ -520,7 +520,7 @@ msgid "By"
 msgstr ""
 
 #: includes/class-sfls-account.php:984
-#: includes/class-sfls-branding.php:541
+#: includes/class-sfls-branding.php:564
 msgid "Plugin name"
 msgstr ""
 
@@ -529,7 +529,7 @@ msgid "Shown in the app header and wherever the plugin is named. Empty means Sub
 msgstr ""
 
 #: includes/class-sfls-account.php:985
-#: includes/class-sfls-branding.php:542
+#: includes/class-sfls-branding.php:565
 msgid "Menu name"
 msgstr ""
 
@@ -562,7 +562,7 @@ msgid "An uploaded file wins over an address. PNG, JPG, GIF, WebP or SVG."
 msgstr ""
 
 #: includes/class-sfls-account.php:1000
-#: includes/class-sfls-branding.php:544
+#: includes/class-sfls-branding.php:567
 msgid "Support address"
 msgstr ""
 
@@ -579,7 +579,7 @@ msgid "Limit the License screen to the admin who activated the license on the cl
 msgstr ""
 
 #: includes/class-sfls-account.php:1008
-#: includes/class-sfls-branding.php:547
+#: includes/class-sfls-branding.php:570
 msgid "Author"
 msgstr ""
 
@@ -588,7 +588,7 @@ msgid "Shown on the Plugins screen rows for SubtleForms and SubtleForms Pro. Up 
 msgstr ""
 
 #: includes/class-sfls-account.php:1009
-#: includes/class-sfls-branding.php:548
+#: includes/class-sfls-branding.php:571
 msgid "Author address"
 msgstr ""
 
@@ -597,7 +597,7 @@ msgid "Links the author name. http or https."
 msgstr ""
 
 #: includes/class-sfls-account.php:1011
-#: includes/class-sfls-branding.php:549
+#: includes/class-sfls-branding.php:572
 #: includes/class-sfls-gateway-paddle.php:80
 msgid "Description"
 msgstr ""
@@ -718,7 +718,7 @@ msgid "Restored and published as version %d."
 msgstr ""
 
 #: includes/class-sfls-account.php:1195
-msgid "The logo of that version is no longer stored. Upload it again if you need it."
+msgid "The logo file for this version is no longer available; upload it again."
 msgstr ""
 
 #. translators: %d: branding version
@@ -3121,75 +3121,75 @@ msgstr ""
 msgid "My licenses"
 msgstr ""
 
-#: includes/class-sfls-branding.php:297
-#: includes/class-sfls-branding.php:361
+#: includes/class-sfls-branding.php:320
+#: includes/class-sfls-branding.php:384
 msgid "Branding is part of the Agency plan."
 msgstr ""
 
-#: includes/class-sfls-branding.php:365
+#: includes/class-sfls-branding.php:388
 msgid "That version was not found."
 msgstr ""
 
 #. translators: 1: field name, 2: maximum characters
-#: includes/class-sfls-branding.php:453
+#: includes/class-sfls-branding.php:476
 #, php-format
 msgid "%1$s can have up to %2$d characters."
 msgstr ""
 
 #. translators: %d: maximum characters
-#: includes/class-sfls-branding.php:499
+#: includes/class-sfls-branding.php:522
 #, php-format
 msgid "can have up to %d characters."
 msgstr ""
 
-#: includes/class-sfls-branding.php:506
+#: includes/class-sfls-branding.php:529
 msgid "must be an https address."
 msgstr ""
 
-#: includes/class-sfls-branding.php:506
+#: includes/class-sfls-branding.php:529
 msgid "must be an http or https address."
 msgstr ""
 
-#: includes/class-sfls-branding.php:511
+#: includes/class-sfls-branding.php:534
 msgid "is not a valid address."
 msgstr ""
 
-#: includes/class-sfls-branding.php:516
+#: includes/class-sfls-branding.php:539
 msgid "must point to a png, jpg, gif, webp or svg image."
 msgstr ""
 
-#: includes/class-sfls-branding.php:543
+#: includes/class-sfls-branding.php:566
 msgid "Logo address"
 msgstr ""
 
-#: includes/class-sfls-branding.php:545
+#: includes/class-sfls-branding.php:568
 msgid "Hide SubtleForms credits"
 msgstr ""
 
-#: includes/class-sfls-branding.php:546
+#: includes/class-sfls-branding.php:569
 msgid "Restrict the License screen"
 msgstr ""
 
-#: includes/class-sfls-branding.php:598
-#: includes/class-sfls-branding.php:608
+#: includes/class-sfls-branding.php:621
+#: includes/class-sfls-branding.php:631
 msgid "The logo is larger than 1 MB."
 msgstr ""
 
-#: includes/class-sfls-branding.php:601
+#: includes/class-sfls-branding.php:624
 msgid "The logo could not be uploaded. Try again."
 msgstr ""
 
-#: includes/class-sfls-branding.php:605
+#: includes/class-sfls-branding.php:628
 msgid "The logo file is empty."
 msgstr ""
 
-#: includes/class-sfls-branding.php:628
-#: includes/class-sfls-branding.php:633
+#: includes/class-sfls-branding.php:651
+#: includes/class-sfls-branding.php:656
 msgid "The logo must be a PNG, JPEG, GIF or WebP image."
 msgstr ""
 
-#: includes/class-sfls-branding.php:638
-#: includes/class-sfls-branding.php:651
+#: includes/class-sfls-branding.php:661
+#: includes/class-sfls-branding.php:674
 msgid "The logo could not be stored. Try again later."
 msgstr ""
 

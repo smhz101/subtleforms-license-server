@@ -1192,7 +1192,7 @@ final class SFLS_Account {
 					)
 				);
 				if ( $restored['logo_lost'] ) {
-					wc_add_notice( __( 'The logo of that version is no longer stored. Upload it again if you need it.', 'subtleforms-license-server' ), 'notice' );
+					wc_add_notice( __( 'The logo file for this version is no longer available; upload it again.', 'subtleforms-license-server' ), 'notice' );
 				}
 				break;
 			case 'reset':

@@ -339,7 +339,7 @@ class SFLS_Branding_Portal_Test extends SFLS_Test_Case {
 		// Remove the logo.
 		$this->post( $owner, array( 'sfls_branding' => 'save', 'license_id' => (string) $lic['id'], 'name' => 'Acme', 'remove_logo' => '1' ) );
 		$this->assertSame( '', SFLS_Branding::get( (int) $lic['id'] )['logo_file'] );
-		$this->assertFileDoesNotExist( SFLS_Branding::logo_dir() . '/' . $state['logo_file'] );
+		$this->assertFileExists( SFLS_Branding::logo_dir() . '/' . $state['logo_file'], 'Kept for the revision that uses it.' );
 	}
 
 	/**
@@ -371,6 +371,26 @@ class SFLS_Branding_Portal_Test extends SFLS_Test_Case {
 	}
 
 	// ── Admin ───────────────────────────────────────────────────────────
+
+	/**
+	 * Restoring a version whose logo is gone says so; one whose logo is kept
+	 * does not.
+	 */
+	public function test_restore_notice_about_the_logo(): void {
+		[ $lic, $owner ] = $this->agency();
+		$one             = SFLS_Branding::save( $lic, array( 'name' => 'One' ), $owner->ID, array( 'file' => array( 'tmp_name' => $this->png_file(), 'error' => UPLOAD_ERR_OK ) ) );
+		SFLS_Branding::save( $lic, array( 'name' => 'Two' ), $owner->ID, array( 'remove' => true ) );
+		$first = array_values( array_filter( SFLS_Branding::revisions( (int) $lic['id'] ), static fn( $r ) => 1 === $r['version'] ) )[0]['id'];
+
+		$this->post( $owner, array( 'sfls_branding' => 'restore', 'license_id' => (string) $lic['id'], 'revision_id' => (string) $first ) );
+		$this->assertStringNotContainsString( 'no longer available', implode( ' ', $this->notices( 'notice' ) ) );
+
+		SFLS_Branding::save( $lic, array( 'name' => 'Three' ), $owner->ID, array( 'remove' => true ) );
+		unlink( SFLS_Branding::logo_dir() . '/' . $one['logo_file'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
+		$this->post( $owner, array( 'sfls_branding' => 'restore', 'license_id' => (string) $lic['id'], 'revision_id' => (string) $first ) );
+		$this->assertStringContainsString( 'Restored and published as version', implode( ' ', $this->notices( 'success' ) ) );
+		$this->assertStringContainsString( 'The logo file for this version is no longer available; upload it again.', implode( ' ', $this->notices( 'notice' ) ) );
+	}
 
 	/**
 	 * Support sees the version, sites and revisions on the license screen.
