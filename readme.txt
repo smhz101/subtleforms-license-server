@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.8.0
+Stable tag: 1.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,6 +25,9 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, 7 or 14 day free trials with one trial per customer, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.8.1 - 2026-10-23 =
+* Change: The plan lists now name Salesforce, Pipedrive, Close, Make and n8n next to the other integrations.
 
 = 1.8.0 - 2026-10-21 =
 * New: My Account > Branding lets a customer with an active Agency license set the plugin name, menu name, logo, support address, credits, License screen restriction and Plugins screen details once for all client sites, with a live preview, the client sites and the version each fetched, and the last ten versions with Restore.
