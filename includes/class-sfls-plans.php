@@ -124,7 +124,7 @@ final class SFLS_Plans {
 			array(
 				'csv_export'        => __( 'CSV export of entries', 'subtleforms-license-server' ),
 				'webhooks'          => __( 'Webhooks with retries', 'subtleforms-license-server' ),
-				'integrations'      => __( 'WooCommerce checkout, Mailchimp, Brevo, Kit, HubSpot and Zapier', 'subtleforms-license-server' ),
+				'integrations'      => __( 'WooCommerce checkout, Mailchimp, Brevo, Kit, HubSpot, Salesforce, Pipedrive, Close, Zapier, Make and n8n', 'subtleforms-license-server' ),
 				'conditional_logic' => __( 'Advanced conditional logic', 'subtleforms-license-server' ),
 				'white_label'       => __( "Branding portal for your clients' sites, white label and WPML/Polylang translation", 'subtleforms-license-server' ),
 			)

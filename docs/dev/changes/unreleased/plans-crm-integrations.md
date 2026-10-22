@@ -1,0 +1,2 @@
+type: Changed
+The plan lists now name Salesforce, Pipedrive, Close, Make and n8n next to the other integrations.
