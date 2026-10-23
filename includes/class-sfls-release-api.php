@@ -247,6 +247,7 @@ final class SFLS_Release_API {
 			'yank_reason'  => $release['yank_reason'],
 			'downloads'    => (int) $release['downloads'],
 			'has_package'  => SFLS_Releases::has_package( $release ),
+			'package_sig'  => SFLS_Signing::release_signature( $release ),
 			'released_at'  => $iso( $release['released_at'] ),
 			'created_at'   => $iso( $release['created_at'] ),
 			'updated_at'   => $iso( $release['updated_at'] ),
@@ -358,14 +359,16 @@ final class SFLS_Release_API {
 		$result = SFLS_Releases::ingest(
 			$tmp,
 			array(
-				'source'     => 'api',
-				'channel'    => in_array( $channel, SFLS_Releases::CHANNELS, true ) ? $channel : '',
-				'publish'    => $publish,
-				'changelog'  => (string) $req->get_param( 'changelog' ),
-				'git_ref'    => sanitize_text_field( (string) $req->get_param( 'git_ref' ) ),
-				'git_commit' => sanitize_text_field( (string) $req->get_param( 'git_commit' ) ),
-				'sha256'     => sanitize_text_field( (string) $req->get_param( 'sha256' ) ),
-				'replace'    => rest_sanitize_boolean( $req->get_param( 'replace' ) ),
+				'source'          => 'api',
+				'channel'         => in_array( $channel, SFLS_Releases::CHANNELS, true ) ? $channel : '',
+				'publish'         => $publish,
+				'changelog'       => (string) $req->get_param( 'changelog' ),
+				'git_ref'         => sanitize_text_field( (string) $req->get_param( 'git_ref' ) ),
+				'git_commit'      => sanitize_text_field( (string) $req->get_param( 'git_commit' ) ),
+				'sha256'          => sanitize_text_field( (string) $req->get_param( 'sha256' ) ),
+				'replace'         => rest_sanitize_boolean( $req->get_param( 'replace' ) ),
+				// A second, explicit flag for replacing a package customers already get.
+				'confirm_replace' => rest_sanitize_boolean( $req->get_param( 'confirm_replace' ) ),
 			)
 		);
 		if ( $cleanup ) {
