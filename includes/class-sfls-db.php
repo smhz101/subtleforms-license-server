@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '8';
+	const SCHEMA_VERSION = '9';
 
 	/**
 	 * Set once licenses were tied to the customer of the order that issued
@@ -281,6 +281,7 @@ final class SFLS_DB {
   git_commit varchar(64) NOT NULL DEFAULT '',
   notes text NULL,
   yank_reason varchar(255) NOT NULL DEFAULT '',
+  package_sig varchar(128) NOT NULL DEFAULT '',
   replaced_files text NULL,
   downloads bigint(20) unsigned NOT NULL DEFAULT 0,
   released_at datetime NULL,
@@ -383,6 +384,9 @@ final class SFLS_DB {
 		);
 
 		self::backfill_billing();
+
+		// Schema 9: package signatures moved from an option into releases.package_sig.
+		SFLS_Signing::migrate_to_column();
 
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
 

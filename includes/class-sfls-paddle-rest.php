@@ -67,7 +67,7 @@ final class SFLS_Paddle_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( $this, 'eligibility' ),
-				'permission_callback' => '__return_true', // Public: anyone may ask whether they can start a trial.
+				'permission_callback' => '__return_true', // Public, but only a signed-in caller (valid REST nonce) gets the real answer.
 			)
 		);
 		register_rest_route(
@@ -338,6 +338,31 @@ final class SFLS_Paddle_REST {
 					'message'    => __( 'This plan has no free trial.', 'subtleforms-license-server' ),
 					'email'      => $email,
 					'trial_days' => 0,
+				)
+			);
+		}
+		if ( ! $user->ID ) {
+			// Anonymous callers get a uniform answer: only the shape of the address is checked, never
+			// whether it or its site already had a trial. Checkout enforces the real rules, so this
+			// endpoint cannot be used to probe other people's addresses or sites.
+			$normal = SFLS_Trials::normalize_email( $email );
+			if ( '' === $normal ) {
+				$check = array(
+					'eligible' => false,
+					'reason'   => 'invalid_email',
+					'message'  => __( 'Enter a valid email address.', 'subtleforms-license-server' ),
+				);
+			} else {
+				$check = array(
+					'eligible' => true,
+					'reason'   => '',
+					'message'  => '',
+				);
+			}
+			return rest_ensure_response(
+				$check + array(
+					'email'      => $email,
+					'trial_days' => SFLS_Paddle::plan( $plan )['trial_days'],
 				)
 			);
 		}

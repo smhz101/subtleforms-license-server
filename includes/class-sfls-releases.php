@@ -412,7 +412,7 @@ final class SFLS_Releases {
 	 */
 	public static function update( int $id, array $data ): void {
 		global $wpdb;
-		$allowed = array_flip( array( 'channel', 'status', 'file', 'size', 'sha256', 'requires', 'tested', 'requires_php', 'changelog', 'source', 'git_ref', 'git_commit', 'notes', 'yank_reason', 'replaced_files', 'downloads', 'released_at' ) );
+		$allowed = array_flip( array( 'channel', 'status', 'file', 'size', 'sha256', 'requires', 'tested', 'requires_php', 'changelog', 'source', 'git_ref', 'git_commit', 'notes', 'yank_reason', 'package_sig', 'replaced_files', 'downloads', 'released_at' ) );
 		$data    = array_intersect_key( $data, $allowed );
 		if ( isset( $data['channel'] ) && ! in_array( $data['channel'], self::CHANNELS, true ) ) {
 			unset( $data['channel'] );

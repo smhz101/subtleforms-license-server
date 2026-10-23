@@ -295,6 +295,8 @@ final class SFLS_Licenses {
 	 * @return true|WP_Error WP_Error data carries the HTTP status.
 	 */
 	public static function activate_domain( array $lic, string $domain, string $version = '', string $source = 'api' ) {
+		// Seat checks always compare the normalised host, whichever caller sent it.
+		$domain = self::normalize_domain( $domain );
 		if ( '' === $domain ) {
 			return new WP_Error( 'missing_parameters', __( 'license_key and site_url are required.', 'subtleforms-license-server' ), array( 'status' => 400 ) );
 		}
@@ -534,15 +536,25 @@ final class SFLS_Licenses {
 	// ── Domains ─────────────────────────────────────────────────────────
 
 	/**
-	 * Normalise a site URL or host to a bare lowercase host without "www.".
+	 * Normalise a site URL or host to a bare lowercase host: no trailing dot,
+	 * internationalised names in ASCII (punycode) when intl is available, and
+	 * no "www.". Seat checks compare this form, so "Example.COM.", "www.example.com"
+	 * and "example.com" are one site.
 	 *
 	 * @param string $url URL or host.
 	 */
 	public static function normalize_domain( string $url ): string {
-		$url  = trim( strtolower( $url ) );
+		$url  = trim( $url );
 		$host = wp_parse_url( str_contains( $url, '://' ) ? $url : 'https://' . $url, PHP_URL_HOST );
-		$host = (string) $host;
-		return preg_replace( '/^www\./', '', $host );
+		$host = strtolower( rtrim( (string) $host, '.' ) );
+		if ( '' !== $host && preg_match( '/[^\x00-\x7F]/', $host ) && function_exists( 'idn_to_ascii' ) ) {
+			$ascii = defined( 'INTL_IDNA_VARIANT_UTS46' ) ? idn_to_ascii( $host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46 ) : idn_to_ascii( $host );
+			if ( is_string( $ascii ) && '' !== $ascii ) {
+				$host = strtolower( $ascii );
+			}
+		}
+		$host = (string) preg_replace( '/^www\./', '', $host );
+		return rtrim( $host, '.' );
 	}
 
 	/**

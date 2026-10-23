@@ -329,13 +329,53 @@ class SFLS_Signing_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * Deleting a release drops its signature.
+	 * The signature lives in releases.package_sig; deleting the release drops it.
 	 */
 	public function test_delete_forgets_signature(): void {
+		global $wpdb;
 		$release = $this->add_release( '9.8.5' );
-		$this->assertArrayHasKey( $release['id'], get_option( SFLS_Signing::SIGNATURES_OPTION ) );
-		SFLS_Releases::delete( $release['id'] );
+		$sig     = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT package_sig FROM ' . SFLS_DB::releases() . ' WHERE id = %d', $release['id'] ) );
+		$this->assertNotSame( '', $sig );
 		$this->assertArrayNotHasKey( $release['id'], (array) get_option( SFLS_Signing::SIGNATURES_OPTION, array() ) );
+		SFLS_Releases::delete( $release['id'] );
+		$this->assertNull( $wpdb->get_var( $wpdb->prepare( 'SELECT package_sig FROM ' . SFLS_DB::releases() . ' WHERE id = %d', $release['id'] ) ) );
+	}
+
+	/**
+	 * Schema 9: option entries are copied into the column, an entry for a
+	 * changed package is not, and the option still answers as a fallback.
+	 */
+	public function test_option_signatures_migrate_into_column(): void {
+		global $wpdb;
+		$release = $this->add_release( '9.8.6' );
+		$sig     = SFLS_Signing::release_signature( SFLS_Releases::get( '9.8.6' ) );
+		$this->assertNotSame( '', $sig );
+		$wpdb->update( SFLS_DB::releases(), array( 'package_sig' => '' ), array( 'id' => $release['id'] ) );
+		SFLS_Releases::flush();
+		update_option(
+			SFLS_Signing::SIGNATURES_OPTION,
+			array(
+				$release['id'] => array(
+					'version'   => '9.8.6',
+					'sha256'    => strtolower( $release['sha256'] ),
+					'sig'       => $sig,
+					'signed_at' => time(),
+				),
+			),
+			false
+		);
+		// Fallback before the migration.
+		$this->assertSame( $sig, SFLS_Signing::release_signature( SFLS_Releases::get( '9.8.6' ) ) );
+		SFLS_Signing::migrate_to_column();
+		$this->assertSame( $sig, (string) $wpdb->get_var( $wpdb->prepare( 'SELECT package_sig FROM ' . SFLS_DB::releases() . ' WHERE id = %d', $release['id'] ) ) );
+
+		// A column signature for another package is not served.
+		$other = $release;
+		$other['sha256']      = str_repeat( 'a', 64 );
+		$other['package_sig'] = $sig;
+		delete_option( SFLS_Signing::SIGNATURES_OPTION );
+		$this->assertSame( '', SFLS_Signing::release_signature( $other ) );
+		$this->assertSame( $sig, SFLS_Signing::release_signature( SFLS_Releases::get( '9.8.6' ) ) );
 	}
 
 	/**

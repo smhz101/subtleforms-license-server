@@ -411,10 +411,10 @@ class SFLS_License_Server_Logic_Test extends SFLS_Test_Case {
 	/**
 	 * Schema 8 adds the indexes, the columns and the tables through dbDelta.
 	 */
-	public function test_schema_8(): void {
+	public function test_schema_9(): void {
 		global $wpdb;
-		$this->assertSame( '8', SFLS_DB::SCHEMA_VERSION );
-		$this->assertSame( '8', get_option( 'sfls_schema_version' ) );
+		$this->assertSame( '9', SFLS_DB::SCHEMA_VERSION );
+		$this->assertSame( '9', get_option( 'sfls_schema_version' ) );
 		$keys = wp_list_pluck( (array) $wpdb->get_results( "SHOW INDEX FROM {$wpdb->prefix}sfls_licenses", ARRAY_A ), 'Key_name' );
 		$this->assertContains( 'status', $keys );
 		$this->assertContains( 'expires_at', $keys );

@@ -12,8 +12,9 @@
  *
  * - Packages: every release gets a detached signature over
  *   "sfls-package-v1\n<slug>\n<version>\n<sha256>" when it is stored. The
- *   signature is kept next to the release (option sfls_release_signatures,
- *   public data) so a database write alone cannot sign another zip.
+ *   signature is kept next to the release (releases.package_sig since
+ *   schema 9, earlier the option sfls_release_signatures; public data) so a
+ *   database write alone cannot sign another zip.
  *   /update/check returns package_sha256 and package_sig.
  * - Answers: every /license/*, /update/check, /update/versions,
  *   /connect/exchange and /branding answer carries signed_at, the echoed
@@ -37,7 +38,8 @@ final class SFLS_Signing {
 	const SLUG             = 'subtleforms-pro';
 
 	/**
-	 * Package signatures by release ID: { id: { version, sha256, sig, signed_at } }.
+	 * Old store of package signatures by release ID: { id: { version, sha256, sig, signed_at } }.
+	 * Since schema 9 the signature lives in releases.package_sig; this option is only read as a fallback.
 	 */
 	const SIGNATURES_OPTION = 'sfls_release_signatures';
 
@@ -233,8 +235,9 @@ final class SFLS_Signing {
 	}
 
 	/**
-	 * Sign the package of a release and keep the signature. Returns false
-	 * when signing is off or the release has no sha256.
+	 * Sign the package of a release and keep the signature in
+	 * releases.package_sig (schema 9). Returns false when signing is off or
+	 * the release has no sha256.
 	 *
 	 * @param array $release Release.
 	 */
@@ -244,37 +247,81 @@ final class SFLS_Signing {
 		if ( ! self::enabled() || $id <= 0 || ! preg_match( '/^[a-f0-9]{64}$/', $sha ) ) {
 			return false;
 		}
-		$all        = self::signatures();
-		$all[ $id ] = array(
-			'version'   => (string) $release['version'],
-			'sha256'    => $sha,
-			'sig'       => self::sign( self::package_message( (string) $release['version'], $sha ) ),
-			'signed_at' => time(),
-		);
-		update_option( self::SIGNATURES_OPTION, $all, false );
+		SFLS_Releases::update( $id, array( 'package_sig' => self::sign( self::package_message( (string) $release['version'], $sha ) ) ) );
+		// A stale entry in the old option must not outlive a new signature.
+		self::forget( $id );
 		return true;
 	}
 
 	/**
 	 * Package signature of a release, '' when it was never signed or its
-	 * package changed since.
+	 * package changed since. The column is checked against the public key, so
+	 * a signature that no longer matches the version and sha256 is not served.
+	 * The old option is the fallback for rows that were not migrated yet.
 	 *
 	 * @param array $release Release.
 	 */
 	public static function release_signature( array $release ): string {
-		$entry = self::signatures()[ (int) ( $release['id'] ?? 0 ) ] ?? null;
+		$id  = (int) ( $release['id'] ?? 0 );
+		$sha = strtolower( (string) ( $release['sha256'] ?? '' ) );
+		if ( '' === $sha ) {
+			return '';
+		}
+		$public  = defined( 'SFLS_SIGNING_PUBLIC_KEY' ) && null === self::$test_secret ? (string) SFLS_SIGNING_PUBLIC_KEY : self::public_key();
+		$message = self::package_message( (string) $release['version'], $sha );
+		$sig     = (string) ( $release['package_sig'] ?? '' );
+		if ( '' !== $public && '' !== $sig && self::verify( $message, $sig, $public ) ) {
+			return $sig;
+		}
+		if ( '' !== $public && $id > 0 ) {
+			// The array may be older than the row (a package was replaced and signed since): ask the row.
+			global $wpdb;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$stored = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT package_sig FROM ' . SFLS_DB::releases() . ' WHERE id = %d', $id ) );
+			if ( '' !== $stored && self::verify( $message, $stored, $public ) ) {
+				return $stored;
+			}
+		}
+		$entry = self::signatures()[ $id ] ?? null;
 		if ( ! is_array( $entry ) ) {
 			return '';
 		}
-		$sha = strtolower( (string) ( $release['sha256'] ?? '' ) );
-		if ( '' === $sha || ! hash_equals( (string) $entry['sha256'], $sha ) || (string) $entry['version'] !== (string) $release['version'] ) {
+		if ( ! hash_equals( (string) $entry['sha256'], $sha ) || (string) $entry['version'] !== (string) $release['version'] ) {
 			return '';
 		}
 		return (string) $entry['sig'];
 	}
 
 	/**
-	 * Forget the signature of a deleted release.
+	 * Copy the signatures of the old option into releases.package_sig for rows
+	 * that have none and whose version and sha256 still match. The option is
+	 * left in place as a fallback. Runs from the schema 9 upgrade.
+	 */
+	public static function migrate_to_column(): void {
+		global $wpdb;
+		$all = self::signatures();
+		if ( ! $all ) {
+			return;
+		}
+		$table = SFLS_DB::releases();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = (array) $wpdb->get_results( "SELECT id, version, sha256, package_sig FROM {$table}", ARRAY_A );
+		foreach ( $rows as $row ) {
+			$entry = $all[ (int) $row['id'] ] ?? null;
+			if ( '' !== (string) $row['package_sig'] || ! is_array( $entry ) || empty( $entry['sig'] ) ) {
+				continue;
+			}
+			if ( strtolower( (string) $row['sha256'] ) !== (string) $entry['sha256'] || (string) $row['version'] !== (string) $entry['version'] ) {
+				continue;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update( $table, array( 'package_sig' => substr( (string) $entry['sig'], 0, 128 ) ), array( 'id' => (int) $row['id'] ) );
+		}
+		SFLS_Releases::flush();
+	}
+
+	/**
+	 * Forget the old option entry of a release. The column goes with the row.
 	 *
 	 * @param int $id Release ID.
 	 */
