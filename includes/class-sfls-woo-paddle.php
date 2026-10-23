@@ -72,6 +72,9 @@ final class SFLS_Woo_Paddle {
 		// Payment page and abandoned orders.
 		add_action( 'woocommerce_receipt_' . self::GATEWAY, array( $this, 'receipt_page' ) );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'cancel_open_transaction' ) );
+		add_action( 'woocommerce_order_status_cancelled', array( $this, 'release_trial_claims' ) );
+		add_action( 'woocommerce_order_status_failed', array( $this, 'release_trial_claims' ) );
+		add_action( 'template_redirect', array( $this, 'handle_trial_code' ) );
 		add_action( 'wp_enqueue_scripts', array( self::class, 'register_assets' ), 6 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_checkout' ), 20 );
 	}
@@ -547,8 +550,9 @@ final class SFLS_Woo_Paddle {
 	 *
 	 * @param string $email          Billing email.
 	 * @param string $payment_method Chosen payment method.
+	 * @param int    $order_id       The order being placed (0 when not known): its own pending claims do not count.
 	 */
-	public static function trial_problem( string $email, string $payment_method ): string {
+	public static function trial_problem( string $email, string $payment_method, int $order_id = 0 ): string {
 		$item = null;
 		if ( function_exists( 'WC' ) && WC()->cart ) {
 			foreach ( WC()->cart->get_cart() as $row ) {
@@ -566,7 +570,10 @@ final class SFLS_Woo_Paddle {
 		if ( self::GATEWAY !== $payment_method ) {
 			return esc_html__( 'Free trials are paid with Paddle, which keeps your card on file for when the trial ends. Choose Pay with Paddle.', 'subtleforms-license-server' );
 		}
-		$check = SFLS_Trials::check( $email );
+		if ( $order_id <= 0 && function_exists( 'WC' ) && WC()->session ) {
+			$order_id = (int) WC()->session->get( 'order_awaiting_payment' ); // The unpaid order this checkout retries.
+		}
+		$check = SFLS_Trials::check( $email, '', 0, $order_id );
 		if ( $check['eligible'] ) {
 			return '';
 		}
@@ -599,7 +606,7 @@ final class SFLS_Woo_Paddle {
 		if ( ! SFLS_Paddle::woo_selling() || ! $order instanceof WC_Order || ! class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
 			return;
 		}
-		$problem = self::trial_problem( (string) $order->get_billing_email(), (string) $order->get_payment_method() );
+		$problem = self::trial_problem( (string) $order->get_billing_email(), (string) $order->get_payment_method(), $order->get_id() );
 		if ( '' !== $problem ) {
 			throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'sfls_trial_not_eligible', wp_kses( $problem, array( 'a' => array( 'href' => true ) ) ), 400 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Escaped and filtered above.
 		}
@@ -836,14 +843,49 @@ final class SFLS_Woo_Paddle {
 			return SFLS_Woo_Paddle_Orders::pay_upgrade( $order, $line );
 		}
 		if ( 'trial' === $line['kind'] ) {
-			$check = SFLS_Trials::check( (string) $order->get_billing_email() );
+			// Claim the trial now, before any payment, so parallel checkouts with the same email cannot both get one.
+			$check = SFLS_Trials::reserve( (string) $order->get_billing_email(), $order->get_id() );
 			if ( ! $check['eligible'] ) {
 				return new WP_Error( 'sfls_trial', $check['message'] );
 			}
+			if ( ! self::trial_email_confirmed( $order ) ) {
+				// Email a code and send the customer to the payment page, which asks for it before the Paddle form.
+				SFLS_Trials::issue_code( (string) $order->get_billing_email() );
+				$order->add_order_note( __( 'Free trial: a confirmation code was emailed to the customer. The Paddle checkout opens once it is entered.', 'subtleforms-license-server' ) );
+				return array(
+					'result'   => 'success',
+					'redirect' => $order->get_checkout_payment_url( true ),
+				);
+			}
 		}
+		return self::open_transaction( $order, $line );
+	}
+
+	/**
+	 * Whether the email of a trial order does not need a code (setting off)
+	 * or was confirmed with one.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	public static function trial_email_confirmed( WC_Order $order ): bool {
+		return ! SFLS_Settings::trial_verify() || SFLS_Trials::is_verified( (string) $order->get_billing_email() );
+	}
+
+	/**
+	 * Create the Paddle transaction of an order and say where the customer
+	 * goes next.
+	 *
+	 * @param WC_Order $order Order.
+	 * @param array    $line  order_line() result.
+	 * @return array{result:string,redirect:string}|WP_Error
+	 */
+	public static function open_transaction( WC_Order $order, array $line ) {
 		$previous = (string) $order->get_meta( '_sfls_paddle_txn_id' );
 		$txn      = self::create_transaction( $order, $line );
 		if ( is_wp_error( $txn ) ) {
+			if ( 'trial' === $line['kind'] ) {
+				SFLS_Trials::release_order( $order->get_id() ); // The payment did not start: the trial is free again.
+			}
 			return $txn;
 		}
 		if ( '' !== $previous && $previous !== $txn['id'] ) {
@@ -896,11 +938,25 @@ final class SFLS_Woo_Paddle {
 			echo '<div class="sfls sfls-paddle-pay"><p>' . esc_html__( 'This order is paid.', 'subtleforms-license-server' ) . ' <a href="' . esc_url( $order->get_checkout_order_received_url() ) . '">' . esc_html__( 'See your license', 'subtleforms-license-server' ) . '</a></p></div>';
 			return;
 		}
+		$line  = self::order_line( $order );
+		$trial = ! is_wp_error( $line ) && 'trial' === $line['kind'];
+		if ( $trial && ! self::trial_email_confirmed( $order ) ) {
+			self::trial_code_form( $order );
+			return;
+		}
+		if ( '' === $txn && $trial && $order->has_status( 'pending' ) ) {
+			// The code was entered here: now the Paddle transaction can be created.
+			$started = self::open_transaction( $order, $line );
+			if ( is_wp_error( $started ) ) {
+				echo '<div class="sfls sfls-paddle-pay"><p class="sfls-paddle-error" role="alert">' . esc_html( $started->get_error_message() ) . '</p></div>';
+				return;
+			}
+			$order = wc_get_order( $order->get_id() );
+			$txn   = (string) $order->get_meta( '_sfls_paddle_txn_id' );
+		}
 		if ( '' === $txn ) {
 			return;
 		}
-		$line  = self::order_line( $order );
-		$trial = ! is_wp_error( $line ) && 'trial' === $line['kind'];
 
 		self::register_assets();
 		wp_enqueue_script( 'sfls-paddle-inline' );
@@ -922,6 +978,81 @@ final class SFLS_Woo_Paddle {
 		echo '<p class="sfls-muted sfls-paddle-pay-tax">' . esc_html( self::tax_note() ) . '</p>';
 		echo '<p><a href="' . esc_url( wc_get_checkout_url() ) . '">' . esc_html__( 'Back to checkout', 'subtleforms-license-server' ) . '</a></p>';
 		echo '</div>';
+	}
+
+	/**
+	 * The form that asks for the emailed code before a trial's Paddle form.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	private static function trial_code_form( WC_Order $order ): void {
+		$notice = (string) $order->get_meta( '_sfls_trial_code_notice' );
+		if ( '' !== $notice ) {
+			$order->delete_meta_data( '_sfls_trial_code_notice' );
+			$order->save_meta_data();
+		}
+		$email = (string) $order->get_billing_email();
+		echo '<div class="sfls sfls-paddle-pay sfls-trial-code">';
+		echo '<h2 class="sfls-paddle-pay-title">' . esc_html__( 'Confirm your email', 'subtleforms-license-server' ) . '</h2>';
+		/* translators: %s: email address */
+		echo '<p>' . esc_html( sprintf( __( 'We emailed a 6 digit code to %s. Enter it to start your free trial.', 'subtleforms-license-server' ), $email ) ) . '</p>';
+		if ( '' !== $notice ) {
+			echo '<p class="sfls-paddle-error" role="alert">' . esc_html( $notice ) . '</p>';
+		}
+		echo '<form method="post" action="' . esc_url( $order->get_checkout_payment_url( true ) ) . '">';
+		wp_nonce_field( 'sfls_trial_code_' . $order->get_id(), 'sfls_trial_nonce' );
+		echo '<input type="hidden" name="sfls_trial_order" value="' . esc_attr( (string) $order->get_id() ) . '">';
+		echo '<p><label for="sfls-trial-code">' . esc_html__( 'Confirmation code', 'subtleforms-license-server' ) . '</label><br><input id="sfls-trial-code" type="text" name="sfls_trial_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required class="input-text"></p>';
+		echo '<p><button type="submit" name="sfls_trial_action" value="verify" class="button alt">' . esc_html__( 'Confirm and continue', 'subtleforms-license-server' ) . '</button> ';
+		echo '<button type="submit" name="sfls_trial_action" value="resend" class="button" formnovalidate>' . esc_html__( 'Email me a new code', 'subtleforms-license-server' ) . '</button></p>';
+		/* translators: %d: minutes */
+		echo '<p class="sfls-muted">' . esc_html( sprintf( __( 'The code works for %d minutes.', 'subtleforms-license-server' ), SFLS_Trials::CODE_MINUTES ) ) . '</p>';
+		echo '</form></div>';
+	}
+
+	/**
+	 * Handle the code form of the payment page: confirm the code, or send a
+	 * new one, then show the page again.
+	 */
+	public function handle_trial_code(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Verified below with the order's own nonce.
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) || empty( $_POST['sfls_trial_order'] ) || empty( $_POST['sfls_trial_action'] ) ) {
+			return;
+		}
+		$order_id = absint( $_POST['sfls_trial_order'] );
+		$nonce    = isset( $_POST['sfls_trial_nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['sfls_trial_nonce'] ) ) : '';
+		$order    = wc_get_order( $order_id );
+		$key      = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
+		if ( ! $order instanceof WC_Order || ! wp_verify_nonce( $nonce, 'sfls_trial_code_' . $order_id ) || ! hash_equals( $order->get_order_key(), $key ) || self::GATEWAY !== $order->get_payment_method() ) {
+			return;
+		}
+		$action = sanitize_key( wp_unslash( $_POST['sfls_trial_action'] ) );
+		$email  = (string) $order->get_billing_email();
+		$result = true;
+		if ( 'resend' === $action ) {
+			$result = SFLS_Trials::issue_code( $email );
+			if ( true === $result ) {
+				$result = new WP_Error( 'code_sent', __( 'A new code is on its way.', 'subtleforms-license-server' ) );
+			}
+		} elseif ( 'verify' === $action ) {
+			$result = SFLS_Trials::verify_code( $email, isset( $_POST['sfls_trial_code'] ) ? sanitize_text_field( wp_unslash( $_POST['sfls_trial_code'] ) ) : '' );
+		}
+		// phpcs:enable
+		if ( is_wp_error( $result ) ) {
+			$order->update_meta_data( '_sfls_trial_code_notice', $result->get_error_message() );
+			$order->save_meta_data();
+		}
+		wp_safe_redirect( $order->get_checkout_payment_url( true ) );
+		exit;
+	}
+
+	/**
+	 * A trial order that failed or was canceled gives its claim back.
+	 *
+	 * @param int $order_id Order.
+	 */
+	public function release_trial_claims( $order_id ): void {
+		SFLS_Trials::release_order( (int) $order_id );
 	}
 
 	/**

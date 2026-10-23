@@ -134,16 +134,9 @@ class SFLS_Rest_Api_Test extends SFLS_Test_Case {
 		$lic                    = $this->make_license();
 		$this->rest( 'POST', '/sfls/v1/license/validate', $this->params( $lic ) );
 		$this->assertSame( 429, $this->rest( 'POST', '/sfls/v1/license/validate', $this->params( $lic ) )->get_status() );
-		foreach ( array( 'ip' => '203.0.113.50', 'pair' => strtoupper( $lic['license_key'] ) . '|203.0.113.50|shop.example.com' ) as $type => $value ) {
-			set_transient(
-				'sfls_rl_' . $type . '_' . md5( $value ),
-				array(
-					'start' => time() - 601,
-					'hits'  => 99,
-				),
-				600
-			);
-		}
+		// Let every window end: move the start of each counter back past the window.
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}sfls_rate_limits SET window_start = %d", time() - 601 ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$this->assertNotSame( 429, $this->rest( 'POST', '/sfls/v1/license/validate', $this->params( $lic ) )->get_status() );
 	}
 

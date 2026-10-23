@@ -67,7 +67,7 @@ final class SFLS_Paddle_REST {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( $this, 'eligibility' ),
-				'permission_callback' => '__return_true', // Public: anyone may ask whether they can start a trial.
+				'permission_callback' => '__return_true', // Public, but only a signed-in caller (valid REST nonce) gets the real answer.
 			)
 		);
 		register_rest_route(
@@ -341,6 +341,31 @@ final class SFLS_Paddle_REST {
 				)
 			);
 		}
+		if ( ! $user->ID ) {
+			// Anonymous callers get a uniform answer: only the shape of the address is checked, never
+			// whether it or its site already had a trial. Checkout enforces the real rules, so this
+			// endpoint cannot be used to probe other people's addresses or sites.
+			$normal = SFLS_Trials::normalize_email( $email );
+			if ( '' === $normal ) {
+				$check = array(
+					'eligible' => false,
+					'reason'   => 'invalid_email',
+					'message'  => __( 'Enter a valid email address.', 'subtleforms-license-server' ),
+				);
+			} else {
+				$check = array(
+					'eligible' => true,
+					'reason'   => '',
+					'message'  => '',
+				);
+			}
+			return rest_ensure_response(
+				$check + array(
+					'email'      => $email,
+					'trial_days' => SFLS_Paddle::plan( $plan )['trial_days'],
+				)
+			);
+		}
 		$check = SFLS_Trials::check( $email, $site );
 		return rest_ensure_response(
 			$check + array(
@@ -357,7 +382,13 @@ final class SFLS_Paddle_REST {
 	 * @return WP_REST_Response
 	 */
 	public function checkout( WP_REST_Request $req ) {
-		$limited = self::limited();
+		// Polling after a payment has a bucket of its own (per address and order or transaction), so it
+		// never uses up the allowance of the license API and a customer is not locked out by it.
+		// An address-wide ceiling comes first, so changing the order or txn value on every request
+		// does not open a fresh bucket each time.
+		$ref     = (string) $req->get_param( 'order' ) . '|' . (string) $req->get_param( 'txn' );
+		$limiter = new SFLS_REST();
+		$limited = $limiter->rate_limit( 'pollip', SFLS_Licenses::client_ip() ) ?? $limiter->rate_limit( 'poll', SFLS_Licenses::client_ip() . '|' . $ref );
 		if ( $limited ) {
 			return $limited;
 		}

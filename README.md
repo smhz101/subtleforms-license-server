@@ -22,7 +22,7 @@ One form, one row per plan (Starter, Pro, Agency):
 
 | Column | What it creates |
 |---|---|
-| Sites | Site limit for the plan (0 = unlimited). Prefilled from the plan. |
+| Sites | Site limit for the plan (0 = unlimited). Prefilled from the plan: Starter 1, Pro 5, Agency 25. A blank value is refused. |
 | Yearly price | `SubtleForms Pro <Plan>`: 12 months. |
 | Renewal price | `<Plan> Renewal`: 12 months, hidden from the shop, used by the Renew button. |
 | Lifetime price (optional) | `<Plan> Lifetime`: never expires. |
@@ -130,7 +130,7 @@ Every version is a row in `wp_sfls_releases` with a channel (stable or beta), a 
 * **Customers**: My Account › Pro downloads (and the `[sfls_downloads]` shortcode / SubtleForms Pro downloads block) shows the latest release and every older published version with its changelog. Each button creates a signed, single-use link for that license and version. Licenses that expired or were suspended keep the versions released while they were valid (`released_at <= expires_at`), not newer ones.
 * **Git and CI**: Licenses › Settings › Releases has deploy tokens, the release API and the GitHub webhook connection. See [docs/CI.md](docs/CI.md) for both CI paths, the GitHub Actions workflow in the Pro repository and WP-CLI (`wp sfls release …`).
 
-Update downloads: `/update/check` returns `package` = `/update/package?license_key&site_url[&channel]`. That address checks the license and the site and redirects to a signed `/update/download` link for that version that expires after 15 minutes and works once (used tokens are kept in `wp_sfls_download_tokens`). WordPress follows the redirect when it installs the update, so a cached update check never hands out a dead link. Links signed by 1.5 (without a version) still download the current release.
+Update downloads: `/update/check` returns `package` = `/update/package?lid&site_url&ptoken[&channel]` (since 1.7.0 the license ID and a token for that license and site, never the key; a request with `license_key` instead still works). That address checks the license and the site and redirects to a signed `/update/download` link for that version that expires after 15 minutes and works once (used tokens are kept in `wp_sfls_download_tokens`). WordPress follows the redirect when it installs the update, so a cached update check never hands out a dead link. Links signed by 1.5 (without a version) still download the current release.
 
 ## Selling with Paddle (1.5.0: WooCommerce checkout, Paddle payments)
 
@@ -178,10 +178,10 @@ Updating from 1.4.0: a shop that sold with Paddle in 1.4.0 moves to the recommen
 
   | Paddle | License |
   |---|---|
-  | `trialing` | Status active, **1 site**, `trial_ends_at`, `expires_at` = trial end + 3 days. |
-  | `active` / first payment | Full plan sites, trial over, `expires_at` = end of the billing period + 3 days, `renews_at` = next charge. |
-  | renewal `transaction.completed` | `expires_at` moves to the end of the new period + 3 days. Payment email, renewal order. |
-  | `past_due` | Stays valid until the paid period (+ 3 days, then the usual 14 day grace) ends. Payment failed email. |
+  | `trialing` | Status active, **1 site**, `trial_ends_at`, `expires_at` = trial end. A trial has no grace period. |
+  | `active` / first payment | Full plan sites, trial over, `expires_at` = end of the billing period, `renews_at` = next charge. |
+  | renewal `transaction.completed` | `expires_at` moves to the end of the new period. Payment email, renewal order. |
+  | `past_due` | Stays valid until the paid period ends, then the one 14 day grace period applies (it was 3 + 14 days before). Payment failed email. |
   | scheduled cancel | `cancels_at` set, no renewal date, email. Stays active until then. |
   | `canceled` | A paid license keeps its expiry. A trial canceled before paying ends at once. |
   | another plan's price | Plan, sites and features change, same key. |
@@ -224,7 +224,7 @@ With **Paddle overlay (legacy)** selected, the pricing cards open the Paddle ove
 | GET | `/license/status` | `license_key`, `site_url` |
 | GET | `/update/check` | `license_key`, `site_url`, `version`, optional `channel=beta` |
 | GET | `/update/download` | signed link from `/update/package` (`version` since 1.6.0) |
-| GET | `/update/package` | `license_key`, `site_url`, optional `channel`, optional `version` (302 to a fresh signed download) |
+| GET | `/update/package` | `lid`, `ptoken`, `site_url`, optional `channel`, optional `version` (302 to a fresh signed download); `license_key` and `site_url` are still accepted |
 | GET | `/update/versions` | `license_key`, `site_url`, optional `channel=beta`: `{ status, valid, activated, channel, versions: [ { version, channel, latest, released_at, requires, tested, requires_php, size, sha256, changelog, package } ] }`, the versions this license may download |
 | GET, POST | `/releases` | deploy token (`Authorization: Bearer`): list, or create from multipart `package` or `package_url` (see docs/CI.md) |
 | GET, DELETE | `/releases/<version>` | deploy token |
@@ -239,26 +239,15 @@ Errors return 4xx with `{ "valid": false, "reason": "…", "error": "…" }`.
 
 License payloads (activate, validate, status, connect exchange) carry `is_local`: true when the requesting site is a local or staging host that does not use a seat. Since 1.4.0 they also carry `billing`, `billing_status`, `trial`, `trial_ends_at`, `renews_at`, `cancels_at`, `renewal_amount` and `manage_url` (see Selling with Paddle).
 
-Rate limits: activate, validate, status, package and versions allow 30 requests per 10 minutes per IP. A valid key on a site it is activated on is then limited per key and site, so nobody else can lock that site out; every other request (unknown key, a site the key is not on, an inactive license) counts against the key's failure budget of 30 times the sites it is activated on. Deactivate and connect exchange are limited per IP. Over the limit they answer `429` with `Retry-After` (seconds). Change it with the `sfls_rate_limit` filter (`array( 'limit' => 30, 'window' => 600 )`). Sites with `WP_ENVIRONMENT_TYPE` `local` skip it unless `sfls_rate_limit_enabled` returns true. Behind a proxy or CDN, filter `sfls_client_ip` to return the visitor address the proxy forwards, otherwise every request looks like it comes from the proxy.
+Rate limits: activate, validate, status, package and versions allow 30 requests per 10 minutes per IP. A valid key on a site it is activated on is then limited per key and site, so nobody else can lock that site out; every other request (unknown key, a site the key is not on, an inactive license) counts against the key's failure budget of 30 times the sites it is activated on. Deactivate and connect exchange are limited per IP. Over the limit they answer `429` with `Retry-After` (seconds). Change it with the `sfls_rate_limit` filter (`array( 'limit' => 30, 'window' => 600 )`). Sites with `WP_ENVIRONMENT_TYPE` `local` skip it unless `sfls_rate_limit_enabled` returns true. Behind a proxy or CDN, tick **Proxy or CDN** in Licenses › Settings: the address is then read from `CF-Connecting-IP`, else the first address of `X-Forwarded-For` (only do this when all traffic comes through the proxy, because the headers can be forged otherwise), and the `sfls_client_ip` filter still has the last word. Without it every request looks like it comes from the proxy and shares one bucket. Since schema 8 the counters are rows in `wp_sfls_rate_limits`, raised atomically; `/update/check` has its own bucket (60 per 10 minutes per IP, unknown keys count as failures) and the checkout status polling of `/paddle/checkout` has its own bucket (240 per 10 minutes per IP and order), so neither uses up the allowance of the license API.
 
-## Tests
-
-Integration tests run inside a real WordPress + WooCommerce site with this plugin active. They create their own users, products, orders and licenses (all `@sfls-test.invalid`) and delete them afterwards.
-
-```
-SFLS_WP_PATH=/path/to/wordpress /path/to/phpunit -c phpunit.xml
-```
-
-The Paddle tests (`PaddleSignatureTest`, `PaddleWebhookTest`, `TrialEligibilityTest`, `PaddleBillingTest`, and since 1.5.0 `PaddleWooGatewayTest` for the WooCommerce gateway) never reach Paddle: the API is answered through the `pre_http_request` filter and every call is recorded so the tests can assert it.
-
-The 1.6.0 release tests (`ReleaseManagementTest`, `ReleaseApiTest`, `GitHubWebhookTest`, `ReleaseCliTest`) set the site's releases aside while they run and put them back afterwards. GitHub is answered through `pre_http_request` as well. `ReleaseCliTest` runs the real `wp` command; set `SFLS_WP_CLI` to the path of `wp-cli.phar` (default `/tmp/claude-0/wp-cli.phar`) or it is skipped.
-
-PHPUnit 9.6 is enough (for example the one in the SubtleForms free plugin's `vendor/bin`).
+Free trials: the customer confirms the email with a one-time 6 digit code on the payment page before the Paddle form opens (valid 15 minutes, 5 tries, stored hashed; turn it off in Licenses › Settings). The trial is claimed when the order is created, inside a transaction and a lock per email, and given back when the order fails or is canceled; claims of an unpaid checkout lapse after 30 minutes. Throw-away addresses are refused (built-in list, more domains in Licenses › Settings, filter `sfls_disposable_domains`), and the company-domain rule skips 49 free mail domains (`sfls_free_mail_domains`).
 
 ## Database
 
 | Version | Change |
 |---|---|
+| Next release (schema 8) | New table `wp_sfls_rate_limits` (bucket, window_start, hits). New table `wp_sfls_trial_codes` (email_hash, code_hash, attempts, expires_at, verified_until, created_at; hashes only). `wp_sfls_trial_claims` gains `order_id` and `status` (pending until the payment). `wp_sfls_licenses` gains indexes on `status` and `expires_at`. The private release folder's `.htaccess` is rewritten to Apache 2.4 syntax (`Require all denied`). `sfls_settings` gains `trusted_proxy`, `trial_verify`, `block_disposable` and `disposable_extra`. The Agency plan allows 25 sites; licenses already issued keep their stored limit until a Paddle event applies the plan. |
 | 1.6.0 (schema 5) | New table `wp_sfls_releases` (id, version unique, channel, status, file, size, sha256, requires, tested, requires_php, changelog, source, git_ref, git_commit, notes, yank_reason, replaced_files, downloads, released_at, created_at, updated_at). On the first request after updating, the releases in the options `sfls_release` and `sfls_release_history` are copied into it as published stable releases (released_at from their date, size and sha256 from the files), and `sfls_releases_migrated` is set. The two options are left in place and only read as a fallback until that copy ran; nothing writes them any more. New table `wp_sfls_github_deliveries` (delivery_id, event, action, tag, result, message, release_version, payload, received_at, processed_at; the last 200 are kept). New options `sfls_release_pin`, `sfls_release_settings` (auto_publish), `sfls_deploy_tokens` (name, hash, scopes, created, last used, revoked; never the token) and `sfls_github` (repo, token, webhook secret, asset_pattern, auto_publish), none autoloaded. |
 | 1.5.0 (schema 4, no table change) | `sfls_settings.sell_with` gains `woo_paddle` (the new default) next to `woocommerce` and `paddle` (legacy overlay); a 1.4.0 shop on `paddle` moves to `woo_paddle` once (option `sfls_migrated_150`) and `woocommerce_sfls_paddle_settings.enabled` is set to yes. New gateway option `woocommerce_sfls_paddle_settings` (enabled, title, description). Orders paid with Paddle get `_sfls_paddle_txn_id`, `_sfls_paddle_paid_txn`, `_sfls_paddle_kind`, `_sfls_paddle_customer_id`, `_sfls_paddle_subscription_id`, `_sfls_paddle_env`, `_sfls_paddle_adjustments` and `_sfls_paddle_notes`; renewal orders `_sfls_paddle_renewal` and `_sfls_parent_order`; upgrade orders `_sfls_paddle_upgrade_pending` until Paddle confirms; trial lines `_sfls_trial` (days) and a visible *Free trial* meta; refunds `_sfls_paddle_adjustment_id`; users `_sfls_paddle_customer_id` and `_sfls_paddle_customer_email`; coupons may carry `_sfls_paddle_discount_id`. Runs on the first request after updating (or on activation). |
 | 1.4.0 (schema 4) | `wp_sfls_licenses` gains `billing` (paddle, woocommerce or manual; existing rows are set to woocommerce when they have an order, manual otherwise), `billing_status`, `trial`, `trial_started_at`, `trial_ends_at`, `renews_at`, `cancels_at`, `billing_amount`, `billing_currency`, `paddle_customer_id`, `paddle_subscription_id` (indexed), `paddle_price_id`, `paddle_transaction_id` (indexed), `checkout_token_hash` and `billing_synced_at`. New table `wp_sfls_trial_claims` (kind email, domain or site; value; license_id; created_at). New table `wp_sfls_paddle_events` (event_id, event_type, occurred_at, received_at, status, license_id, note). New options `sfls_paddle` (Paddle keys and plan mapping, not autoloaded) and `sfls_paddle_rejected`; `sfls_settings` gains `sell_with` (woocommerce), `renewal_notice` (14,3) and `trial_notice` (3). Applied by dbDelta on activation or on the first request after updating; the `/license-welcome/` rewrite rule is flushed on the version change. |

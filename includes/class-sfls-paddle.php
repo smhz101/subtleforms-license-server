@@ -32,10 +32,13 @@ final class SFLS_Paddle {
 	const JS_URL      = 'https://cdn.paddle.com/paddle/v2/paddle.js';
 
 	/**
-	 * Days the license stays valid after a Paddle billing date, so a charge
-	 * that is a few minutes or hours late never shows as expired.
+	 * Extra days added to a Paddle billing date. 0: the one grace period is
+	 * SFLS_Licenses::GRACE_DAYS, applied by SFLS_Licenses::state(), so a lapsed
+	 * subscription is valid for 14 days after its date and not for 17. Trials
+	 * get no grace at all. The `sfls_paddle_grace_days` filter can still add
+	 * days here.
 	 */
-	const BILLING_GRACE_DAYS = 3;
+	const BILLING_GRACE_DAYS = 0;
 
 	/**
 	 * Configuration with defaults.

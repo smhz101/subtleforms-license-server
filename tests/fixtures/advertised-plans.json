@@ -1,0 +1,49 @@
+{
+    "plans": {
+        "starter": {
+            "label": "Starter",
+            "sites": 1,
+            "features": [
+                "csv_export"
+            ]
+        },
+        "pro": {
+            "label": "Pro",
+            "sites": 5,
+            "features": [
+                "csv_export",
+                "webhooks",
+                "integrations",
+                "conditional_logic"
+            ]
+        },
+        "agency": {
+            "label": "Agency",
+            "sites": 25,
+            "features": [
+                "csv_export",
+                "webhooks",
+                "integrations",
+                "conditional_logic",
+                "white_label"
+            ]
+        }
+    },
+    "feature_labels": {
+        "csv_export": "CSV export of entries",
+        "webhooks": "Webhooks with retries",
+        "integrations": "WooCommerce checkout, Mailchimp, Brevo, Kit, HubSpot, Salesforce, Pipedrive, Close, Zapier, Make and n8n",
+        "conditional_logic": "Advanced conditional logic",
+        "white_label": "Branding portal for your clients' sites, white label and WPML/Polylang translation"
+    },
+    "common_items": [
+        "Stripe checkout with coupons",
+        "Advanced conditional logic and conditional emails",
+        "Calculation, Signature and Picture Choice fields",
+        "Multi-file uploads",
+        "Entry PDFs and form analytics",
+        "Pro templates",
+        "MCP server for AI assistants",
+        "Updates and priority support"
+    ]
+}

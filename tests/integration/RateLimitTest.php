@@ -180,4 +180,19 @@ class SFLS_Rate_Limit_Test extends SFLS_Test_Case {
 			$this->assertSame( 'expired', $data['reason'] ?? '', "Request $n" );
 		}
 	}
+
+	/**
+	 * Checkout polling keeps an address-wide ceiling: new order or txn values
+	 * on every request do not open a fresh bucket.
+	 */
+	public function test_checkout_polling_has_an_address_ceiling(): void {
+		$this->limit( 100, array( 'pollip' => 3 ) );
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+		foreach ( range( 1, 3 ) as $n ) {
+			$this->assertNotSame( 429, $this->rest( 'GET', '/sfls/v1/paddle/checkout', array( 'txn' => 'txn_unknown' . $n ) )->get_status() );
+		}
+		$this->assertSame( 429, $this->rest( 'GET', '/sfls/v1/paddle/checkout', array( 'txn' => 'txn_unknown4' ) )->get_status() );
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.10';
+		$this->assertNotSame( 429, $this->rest( 'GET', '/sfls/v1/paddle/checkout', array( 'txn' => 'txn_unknown5' ) )->get_status() );
+	}
 }

@@ -155,7 +155,10 @@ class SFLS_Trial_Eligibility_Test extends SFLS_Test_Case {
 		$this->assertTrue( $ok['eligible'] );
 		$this->assertSame( 14, $ok['trial_days'] );
 
-		SFLS_Trials::record_start( (int) $this->trial_license()['id'], $email );
+		// A signed-in customer gets the real answer for their own account.
+		$user = $this->make_user();
+		SFLS_Trials::record_start( (int) $this->trial_license()['id'], $user->user_email );
+		wp_set_current_user( $user->ID );
 		$used = $this->rest(
 			'POST',
 			'/sfls/v1/paddle/eligibility',
@@ -164,6 +167,7 @@ class SFLS_Trial_Eligibility_Test extends SFLS_Test_Case {
 				'plan'  => 'starter',
 			)
 		)->get_data();
+		wp_set_current_user( 0 );
 		$this->assertFalse( $used['eligible'] );
 		$this->assertSame( 'email_used', $used['reason'] );
 		$this->assertNotSame( '', $used['message'] );

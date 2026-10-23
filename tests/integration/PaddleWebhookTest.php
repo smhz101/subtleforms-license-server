@@ -315,7 +315,7 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 		$after = SFLS_Licenses::find( (int) $lic['id'] );
 		$this->assertSame( $lic['license_key'], $after['license_key'] );
 		$this->assertSame( 'agency', $after['plan'] );
-		$this->assertSame( 0, (int) $after['sites_allowed'] );
+		$this->assertSame( 25, (int) $after['sites_allowed'] );
 		$this->assertSame( '19900', $after['billing_amount'] );
 		$this->assertContains( 'white_label', SFLS_Licenses::payload( $after )['features'] );
 		$this->assertStringContainsString( 'Plan changed from Pro to Agency', (string) $after['notes'] );

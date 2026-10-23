@@ -16,7 +16,8 @@
  * Every response is JSON except download. Errors use a 4xx status with
  * { error, reason }, which is what the Pro client maps to a license state.
  * activate, validate, status, package, versions and branding are limited per IP (30
- * requests per 10 minutes). Requests from a site the valid key is activated
+ * requests per 10 minutes). update/check has its own bucket per IP (60 per 10
+ * minutes) and counts unknown keys as failures. Requests from a site the valid key is activated
  * on are also limited per key and site; every other request is checked
  * against a budget of failed requests per key, address and site, and a
  * high ceiling per key (see guarded()). Over a limit they answer 429 with
@@ -33,6 +34,20 @@ defined( 'ABSPATH' ) || exit;
 final class SFLS_REST {
 
 	const NS = 'sfls/v1';
+
+	/**
+	 * Requests per window of the buckets that do not use the default of 30:
+	 * update checks (every site checks on its own schedule, and many sit
+	 * behind one address) and the order status polling of the checkout page
+	 * (a request every 2 seconds for up to 2 minutes), plus an
+	 * address-wide ceiling for that polling that varying the order or
+	 * transaction cannot get around.
+	 */
+	const DEFAULT_LIMITS = array(
+		'update' => 60,
+		'poll'   => 240,
+		'pollip' => 600,
+	);
 
 	/**
 	 * Hook routes.
@@ -241,6 +256,18 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function update_check( WP_REST_Request $req ) {
+		// Its own bucket: update checks never use up the license API's allowance of an address.
+		$ip      = SFLS_Licenses::client_ip();
+		$limited = $this->rate_limit( 'update', $ip );
+		if ( $limited ) {
+			return $limited;
+		}
+		$pair    = strtoupper( sanitize_text_field( (string) $req->get_param( 'license_key' ) ) ) . '|' . $ip . '|' . SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site_url' ) );
+		$limited = $this->rate_limit( 'pair', $pair, false );
+		if ( $limited ) {
+			return $limited;
+		}
+
 		$channel = self::channel( $req );
 		$release = SFLS_Releases::latest( $channel );
 		if ( ! $release ) {
@@ -259,6 +286,10 @@ final class SFLS_REST {
 		);
 
 		[ $lic, $domain, $error ] = $this->resolve( $req );
+		if ( $error && 404 === $error->get_status() ) {
+			// A key that does not exist counts as a failure, so the answer cannot be used to test keys in bulk.
+			$this->rate_limit( 'pair', $pair, true );
+		}
 		if ( ! $error && SFLS_Licenses::state( $lic )['valid'] && SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
 			// Pro caches this answer for hours, longer than a signed link lives,
 			// so the package is a stable address that hands out a fresh signed
@@ -677,11 +708,15 @@ final class SFLS_REST {
 	 * (default 30 per 10 minutes). Over the limit the answer is 429 with a
 	 * Retry-After header.
 	 *
+	 * The counter is one row per bucket in wp_sfls_rate_limits and is raised
+	 * with a single UPDATE, so requests that arrive together are all counted
+	 * (transients lose counts under load).
+	 *
 	 * Local sites (WP_ENVIRONMENT_TYPE local) skip it unless the
 	 * `sfls_rate_limit_enabled` filter says otherwise, so development and
 	 * automated tests are not throttled.
 	 *
-	 * @param string $type  ip | site (key and site) | pair (failures of key, address and site) | ceiling (failures of a key).
+	 * @param string $type  ip | site (key and site) | pair (failures of key, address and site) | ceiling (failures of a key) | update (update checks per address) | poll (checkout status polling per address and order).
 	 * @param string $value IP address, "key|domain", "key|ip|domain" or license key.
 	 * @param bool   $count Count this request (false: only check).
 	 * @param int    $scale Multiplies the limit.
@@ -693,31 +728,98 @@ final class SFLS_REST {
 		$conf   = wp_parse_args(
 			(array) apply_filters( 'sfls_rate_limit', array(), $type ),
 			array(
-				'limit'  => 30,
+				'limit'  => self::DEFAULT_LIMITS[ $type ] ?? 30,
 				'window' => 10 * MINUTE_IN_SECONDS,
 			)
 		);
 		$limit  = max( 1, (int) $conf['limit'] ) * max( 1, $scale );
 		$window = max( 1, (int) $conf['window'] );
 		$now    = time();
-		$bucket = 'sfls_rl_' . $type . '_' . md5( '' === $value ? 'unknown' : $value );
-		$state  = get_transient( $bucket );
-		$state  = ( is_array( $state ) && isset( $state['start'], $state['hits'] ) && $state['start'] + $window > $now ) ? $state : array(
-			'start' => $now,
-			'hits'  => 0,
-		);
+		$bucket = self::bucket_name( $type, $value );
 
-		if ( $state['hits'] >= $limit ) {
-			$retry    = max( 1, (int) $state['start'] + $window - $now );
+		$state = $count ? self::hit( $bucket, $window, $now ) : self::peek( $bucket, $window, $now );
+		// Counting raises the counter first, so the request that makes it exceed the limit is the first one refused.
+		if ( $state['hits'] > $limit || ( ! $count && $state['hits'] >= $limit ) ) {
+			$retry    = max( 1, $state['start'] + $window - $now );
 			$response = $this->error( 429, 'rate_limited', __( 'Too many requests. Try again in a few minutes.', 'subtleforms-license-server' ) );
 			$response->header( 'Retry-After', (string) $retry );
 			return $response;
 		}
-
-		if ( $count ) {
-			++$state['hits'];
-			set_transient( $bucket, $state, $window );
-		}
 		return null;
+	}
+
+	/**
+	 * Key of a counter row.
+	 *
+	 * @param string $type  Bucket type.
+	 * @param string $value Bucket value.
+	 */
+	public static function bucket_name( string $type, string $value ): string {
+		return md5( $type . '|' . ( '' === $value ? 'unknown' : $value ) );
+	}
+
+	/**
+	 * Current count of a bucket without counting.
+	 *
+	 * @param string $bucket Row key.
+	 * @param int    $window Window length in seconds.
+	 * @param int    $now    Current time.
+	 * @return array{start:int,hits:int}
+	 */
+	private static function peek( string $bucket, int $window, int $now ): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT window_start, hits FROM {$wpdb->prefix}sfls_rate_limits WHERE bucket = %s", $bucket ), ARRAY_A );
+		if ( ! $row || (int) $row['window_start'] + $window <= $now ) {
+			return array(
+				'start' => $now,
+				'hits'  => 0,
+			);
+		}
+		return array(
+			'start' => (int) $row['window_start'],
+			'hits'  => (int) $row['hits'],
+		);
+	}
+
+	/**
+	 * Count one request in a bucket and return the count of its window. Each
+	 * step is one atomic statement: raise the counter of a running window;
+	 * else start a new window on an ended one; else create the row (another
+	 * request may create it first, then raise it).
+	 *
+	 * @param string $bucket Row key.
+	 * @param int    $window Window length in seconds.
+	 * @param int    $now    Current time.
+	 * @return array{start:int,hits:int}
+	 */
+	private static function hit( string $bucket, int $window, int $now ): array {
+		global $wpdb;
+		$table = $wpdb->prefix . 'sfls_rate_limits';
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		for ( $try = 0; $try < 3; $try++ ) {
+			$raised = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET hits = hits + 1 WHERE bucket = %s AND window_start > %d", $bucket, $now - $window ) );
+			if ( ! $raised ) {
+				$raised = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET hits = 1, window_start = %d WHERE bucket = %s AND window_start <= %d", $now, $bucket, $now - $window ) );
+			}
+			if ( ! $raised ) {
+				$raised = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} ( bucket, window_start, hits ) VALUES ( %s, %d, 1 )", $bucket, $now ) );
+			}
+			if ( $raised ) {
+				break;
+			}
+		}
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT window_start, hits FROM {$table} WHERE bucket = %s", $bucket ), ARRAY_A );
+		// phpcs:enable
+		if ( ! $row ) {
+			return array(
+				'start' => $now,
+				'hits'  => 1,
+			);
+		}
+		return array(
+			'start' => (int) $row['window_start'],
+			'hits'  => (int) $row['hits'],
+		);
 	}
 }

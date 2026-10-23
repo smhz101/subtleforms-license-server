@@ -27,6 +27,8 @@ $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_github_deliveries" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding_revisions" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding_sites" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_rate_limits" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_trial_codes" );
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfls\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfls\\_%'" );
 // phpcs:enable
 
@@ -49,6 +51,8 @@ foreach ( array(
 	'sfls_owners_migrated',
 	'sfls_link_secret',
 	'sfls_release_files_private',
+	'sfls_release_signatures',
+	'sfls_release_replacements',
 	'woocommerce_sfls_paddle_settings',
 	'sfls_delete_data_on_uninstall',
 ) as $sfls_option ) {
