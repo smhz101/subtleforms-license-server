@@ -277,7 +277,7 @@ final class SFLS_Signing {
 			// The array may be older than the row (a package was replaced and signed since): ask the row.
 			global $wpdb;
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$stored = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT package_sig FROM ' . SFLS_DB::releases() . ' WHERE id = %d', $id ) );
+			$stored = (string) $wpdb->get_var( $wpdb->prepare( "SELECT package_sig FROM {$wpdb->prefix}sfls_releases WHERE id = %d", $id ) );
 			if ( '' !== $stored && self::verify( $message, $stored, $public ) ) {
 				return $stored;
 			}
