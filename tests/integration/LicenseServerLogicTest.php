@@ -413,8 +413,8 @@ class SFLS_License_Server_Logic_Test extends SFLS_Test_Case {
 	 */
 	public function test_schema_9(): void {
 		global $wpdb;
-		$this->assertSame( '9', SFLS_DB::SCHEMA_VERSION );
-		$this->assertSame( '9', get_option( 'sfls_schema_version' ) );
+		$this->assertSame( '10', SFLS_DB::SCHEMA_VERSION );
+		$this->assertSame( '10', get_option( 'sfls_schema_version' ) );
 		$keys = wp_list_pluck( (array) $wpdb->get_results( "SHOW INDEX FROM {$wpdb->prefix}sfls_licenses", ARRAY_A ), 'Key_name' );
 		$this->assertContains( 'status', $keys );
 		$this->assertContains( 'expires_at', $keys );

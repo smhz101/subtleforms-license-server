@@ -12,7 +12,13 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '9';
+	const SCHEMA_VERSION = '10';
+
+	/**
+	 * Licence IDs whose Agency seats were already more than the plan's 25
+	 * when schema 10 ran. Shown to the admin.
+	 */
+	const AGENCY_OVER_LIMIT = 'sfls_agency_over_limit';
 
 	/**
 	 * Set once licenses were tied to the customer of the order that issued
@@ -388,6 +394,9 @@ final class SFLS_DB {
 		// Schema 9: package signatures moved from an option into releases.package_sig.
 		SFLS_Signing::migrate_to_column();
 
+		// Schema 10: Agency licences issued unlimited (0 seats) get the plan's seats.
+		self::migrate_agency_seats();
+
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
 
 		// Private folder for release packages.
@@ -404,6 +413,38 @@ final class SFLS_DB {
 
 		// Schema 5 (1.6.0): move the releases out of the two options.
 		SFLS_Releases::migrate_from_options();
+	}
+
+	/**
+	 * Schema 10: an Agency licence with 0 sites (unlimited) gets 25 seats, or
+	 * its active domain count when that is more. A licence that already uses
+	 * more than 25 keeps its count, gets a line in the activity log and is
+	 * listed in AGENCY_OVER_LIMIT. Returns the IDs listed. Runs only from
+	 * install(), which the schema version gates.
+	 *
+	 * @return int[]
+	 */
+	public static function migrate_agency_seats(): array {
+		global $wpdb;
+		$licenses = self::licenses();
+		$acts     = self::activations();
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT l.id, COUNT(a.id) AS domains FROM {$licenses} l LEFT JOIN {$acts} a ON a.license_id = l.id WHERE l.plan = %s AND l.sites_allowed = %d GROUP BY l.id", 'agency', 0 ), ARRAY_A );
+		$over = array();
+		foreach ( $rows as $row ) {
+			$id      = (int) $row['id'];
+			$domains = (int) $row['domains'];
+			$wpdb->update( $licenses, array( 'sites_allowed' => max( 25, $domains ) ), array( 'id' => $id ) );
+			if ( $domains > 25 ) {
+				$over[] = $id;
+				SFLS_Licenses::log( $id, '', 'over_limit', 'schema' );
+			}
+		}
+		// phpcs:enable
+		if ( $over ) {
+			update_option( self::AGENCY_OVER_LIMIT, $over, false );
+		}
+		return $over;
 	}
 
 	/**
