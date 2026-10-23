@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-23T06:42:34+00:00\n"
+"POT-Creation-Date: 2026-10-23T07:07:40+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: subtleforms-license-server\n"
@@ -440,7 +440,7 @@ msgid "That version is not available for download."
 msgstr ""
 
 #: includes/class-sfls-account.php:828
-#: includes/class-sfls-rest.php:380
+#: includes/class-sfls-rest.php:383
 msgid "This version was released after your license expired. Renew to download it."
 msgstr ""
 
@@ -3966,17 +3966,17 @@ msgid "This license is in your account."
 msgstr ""
 
 #: includes/class-sfls-licenses.php:301
-#: includes/class-sfls-rest.php:551
+#: includes/class-sfls-rest.php:554
 msgid "license_key and site_url are required."
 msgstr ""
 
 #: includes/class-sfls-licenses.php:309
-#: includes/class-sfls-rest.php:203
+#: includes/class-sfls-rest.php:206
 msgid "This license has expired. Renew it from your SubtleForms account."
 msgstr ""
 
 #: includes/class-sfls-licenses.php:310
-#: includes/class-sfls-rest.php:204
+#: includes/class-sfls-rest.php:207
 msgid "This license is not active. Contact SubtleForms support."
 msgstr ""
 
@@ -4027,7 +4027,7 @@ msgstr ""
 msgid "Enter a valid email address."
 msgstr ""
 
-#: includes/class-sfls-paddle-rest.php:409
+#: includes/class-sfls-paddle-rest.php:412
 msgid "Your license is ready. We emailed the key to you, and you can see it after signing in."
 msgstr ""
 
@@ -4382,55 +4382,55 @@ msgstr ""
 msgid "[Test] %s"
 msgstr ""
 
-#: includes/class-sfls-rest.php:134
-#: includes/class-sfls-rest.php:208
-#: includes/class-sfls-rest.php:373
+#: includes/class-sfls-rest.php:137
+#: includes/class-sfls-rest.php:211
+#: includes/class-sfls-rest.php:376
 msgid "This site is not activated for this license."
 msgstr ""
 
-#: includes/class-sfls-rest.php:194
+#: includes/class-sfls-rest.php:197
 msgid "version must be a whole number."
 msgstr ""
 
-#: includes/class-sfls-rest.php:370
-#: includes/class-sfls-rest.php:470
+#: includes/class-sfls-rest.php:373
+#: includes/class-sfls-rest.php:473
 msgid "An active license is required to download updates."
 msgstr ""
 
-#: includes/class-sfls-rest.php:377
-#: includes/class-sfls-rest.php:473
+#: includes/class-sfls-rest.php:380
+#: includes/class-sfls-rest.php:476
 msgid "No package is available."
 msgstr ""
 
-#: includes/class-sfls-rest.php:465
+#: includes/class-sfls-rest.php:468
 msgid "This download link has expired. Check for updates again."
 msgstr ""
 
-#: includes/class-sfls-rest.php:476
+#: includes/class-sfls-rest.php:479
 msgid "This download link was already used. Check for updates again to get a new one."
 msgstr ""
 
-#: includes/class-sfls-rest.php:505
+#: includes/class-sfls-rest.php:508
 msgid "This connection code is invalid or has expired. Connect the site again."
 msgstr ""
 
-#: includes/class-sfls-rest.php:554
+#: includes/class-sfls-rest.php:557
 msgid "license_key is required."
 msgstr ""
 
-#: includes/class-sfls-rest.php:557
+#: includes/class-sfls-rest.php:560
 msgid "site_url is required."
 msgstr ""
 
-#: includes/class-sfls-rest.php:560
+#: includes/class-sfls-rest.php:563
 msgid "site_url must be the address of a website, such as https://example.com."
 msgstr ""
 
-#: includes/class-sfls-rest.php:565
+#: includes/class-sfls-rest.php:568
 msgid "That license key was not found. Check it in your SubtleForms account."
 msgstr ""
 
-#: includes/class-sfls-rest.php:741
+#: includes/class-sfls-rest.php:744
 msgid "Too many requests. Try again in a few minutes."
 msgstr ""
 
@@ -4717,6 +4717,7 @@ msgstr ""
 
 #. translators: %s: adjustment ID
 #: includes/class-sfls-woo-paddle-orders.php:1147
+#: includes/class-sfls-woo-paddle-orders.php:1208
 #, php-format
 msgid "Chargeback in Paddle (%s)"
 msgstr ""
@@ -4734,19 +4735,19 @@ msgid "Recorded a refund of %1$s: %2$s."
 msgstr ""
 
 #. translators: %s: adjustment ID
-#: includes/class-sfls-woo-paddle-orders.php:1245
+#: includes/class-sfls-woo-paddle-orders.php:1268
 #, php-format
 msgid "Paddle rejected refund %s, so the WooCommerce refund was removed. No money was returned."
 msgstr ""
 
 #. translators: 1: subscription ID, 2: error
-#: includes/class-sfls-woo-paddle-orders.php:1266
+#: includes/class-sfls-woo-paddle-orders.php:1289
 #, php-format
 msgid "Could not cancel Paddle subscription %1$s after the refund: %2$s. Cancel it in Paddle."
 msgstr ""
 
 #. translators: %s: subscription ID
-#: includes/class-sfls-woo-paddle-orders.php:1271
+#: includes/class-sfls-woo-paddle-orders.php:1294
 #, php-format
 msgid "Paddle subscription %s canceled because the order was fully refunded."
 msgstr ""
