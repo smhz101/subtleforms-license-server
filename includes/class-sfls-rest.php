@@ -39,11 +39,14 @@ final class SFLS_REST {
 	 * Requests per window of the buckets that do not use the default of 30:
 	 * update checks (every site checks on its own schedule, and many sit
 	 * behind one address) and the order status polling of the checkout page
-	 * (a request every 2 seconds for up to 2 minutes).
+	 * (a request every 2 seconds for up to 2 minutes), plus an
+	 * address-wide ceiling for that polling that varying the order or
+	 * transaction cannot get around.
 	 */
 	const DEFAULT_LIMITS = array(
 		'update' => 60,
 		'poll'   => 240,
+		'pollip' => 600,
 	);
 
 	/**

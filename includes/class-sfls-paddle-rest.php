@@ -384,8 +384,11 @@ final class SFLS_Paddle_REST {
 	public function checkout( WP_REST_Request $req ) {
 		// Polling after a payment has a bucket of its own (per address and order or transaction), so it
 		// never uses up the allowance of the license API and a customer is not locked out by it.
+		// An address-wide ceiling comes first, so changing the order or txn value on every request
+		// does not open a fresh bucket each time.
 		$ref     = (string) $req->get_param( 'order' ) . '|' . (string) $req->get_param( 'txn' );
-		$limited = ( new SFLS_REST() )->rate_limit( 'poll', SFLS_Licenses::client_ip() . '|' . $ref );
+		$limiter = new SFLS_REST();
+		$limited = $limiter->rate_limit( 'pollip', SFLS_Licenses::client_ip() ) ?? $limiter->rate_limit( 'poll', SFLS_Licenses::client_ip() . '|' . $ref );
 		if ( $limited ) {
 			return $limited;
 		}
