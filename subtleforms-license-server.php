@@ -3,7 +3,7 @@
  * Plugin Name:       SubtleForms License Server
  * Plugin URI:        https://subtleforms.com
  * Description:       Issues and validates SubtleForms Pro license keys, sells them through WooCommerce, connects customer sites, runs the customer members area and serves Pro updates. Install on subtleforms.com only.
- * Version:           1.8.1
+ * Version:           1.9.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            SubtleForms
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SFLS_VERSION', '1.8.1' );
+define( 'SFLS_VERSION', '1.9.0' );
 define( 'SFLS_FILE', __FILE__ );
 define( 'SFLS_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SFLS_URL', plugin_dir_url( __FILE__ ) );
