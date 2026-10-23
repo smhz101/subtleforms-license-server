@@ -312,4 +312,33 @@ class SFLS_Trial_Verification_Test extends SFLS_Test_Case {
 		);
 		$this->assertSame( 'active', SFLS_Licenses::find( (int) $lic['id'] )['status'] );
 	}
+
+	/**
+	 * A chargeback stored before the action was kept in the map is still
+	 * recognised on reversal: its mirrored refund is removed.
+	 */
+	public function test_chargeback_reverse_handles_a_legacy_map_entry(): void {
+		$order = $this->buy_with_paddle( $this->email( 'cbold' ) );
+		$txn   = $this->txns[ $order->get_transaction_id() ];
+		$lic   = $this->licenses_of_order( $order->get_id() )[0];
+		$total = (string) $txn['details']['totals']['total'];
+		$totals = array(
+			'total'         => $total,
+			'currency_code' => 'USD',
+		);
+
+		$this->webhook( 'adjustment.created', array( 'id' => 'adj_legacycb1', 'action' => 'chargeback', 'status' => 'approved', 'transaction_id' => $txn['id'], 'totals' => $totals ) );
+
+		$fresh = wc_get_order( $order->get_id() );
+		$map   = (array) $fresh->get_meta( '_sfls_paddle_adjustments' );
+		unset( $map['adj_legacycb1']['action'] );
+		$fresh->update_meta_data( '_sfls_paddle_adjustments', $map );
+		$fresh->save_meta_data();
+
+		$this->webhook( 'adjustment.created', array( 'id' => 'adj_legacyrev1', 'action' => 'chargeback_reverse', 'status' => 'approved', 'transaction_id' => $txn['id'], 'totals' => $totals ) );
+
+		$this->assertSame( 'active', SFLS_Licenses::find( (int) $lic['id'] )['status'] );
+		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
+		$this->assertCount( 0, wc_get_orders( array( 'type' => 'shop_order_refund', 'parent' => $order->get_id(), 'limit' => 5 ) ) );
+	}
 }

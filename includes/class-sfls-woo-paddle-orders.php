@@ -1186,6 +1186,29 @@ final class SFLS_Woo_Paddle_Orders {
 	}
 
 	/**
+	 * Whether a stored adjustment entry mirrors a chargeback. Entries written
+	 * before the action was stored have none, so a Paddle entry without one is
+	 * recognised by the reason of the refund it created.
+	 *
+	 * @param string $adj_id Adjustment ID.
+	 * @param array  $entry  Stored entry.
+	 */
+	private static function is_chargeback_entry( string $adj_id, array $entry ): bool {
+		if ( isset( $entry['action'] ) && '' !== $entry['action'] ) {
+			return 'chargeback' === $entry['action'];
+		}
+		if ( 'paddle' !== ( $entry['source'] ?? '' ) || empty( $entry['refund_id'] ) ) {
+			return false;
+		}
+		$refund = wc_get_order( (int) $entry['refund_id'] );
+		if ( ! $refund instanceof WC_Order_Refund ) {
+			return false;
+		}
+		/* translators: %s: adjustment ID */
+		return sprintf( __( 'Chargeback in Paddle (%s)', 'subtleforms-license-server' ), $adj_id ) === (string) $refund->get_reason();
+	}
+
+	/**
 	 * A chargeback was reversed: remove the refunds that mirrored chargebacks
 	 * and make the suspended or refunded licenses of the order active again.
 	 *
@@ -1195,7 +1218,7 @@ final class SFLS_Woo_Paddle_Orders {
 	private static function restore_after_chargeback( WC_Order $order ): int {
 		$map = self::adjustments_of( $order );
 		foreach ( $map as $adj_id => $entry ) {
-			if ( 'chargeback' === ( $entry['action'] ?? '' ) && ! empty( $entry['refund_id'] ) ) {
+			if ( self::is_chargeback_entry( (string) $adj_id, (array) $entry ) && ! empty( $entry['refund_id'] ) ) {
 				$refund = wc_get_order( (int) $entry['refund_id'] );
 				if ( $refund instanceof WC_Order_Refund ) {
 					$refund->delete( true );
