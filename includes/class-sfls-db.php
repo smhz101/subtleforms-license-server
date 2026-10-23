@@ -395,7 +395,12 @@ final class SFLS_DB {
 		SFLS_Signing::migrate_to_column();
 
 		// Schema 10: Agency licences issued unlimited (0 seats) get the plan's seats.
-		self::migrate_agency_seats();
+		// Only when crossing the boundary: install() also runs on every activation, and
+		// an admin may have set an Agency licence to 0 (unlimited) on purpose since.
+		$previous = (string) get_option( 'sfls_schema_version', '' );
+		if ( '' !== $previous && version_compare( $previous, '10', '<' ) ) {
+			self::migrate_agency_seats();
+		}
 
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
 
@@ -419,8 +424,8 @@ final class SFLS_DB {
 	 * Schema 10: an Agency licence with 0 sites (unlimited) gets 25 seats, or
 	 * its active domain count when that is more. A licence that already uses
 	 * more than 25 keeps its count, gets a line in the activity log and is
-	 * listed in AGENCY_OVER_LIMIT. Returns the IDs listed. Runs only from
-	 * install(), which the schema version gates.
+	 * listed in AGENCY_OVER_LIMIT. Returns the IDs listed. install() calls it
+	 * only when the stored schema version is below 10.
 	 *
 	 * @return int[]
 	 */

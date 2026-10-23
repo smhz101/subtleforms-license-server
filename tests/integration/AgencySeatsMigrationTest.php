@@ -56,4 +56,21 @@ class SFLS_Agency_Seats_Migration_Test extends SFLS_Test_Case {
 		$this->assertContains( 'over_limit', $events );
 		$this->assertEmpty( SFLS_Licenses::log_entries( (int) $few['id'] ) );
 	}
+
+	/**
+	 * Running the installer again (a reactivation) does not turn an unlimited
+	 * Agency licence back into 25 seats; crossing the schema-10 boundary does.
+	 */
+	public function test_install_migrates_only_when_crossing_schema_10(): void {
+		$lic = $this->make_license( array( 'plan' => 'agency', 'sites_allowed' => 0 ) );
+
+		update_option( 'sfls_schema_version', SFLS_DB::SCHEMA_VERSION );
+		SFLS_DB::install();
+		$this->assertSame( 0, (int) SFLS_Licenses::find( (int) $lic['id'] )['sites_allowed'], 'A reactivation keeps unlimited.' );
+
+		update_option( 'sfls_schema_version', '9' );
+		SFLS_DB::install();
+		$this->assertSame( 25, (int) SFLS_Licenses::find( (int) $lic['id'] )['sites_allowed'] );
+		$this->assertSame( SFLS_DB::SCHEMA_VERSION, get_option( 'sfls_schema_version' ) );
+	}
 }
