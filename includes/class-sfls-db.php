@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '7';
+	const SCHEMA_VERSION = '8';
 
 	/**
 	 * Set once licenses were tied to the customer of the order that issued
@@ -109,6 +109,22 @@ final class SFLS_DB {
 	}
 
 	/**
+	 * Rate limit counters, one row per bucket (schema 8).
+	 */
+	public static function rate_limits(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_rate_limits';
+	}
+
+	/**
+	 * Email confirmation codes for free trials (schema 8).
+	 */
+	public static function trial_codes(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_trial_codes';
+	}
+
+	/**
 	 * Create or upgrade the tables and the private release folder.
 	 */
 	public static function install(): void {
@@ -127,6 +143,8 @@ final class SFLS_DB {
 		$brand    = self::branding();
 		$brev     = self::branding_revisions();
 		$bsites   = self::branding_sites();
+		$rates    = self::rate_limits();
+		$codes    = self::trial_codes();
 
 		dbDelta(
 			"CREATE TABLE {$licenses} (
@@ -163,6 +181,8 @@ final class SFLS_DB {
   UNIQUE KEY license_key (license_key),
   KEY customer_email (customer_email),
   KEY order_id (order_id),
+  KEY status (status),
+  KEY expires_at (expires_at),
   KEY user_id (user_id),
   KEY paddle_subscription_id (paddle_subscription_id),
   KEY paddle_transaction_id (paddle_transaction_id)
@@ -217,10 +237,13 @@ final class SFLS_DB {
   kind varchar(10) NOT NULL,
   value varchar(190) NOT NULL,
   license_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  order_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  status varchar(10) NOT NULL DEFAULT 'active',
   created_at datetime NOT NULL,
   PRIMARY KEY  (id),
   KEY kind_value (kind,value),
-  KEY license_id (license_id)
+  KEY license_id (license_id),
+  KEY order_id (order_id)
 ) {$charset};"
 		);
 
@@ -332,6 +355,33 @@ final class SFLS_DB {
 ) {$charset};"
 		);
 
+		// Schema 8: atomic rate limit counters, and the one-time codes
+		// that confirm an email address before a free trial. Claims got an
+		// order and a status (pending until the payment, released when it
+		// fails), licenses got indexes on status and expires_at.
+		dbDelta(
+			"CREATE TABLE {$rates} (
+  bucket char(32) NOT NULL,
+  window_start int(11) unsigned NOT NULL DEFAULT 0,
+  hits int(11) unsigned NOT NULL DEFAULT 0,
+  PRIMARY KEY  (bucket),
+  KEY window_start (window_start)
+) {$charset};"
+		);
+
+		dbDelta(
+			"CREATE TABLE {$codes} (
+  email_hash char(64) NOT NULL,
+  code_hash char(64) NOT NULL DEFAULT '',
+  attempts tinyint(3) unsigned NOT NULL DEFAULT 0,
+  expires_at datetime NOT NULL,
+  verified_until datetime NULL,
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (email_hash),
+  KEY expires_at (expires_at)
+) {$charset};"
+		);
+
 		self::backfill_billing();
 
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
@@ -341,8 +391,8 @@ final class SFLS_DB {
 		if ( ! is_dir( $dir ) ) {
 			wp_mkdir_p( $dir );
 		}
-		if ( ! file_exists( $dir . '/.htaccess' ) ) {
-			file_put_contents( $dir . '/.htaccess', "Require all denied\nDeny from all\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		if ( ! file_exists( $dir . '/.htaccess' ) || str_contains( (string) file_get_contents( $dir . '/.htaccess' ), 'Deny from all' ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			file_put_contents( $dir . '/.htaccess', "Require all denied\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		}
 		if ( ! file_exists( $dir . '/index.php' ) ) {
 			file_put_contents( $dir . '/index.php', "<?php\n// Silence.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
@@ -421,16 +471,31 @@ final class SFLS_DB {
 	 */
 	public static function prune(): int {
 		global $wpdb;
-		$days = SFLS_Settings::retention_days();
+		$counters = self::prune_counters(); // Counters are not activity history: always pruned.
+		$days     = SFLS_Settings::retention_days();
 		if ( $days <= 0 ) {
-			return 0;
+			return $counters;
 		}
 		$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$log    = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_activation_log WHERE created_at < %s", $cutoff ) );
 		$events = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_paddle_events WHERE received_at < %s", $cutoff ) );
 		// phpcs:enable
-		return $log + $events;
+		return $log + $events + $counters;
+	}
+
+	/**
+	 * Delete rate limit counters whose window ended more than a day ago, and
+	 * confirmation codes that expired more than a day ago. Returns how many
+	 * rows were deleted.
+	 */
+	public static function prune_counters(): int {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rates = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_rate_limits WHERE window_start < %d", time() - DAY_IN_SECONDS ) );
+		$codes = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_trial_codes WHERE expires_at < %s AND ( verified_until IS NULL OR verified_until < %s )", gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ), gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ) ) );
+		// phpcs:enable
+		return $rates + $codes;
 	}
 
 	/**

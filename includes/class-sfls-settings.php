@@ -35,6 +35,12 @@ final class SFLS_Settings {
 			'staging_hosts'    => implode( "\n", SFLS_Licenses::default_staging_patterns() ),
 			// 1.7.0: days to keep the activation log (IP addresses) and Paddle events, 0 = forever.
 			'retention_days'   => 365,
+			// Schema 8: behind a CDN or proxy, read the visitor address from its headers.
+			'trusted_proxy'    => 0,
+			// Schema 8: trials need a verified email, and refuse disposable addresses.
+			'trial_verify'     => 1,
+			'block_disposable' => 1,
+			'disposable_extra' => '',
 		);
 	}
 
@@ -69,6 +75,13 @@ final class SFLS_Settings {
 			'simplify_account' => empty( $input['simplify_account'] ) ? 0 : 1,
 			'simple_checkout'  => empty( $input['simple_checkout'] ) ? 0 : 1,
 		);
+		// Checkboxes of the trial and proxy rules are saved only when the form says it has them.
+		if ( ! empty( $input['rules_present'] ) ) {
+			$values['trusted_proxy']    = empty( $input['trusted_proxy'] ) ? 0 : 1;
+			$values['trial_verify']     = empty( $input['trial_verify'] ) ? 0 : 1;
+			$values['block_disposable'] = empty( $input['block_disposable'] ) ? 0 : 1;
+			$values['disposable_extra'] = implode( "\n", self::clean_domains( (string) ( $input['disposable_extra'] ?? '' ) ) );
+		}
 		if ( array_key_exists( 'retention_days', $input ) ) {
 			$values['retention_days'] = min( 3650, absint( $input['retention_days'] ) );
 		}
@@ -94,6 +107,126 @@ final class SFLS_Settings {
 			}
 		}
 		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * Mail domains from text: one per line (commas work too), lowercase, no
+	 * "@", letters, digits, dots and hyphens, at least one dot, no duplicates.
+	 *
+	 * @param string $raw Text.
+	 * @return string[]
+	 */
+	public static function clean_domains( string $raw ): array {
+		$out = array();
+		foreach ( preg_split( '/[\s,]+/', strtolower( $raw ) ) as $line ) {
+			$line = trim( ltrim( (string) $line, '@' ), '.' );
+			if ( '' !== $line && str_contains( $line, '.' ) && preg_match( '/^[a-z0-9][a-z0-9.-]*$/', $line ) ) {
+				$out[] = $line;
+			}
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * Whether the site sits behind a proxy or CDN whose client address
+	 * headers can be trusted.
+	 */
+	public static function trusted_proxy(): bool {
+		return (bool) self::get( 'trusted_proxy' );
+	}
+
+	/**
+	 * Whether a trial needs an email address confirmed with a code first.
+	 */
+	public static function trial_verify(): bool {
+		return (bool) self::get( 'trial_verify' );
+	}
+
+	/**
+	 * Whether disposable mail addresses are refused for free trials.
+	 */
+	public static function block_disposable(): bool {
+		return (bool) self::get( 'block_disposable' );
+	}
+
+	/**
+	 * Throw-away mail services: the built-in list, the extra domains of
+	 * Licenses › Settings, filtered by `sfls_disposable_domains`.
+	 *
+	 * @return string[]
+	 */
+	public static function disposable_domains(): array {
+		$builtin = array(
+			'mailinator.com',
+			'guerrillamail.com',
+			'guerrillamail.net',
+			'guerrillamail.org',
+			'guerrillamailblock.com',
+			'sharklasers.com',
+			'grr.la',
+			'10minutemail.com',
+			'10minutemail.net',
+			'tempmail.com',
+			'temp-mail.org',
+			'temp-mail.io',
+			'tempmail.net',
+			'tempail.com',
+			'throwawaymail.com',
+			'yopmail.com',
+			'yopmail.net',
+			'yopmail.fr',
+			'trashmail.com',
+			'trashmail.net',
+			'trash-mail.com',
+			'getnada.com',
+			'nada.email',
+			'maildrop.cc',
+			'dispostable.com',
+			'fakeinbox.com',
+			'fakemail.net',
+			'mintemail.com',
+			'mohmal.com',
+			'moakt.com',
+			'emailondeck.com',
+			'burnermail.io',
+			'mailnesia.com',
+			'mytemp.email',
+			'tmpmail.org',
+			'tmpmail.net',
+			'discard.email',
+			'spamgourmet.com',
+			'mailcatch.com',
+			'inboxkitten.com',
+			'anonaddy.me',
+			'33mail.com',
+			'emailfake.com',
+			'harakirimail.com',
+			'tempinbox.com',
+			'jetable.org',
+			'mail.tm',
+			'dropmail.me',
+			'tempr.email',
+		);
+		$list    = array_merge( $builtin, self::clean_domains( (string) self::get( 'disposable_extra' ) ) );
+		return array_values( array_unique( array_map( 'strval', (array) apply_filters( 'sfls_disposable_domains', $list ) ) ) );
+	}
+
+	/**
+	 * Whether an address is on a disposable mail domain (or a subdomain of one).
+	 *
+	 * @param string $email Address.
+	 */
+	public static function is_disposable( string $email ): bool {
+		$domain = strtolower( (string) substr( strrchr( $email, '@' ), 1 ) );
+		if ( '' === $domain ) {
+			return false;
+		}
+		foreach ( self::disposable_domains() as $blocked ) {
+			if ( $domain === $blocked || str_ends_with( $domain, '.' . $blocked ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -279,7 +412,56 @@ final class SFLS_Settings {
 	public static function free_mail_domains(): array {
 		return (array) apply_filters(
 			'sfls_free_mail_domains',
-			array( 'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'ymail.com', 'aol.com', 'icloud.com', 'me.com', 'proton.me', 'protonmail.com', 'gmx.com', 'mail.com' )
+			array(
+				'gmail.com',
+				'googlemail.com',
+				'outlook.com',
+				'hotmail.com',
+				'live.com',
+				'msn.com',
+				'yahoo.com',
+				'ymail.com',
+				'rocketmail.com',
+				'aol.com',
+				'icloud.com',
+				'me.com',
+				'mac.com',
+				'proton.me',
+				'protonmail.com',
+				'protonmail.ch',
+				'pm.me',
+				'gmx.com',
+				'gmx.net',
+				'gmx.de',
+				'gmx.at',
+				'web.de',
+				'mail.com',
+				'zoho.com',
+				'zohomail.com',
+				'fastmail.com',
+				'fastmail.fm',
+				'yandex.com',
+				'yandex.ru',
+				'ya.ru',
+				'mail.ru',
+				'inbox.ru',
+				'list.ru',
+				'bk.ru',
+				'qq.com',
+				'163.com',
+				'126.com',
+				'sina.com',
+				'naver.com',
+				'rediffmail.com',
+				'tutanota.com',
+				'tuta.io',
+				'hey.com',
+				't-online.de',
+				'libero.it',
+				'laposte.net',
+				'orange.fr',
+				'free.fr',
+			)
 		);
 	}
 
@@ -297,7 +479,7 @@ final class SFLS_Settings {
 			return true;
 		}
 		// Regional variants such as yahoo.co.uk, outlook.de, hotmail.fr.
-		return (bool) preg_match( '/^(yahoo|outlook|hotmail|live)\.[a-z.]+$/', $domain );
+		return (bool) preg_match( '/^(yahoo|outlook|hotmail|live|gmx|yandex|zoho)\.[a-z.]+$/', $domain );
 	}
 
 	/**

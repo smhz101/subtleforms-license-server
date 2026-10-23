@@ -115,6 +115,7 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 				$order->delete( true );
 			}
 			delete_option( 'sfls_issue_lock_' . $id );
+			$wpdb->delete( $wpdb->prefix . 'sfls_trial_claims', array( 'order_id' => (int) $id ) );
 		}
 		foreach ( $this->posts as $id ) {
 			wp_delete_post( $id, true );
@@ -148,8 +149,12 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 		}
 		$this->temp_files = array();
 		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfls\\_rl\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfls\\_rl\\_%'" );
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}sfls_rate_limits" );
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}sfls_trial_codes" );
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'sfls\\_trial\\_lock\\_%'" );
 		SFLS_Products::flush();
 		wp_set_current_user( 0 );
+		unset( $_SERVER['HTTP_CF_CONNECTING_IP'], $_SERVER['HTTP_X_FORWARDED_FOR'] );
 		$_SERVER['REMOTE_ADDR'] = '127.0.0.1';
 		parent::tearDown();
 	}

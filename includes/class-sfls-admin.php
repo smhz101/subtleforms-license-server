@@ -492,13 +492,14 @@ final class SFLS_Admin {
 		}
 		echo '</select></td></tr>';
 
-		echo '<tr><th scope="row"><label for="sfls-sites">' . esc_html__( 'Sites allowed', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-sites" type="number" min="0" name="sites_allowed" value="' . esc_attr( (string) (int) $lic['sites_allowed'] ) . '" class="small-text"> <span class="description">' . esc_html__( '0 for unlimited. Local and staging sites are always free.', 'subtleforms-license-server' ) . '</span></td></tr>';
+		echo '<tr><th scope="row"><label for="sfls-sites">' . esc_html__( 'Sites allowed', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-sites" type="number" min="0" required name="sites_allowed" value="' . esc_attr( (string) (int) $lic['sites_allowed'] ) . '" class="small-text"> <span class="description">' . esc_html__( '0 for unlimited. Local and staging sites are always free.', 'subtleforms-license-server' ) . '</span></td></tr>';
 
 		echo '<tr><th scope="row"><label for="sfls-expires">' . esc_html__( 'Expires', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-expires" type="date" name="expires_at" value="' . esc_attr( $expiry ) . '"> <span class="description">' . esc_html__( 'Leave empty for a lifetime license.', 'subtleforms-license-server' ) . '</span></td></tr>';
 
 		echo '<tr><th scope="row"><label for="sfls-status">' . esc_html__( 'Status', 'subtleforms-license-server' ) . '</label></th><td><select id="sfls-status" name="status">';
 		echo '<option value="active"' . selected( 'active', $lic['status'], false ) . '>' . esc_html__( 'Active', 'subtleforms-license-server' ) . '</option>';
-		echo '<option value="suspended"' . selected( 'active' !== $lic['status'], true, false ) . '>' . esc_html__( 'Suspended', 'subtleforms-license-server' ) . '</option>';
+		echo '<option value="suspended"' . selected( 'suspended', $lic['status'], false ) . '>' . esc_html__( 'Suspended', 'subtleforms-license-server' ) . '</option>';
+		echo '<option value="refunded"' . selected( 'refunded', $lic['status'], false ) . '>' . esc_html__( 'Refunded', 'subtleforms-license-server' ) . '</option>';
 		echo '</select> ' . wp_kses_post( $this->pill( $state['status'] ) ) . '</td></tr>';
 
 		echo '<tr><th scope="row"><label for="sfls-email">' . esc_html__( 'Customer email', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-email" type="email" name="customer_email" value="' . esc_attr( $lic['customer_email'] ) . '" class="regular-text">';
@@ -973,6 +974,13 @@ final class SFLS_Admin {
 
 		echo '<tr><th scope="row"><label for="sfls-staging">' . esc_html__( 'Staging hosts', 'subtleforms-license-server' ) . '</label></th><td><textarea id="sfls-staging" name="staging_hosts" rows="6" class="large-text code">' . esc_textarea( (string) $s['staging_hosts'] ) . '</textarea><p class="description">' . esc_html__( 'Sites on these hosts do not use a seat. One per line. *.example.com matches every subdomain of example.com, staging.* matches a staging subdomain of any site, and a * inside a name matches any letters, as in *stg.wpengine.com. Production hosts such as *.wpengine.com and *.kinsta.cloud should not be listed. localhost, *.local, *.test, *.example and *.invalid are always free.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
+		echo '<tr><th scope="row">' . esc_html__( 'Free trials', 'subtleforms-license-server' ) . '</th><td><input type="hidden" name="rules_present" value="1">';
+		echo '<label><input type="checkbox" name="trial_verify" value="1"' . checked( (int) $s['trial_verify'], 1, false ) . '> ' . esc_html__( 'Confirm the email address with a one-time code before the Paddle checkout', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'The code is emailed, works for 15 minutes and allows 5 tries.', 'subtleforms-license-server' ) . '</p>';
+		echo '<p><label><input type="checkbox" name="block_disposable" value="1"' . checked( (int) $s['block_disposable'], 1, false ) . '> ' . esc_html__( 'Refuse throw-away email addresses', 'subtleforms-license-server' ) . '</label></p>';
+		echo '<p><label for="sfls-disposable">' . esc_html__( 'More throw-away domains', 'subtleforms-license-server' ) . '</label><br><textarea id="sfls-disposable" name="disposable_extra" rows="3" class="large-text code">' . esc_textarea( (string) $s['disposable_extra'] ) . '</textarea><span class="description">' . esc_html__( 'One domain per line, added to the built-in list.', 'subtleforms-license-server' ) . '</span></p></td></tr>';
+
+		echo '<tr><th scope="row">' . esc_html__( 'Proxy or CDN', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="trusted_proxy" value="1"' . checked( (int) $s['trusted_proxy'], 1, false ) . '> ' . esc_html__( 'This site is behind Cloudflare or another proxy: read the visitor address from CF-Connecting-IP or X-Forwarded-For', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Rate limits and the activity log use this address. Turn it on only when all traffic comes through the proxy, because the headers can be forged otherwise.', 'subtleforms-license-server' ) . '</p></td></tr>';
+
 		echo '<tr><th scope="row">' . esc_html__( 'My Account', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="simplify_account" value="1"' . checked( (int) $s['simplify_account'], 1, false ) . '> ' . esc_html__( 'Simplify My Account for license-only stores', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Hides the Addresses and Downloads tabs for customers whose orders only contain license products. Orders, Licenses, Pro downloads, Payment methods and Account details stay.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
 		echo '<tr><th scope="row">' . esc_html__( 'Checkout', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="simple_checkout" value="1"' . checked( (int) $s['simple_checkout'], 1, false ) . '> ' . esc_html__( 'Ask only for name, email and country when the cart holds only licenses', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Street, city, postcode, state, company and phone are hidden. Country stays because tax depends on it.', 'subtleforms-license-server' ) . '</p></td></tr>';
@@ -1356,7 +1364,7 @@ final class SFLS_Admin {
 				'amount'         => $current[ $plan ]['price_id'] === $clean( $in['price_id'] ?? '' ) ? $current[ $plan ]['amount'] : '',
 				'currency'       => $current[ $plan ]['price_id'] === $clean( $in['price_id'] ?? '' ) ? $current[ $plan ]['currency'] : '',
 			);
-			$buy = $by_id[ $row['price_id'] ] ?? null;
+			$buy   = $by_id[ $row['price_id'] ] ?? null;
 			if ( $buy ) {
 				$row['amount']     = (string) ( $buy['unit_price']['amount'] ?? '' );
 				$row['currency']   = (string) ( $buy['unit_price']['currency_code'] ?? '' );
@@ -1560,8 +1568,13 @@ final class SFLS_Admin {
 				$msg = __( 'License suspended.', 'subtleforms-license-server' );
 				break;
 			case 'resume':
-				SFLS_Licenses::update( $id, array( 'status' => 'active' ) );
-				$msg = __( 'License resumed.', 'subtleforms-license-server' );
+				if ( SFLS_Licenses::resume( $id ) ) {
+					$msg = __( 'License resumed.', 'subtleforms-license-server' );
+				} else {
+					$this->flash( __( 'Only a suspended license can be resumed here. Set the status of a refunded license in the license editor.', 'subtleforms-license-server' ), 'error' );
+					wp_safe_redirect( $back );
+					exit;
+				}
 				break;
 			case 'reset':
 				SFLS_Licenses::reset_activations( $id, 'admin' );
@@ -1605,14 +1618,32 @@ final class SFLS_Admin {
 			wp_die( esc_html__( 'License not found.', 'subtleforms-license-server' ) );
 		}
 
-		$plan   = sanitize_key( wp_unslash( $_POST['plan'] ?? $lic['plan'] ) );
-		$status = sanitize_key( wp_unslash( $_POST['status'] ?? 'active' ) );
-		$email  = sanitize_email( wp_unslash( $_POST['customer_email'] ?? '' ) );
-		$date   = sanitize_text_field( wp_unslash( $_POST['expires_at'] ?? '' ) );
-		$data   = array(
+		$plan  = sanitize_key( wp_unslash( $_POST['plan'] ?? $lic['plan'] ) );
+		$email = sanitize_email( wp_unslash( $_POST['customer_email'] ?? '' ) );
+		$date  = sanitize_text_field( wp_unslash( $_POST['expires_at'] ?? '' ) );
+		$back  = add_query_arg(
+			array(
+				'page' => 'sfls',
+				'edit' => $id,
+			),
+			admin_url( 'admin.php' )
+		);
+
+		// A blank site limit would become 0, which is unlimited: refuse it.
+		$sites_raw = isset( $_POST['sites_allowed'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['sites_allowed'] ) ) ) : null;
+		if ( null !== $sites_raw && ( '' === $sites_raw || ! ctype_digit( $sites_raw ) ) ) {
+			$this->flash( __( 'Enter the number of sites allowed. Use 0 only for an unlimited license. Nothing was saved.', 'subtleforms-license-server' ), 'error' );
+			wp_safe_redirect( $back );
+			exit;
+		}
+		// The status is only changed by an explicit choice. A missing or unknown value keeps it.
+		$status_raw = isset( $_POST['status'] ) ? sanitize_key( wp_unslash( $_POST['status'] ) ) : '';
+		$status     = in_array( $status_raw, array( 'active', 'suspended', 'refunded' ), true ) ? $status_raw : (string) $lic['status'];
+
+		$data = array(
 			'plan'           => SFLS_Plans::get( $plan ) ? $plan : $lic['plan'],
-			'sites_allowed'  => absint( $_POST['sites_allowed'] ?? $lic['sites_allowed'] ),
-			'status'         => 'suspended' === $status ? ( 'refunded' === $lic['status'] ? 'refunded' : 'suspended' ) : 'active',
+			'sites_allowed'  => null === $sites_raw ? (int) $lic['sites_allowed'] : absint( $sites_raw ),
+			'status'         => $status,
 			'customer_email' => $email,
 			'notes'          => sanitize_textarea_field( wp_unslash( $_POST['notes'] ?? '' ) ),
 		);
@@ -1689,6 +1720,13 @@ final class SFLS_Admin {
 		}
 		if ( isset( $_POST['retention_days'] ) ) {
 			$extra['retention_days'] = absint( $_POST['retention_days'] );
+		}
+		if ( ! empty( $_POST['rules_present'] ) ) {
+			$extra['rules_present']    = 1;
+			$extra['trusted_proxy']    = ! empty( $_POST['trusted_proxy'] );
+			$extra['trial_verify']     = ! empty( $_POST['trial_verify'] );
+			$extra['block_disposable'] = ! empty( $_POST['block_disposable'] );
+			$extra['disposable_extra'] = isset( $_POST['disposable_extra'] ) ? sanitize_textarea_field( wp_unslash( $_POST['disposable_extra'] ) ) : '';
 		}
 		SFLS_Settings::save(
 			$extra + array(

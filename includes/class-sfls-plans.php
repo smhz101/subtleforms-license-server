@@ -33,7 +33,7 @@ final class SFLS_Plans {
 			),
 			'agency'  => array(
 				'label'    => __( 'Agency', 'subtleforms-license-server' ),
-				'sites'    => 0, // 0 = unlimited.
+				'sites'    => 25,
 				'features' => array( 'csv_export', 'webhooks', 'integrations', 'conditional_logic', 'white_label' ),
 			),
 		);

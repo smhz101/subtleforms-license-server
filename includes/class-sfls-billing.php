@@ -6,9 +6,10 @@
  * subscription:
  *
  *   trialing  license active, 1 site, trial_ends_at set,
- *             expires_at = trial end + SFLS_Paddle::BILLING_GRACE_DAYS
- *   active    the plan's site limit, expires_at = current billing period end + grace
- *   past_due  unchanged expiry: stays valid until the paid period (plus grace) ends
+ *             expires_at = trial end (a trial has no grace period)
+ *   active    the plan's site limit, expires_at = current billing period end
+ *   past_due  unchanged expiry: stays valid until the paid period ends, then the
+ *             one 14-day grace period of SFLS_Licenses::state() applies
  *   paused    same as past_due
  *   canceled  a paid license keeps its expiry; a trial that never paid ends now
  *
@@ -44,7 +45,8 @@ final class SFLS_Billing {
 	}
 
 	/**
-	 * GMT datetime plus the billing grace days.
+	 * GMT datetime plus the extra billing days (0 unless filtered; the one
+	 * grace period is applied by SFLS_Licenses::state()).
 	 *
 	 * @param string|null $gmt GMT datetime.
 	 */

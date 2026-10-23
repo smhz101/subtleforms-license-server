@@ -232,7 +232,33 @@ trait SFLS_Woo_Paddle_Helpers {
 	protected function pay( WC_Order $order ): array {
 		$gateway = SFLS_Woo_Paddle::gateway();
 		$this->assertNotNull( $gateway );
+		foreach ( $order->get_items() as $item ) {
+			if ( '' !== (string) $item->get_meta( '_sfls_trial' ) ) {
+				$this->mark_email_verified( (string) $order->get_billing_email() ); // A trial first needs the emailed code; those tests have their own file.
+			}
+		}
 		return $gateway->process_payment( $order->get_id() );
+	}
+
+	/**
+	 * Mark an email address as confirmed, as a correct code would.
+	 *
+	 * @param string $email Email address.
+	 */
+	protected function mark_email_verified( string $email ): void {
+		global $wpdb;
+		$hash = hash_hmac( 'sha256', SFLS_Trials::normalize_email( $email ), wp_salt( 'auth' ) );
+		$wpdb->replace( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			SFLS_DB::trial_codes(),
+			array(
+				'email_hash'     => $hash,
+				'code_hash'      => '',
+				'attempts'       => 0,
+				'expires_at'     => gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ),
+				'verified_until' => gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ),
+				'created_at'     => gmdate( 'Y-m-d H:i:s' ),
+			)
+		);
 	}
 
 	/**

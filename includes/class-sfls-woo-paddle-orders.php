@@ -1081,14 +1081,23 @@ final class SFLS_Woo_Paddle_Orders {
 			$minor    = (int) ( $adj['totals']['total'] ?? 0 );
 
 			if ( in_array( $action, array( 'chargeback_warning', 'chargeback_reverse' ), true ) ) {
+				if ( 'chargeback_reverse' === $action ) {
+					// The money came back: remove the refunds the chargebacks created, and restore the licenses.
+					$restored = self::restore_after_chargeback( $order );
+					if ( self::note_once( $order, $action . '|' . $id ) ) {
+						$order->add_order_note(
+							$restored
+								/* translators: 1: adjustment ID, 2: number of licenses */
+								? sprintf( _n( 'Paddle reversed a chargeback (%1$s). %2$d license is active again.', 'Paddle reversed a chargeback (%1$s). %2$d licenses are active again.', $restored, 'subtleforms-license-server' ), $id, $restored )
+								/* translators: %s: adjustment ID */
+								: sprintf( __( 'Paddle reversed a chargeback (%s). No suspended license was found to restore.', 'subtleforms-license-server' ), $id )
+						);
+					}
+					return self::result( $restored ? 'restored' : 'noted', $action );
+				}
 				if ( self::note_once( $order, $action . '|' . $id ) ) {
-					$order->add_order_note(
-						'chargeback_warning' === $action
-							/* translators: %s: adjustment ID */
-							? sprintf( __( 'Paddle reported a chargeback warning (%s). Nothing was refunded yet.', 'subtleforms-license-server' ), $id )
-							/* translators: %s: adjustment ID */
-							: sprintf( __( 'Paddle reversed a chargeback (%s). Re-activate the license by hand if it was suspended.', 'subtleforms-license-server' ), $id )
-					);
+					/* translators: %s: adjustment ID */
+					$order->add_order_note( sprintf( __( 'Paddle reported a chargeback warning (%s). Nothing was refunded yet.', 'subtleforms-license-server' ), $id ) );
 				}
 				return self::result( 'noted', $action );
 			}
@@ -1156,6 +1165,7 @@ final class SFLS_Woo_Paddle_Orders {
 			$map        = self::adjustments_of( $order );
 			$map[ $id ] = array(
 				'source'    => 'paddle',
+				'action'    => $action,
 				'status'    => $status,
 				'refund_id' => $refund->get_id(),
 			);
@@ -1173,6 +1183,40 @@ final class SFLS_Woo_Paddle_Orders {
 		} finally {
 			self::unlock( $order->get_id() );
 		}
+	}
+
+	/**
+	 * A chargeback was reversed: remove the refunds that mirrored chargebacks
+	 * and make the suspended or refunded licenses of the order active again.
+	 *
+	 * @param WC_Order $order Order.
+	 * @return int Licenses restored.
+	 */
+	private static function restore_after_chargeback( WC_Order $order ): int {
+		$map = self::adjustments_of( $order );
+		foreach ( $map as $adj_id => $entry ) {
+			if ( 'chargeback' === ( $entry['action'] ?? '' ) && ! empty( $entry['refund_id'] ) ) {
+				$refund = wc_get_order( (int) $entry['refund_id'] );
+				if ( $refund instanceof WC_Order_Refund ) {
+					$refund->delete( true );
+				}
+				unset( $map[ $adj_id ] );
+			}
+		}
+		$order = wc_get_order( $order->get_id() );
+		$order->update_meta_data( '_sfls_paddle_adjustments', $map );
+		$order->save_meta_data();
+		if ( $order->has_status( 'refunded' ) ) {
+			$order->update_status( 'completed' );
+		}
+		$restored = 0;
+		foreach ( SFLS_Woo::order_licenses( $order->get_id() ) as $lic ) {
+			if ( (int) $lic['order_id'] === $order->get_id() && in_array( $lic['status'], array( 'suspended', 'refunded' ), true ) ) {
+				SFLS_Licenses::update( (int) $lic['id'], array( 'status' => 'active' ) );
+				++$restored;
+			}
+		}
+		return $restored;
 	}
 
 	/**

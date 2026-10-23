@@ -174,29 +174,36 @@ final class SFLS_Licenses {
 
 	/**
 	 * Extend a license by a number of months from its expiry (or from today if
-	 * it has already lapsed).
+	 * it has already lapsed). Only the expiry changes: a suspended or refunded
+	 * license stays that way (use resume() or the editor to change a status).
 	 *
 	 * @param int $id     License ID.
 	 * @param int $months Months to add.
 	 */
 	public static function extend( int $id, int $months = 12 ): void {
 		$lic = self::find( $id );
-		if ( ! $lic ) {
-			return;
-		}
-		if ( empty( $lic['expires_at'] ) ) {
-			self::update( $id, array( 'status' => 'active' ) );
+		if ( ! $lic || empty( $lic['expires_at'] ) ) {
 			return; // Lifetime licenses have nothing to extend.
 		}
 		$current = strtotime( $lic['expires_at'] . ' UTC' );
 		$base    = $current > time() ? $current : time();
-		self::update(
-			$id,
-			array(
-				'expires_at' => gmdate( 'Y-m-d H:i:s', strtotime( "+{$months} months", $base ) ),
-				'status'     => 'active',
-			)
-		);
+		self::update( $id, array( 'expires_at' => gmdate( 'Y-m-d H:i:s', strtotime( "+{$months} months", $base ) ) ) );
+	}
+
+	/**
+	 * Lift a suspension. A refunded license is not resumed here: its status
+	 * only changes by an explicit choice in the license editor.
+	 *
+	 * @param int $id License ID.
+	 * @return bool Whether the license was suspended and is active again.
+	 */
+	public static function resume( int $id ): bool {
+		$lic = self::find( $id );
+		if ( ! $lic || 'suspended' !== $lic['status'] ) {
+			return false;
+		}
+		self::update( $id, array( 'status' => 'active' ) );
+		return true;
 	}
 
 	// ── Ownership ───────────────────────────────────────────────────────
@@ -312,22 +319,17 @@ final class SFLS_Licenses {
 			);
 		}
 		if ( ! $existing && ! self::is_local_domain( $domain ) && ! self::has_free_slot( $lic ) ) {
-			$limit = (int) $lic['sites_allowed'];
-			return new WP_Error(
-				'activation_limit',
-				sprintf(
-					/* translators: %d: number of sites */
-					_n( 'This license is already active on %d site. Deactivate it there, or upgrade your plan.', 'This license is already active on %d sites. Deactivate one, or upgrade your plan.', $limit, 'subtleforms-license-server' ),
-					$limit
-				),
-				array( 'status' => 400 )
-			);
+			return self::seat_error( (int) $lic['sites_allowed'] );
 		}
 
 		if ( $existing ) {
 			self::touch_activation( (int) $lic['id'], $domain, $version );
 		} else {
-			self::add_activation( (int) $lic['id'], $domain, $version );
+			if ( self::is_local_domain( $domain ) ) {
+				self::add_activation( (int) $lic['id'], $domain, $version );
+			} elseif ( ! self::add_activation_in_seat( (int) $lic['id'], $domain, $version ) ) {
+				return self::seat_error( (int) $lic['sites_allowed'] );
+			}
 			self::log( (int) $lic['id'], $domain, 'activate', $source );
 			if ( ! empty( $lic['trial'] ) && ! self::is_local_domain( $domain ) ) {
 				SFLS_Trials::record_site( (int) $lic['id'], $domain );
@@ -335,6 +337,49 @@ final class SFLS_Licenses {
 			do_action( 'sfls_domain_activated', $lic, $domain, $version );
 		}
 
+		return true;
+	}
+
+	/**
+	 * The error for a license with no free site slot.
+	 *
+	 * @param int $limit Sites allowed.
+	 */
+	private static function seat_error( int $limit ): WP_Error {
+		return new WP_Error(
+			'activation_limit',
+			sprintf(
+				/* translators: %d: number of sites */
+				_n( 'This license is already active on %d site. Deactivate it there, or upgrade your plan.', 'This license is already active on %d sites. Deactivate one, or upgrade your plan.', $limit, 'subtleforms-license-server' ),
+				$limit
+			),
+			array( 'status' => 400 )
+		);
+	}
+
+	/**
+	 * Take a site slot: lock the license row, count the used slots again and
+	 * insert the activation in one transaction, so two sites activating at the
+	 * same moment cannot both take the last slot.
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $domain     Normalised domain.
+	 * @param string $version    Pro version.
+	 * @return bool False when no slot is free.
+	 */
+	private static function add_activation_in_seat( int $license_id, string $domain, string $version ): bool {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( 'START TRANSACTION' );
+		$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}sfls_licenses WHERE id = %d FOR UPDATE", $license_id ) );
+		$fresh = self::find( $license_id );
+		if ( ! $fresh || ! self::has_free_slot( $fresh ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return false;
+		}
+		self::add_activation( $license_id, $domain, $version );
+		$wpdb->query( 'COMMIT' );
+		// phpcs:enable
 		return true;
 	}
 
@@ -423,11 +468,28 @@ final class SFLS_Licenses {
 	// ── Activity log ────────────────────────────────────────────────────
 
 	/**
-	 * IP address of the current request ('' on the command line). Behind a
-	 * proxy or CDN, filter `sfls_client_ip` to read the forwarded address.
+	 * IP address of the current request ('' on the command line).
+	 *
+	 * REMOTE_ADDR, unless Licenses › Settings says the site is behind a trusted
+	 * proxy or CDN: then CF-Connecting-IP, else the first address of
+	 * X-Forwarded-For. Turn that on only when every request really comes
+	 * through the proxy, because the headers can be forged otherwise. The
+	 * `sfls_client_ip` filter has the last word.
 	 */
 	public static function client_ip(): string {
 		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		if ( SFLS_Settings::trusted_proxy() ) {
+			$forwarded = '';
+			if ( ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) {
+				$forwarded = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_CONNECTING_IP'] ) );
+			} elseif ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+				$parts     = explode( ',', sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) );
+				$forwarded = trim( (string) $parts[0] );
+			}
+			if ( false !== filter_var( $forwarded, FILTER_VALIDATE_IP ) ) {
+				$ip = $forwarded;
+			}
+		}
 		$ip = (string) apply_filters( 'sfls_client_ip', $ip );
 		return false !== filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
 	}

@@ -264,7 +264,7 @@ class SFLS_Branding_Test extends SFLS_Test_Case {
 	 */
 	public function test_schema_has_branding_tables(): void {
 		global $wpdb;
-		$this->assertSame( '7', SFLS_DB::SCHEMA_VERSION );
+		$this->assertSame( '8', SFLS_DB::SCHEMA_VERSION );
 		foreach ( array( SFLS_DB::branding(), SFLS_DB::branding_revisions(), SFLS_DB::branding_sites() ) as $table ) {
 			$this->assertSame( $table, $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ), $table );
 		}

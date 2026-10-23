@@ -213,6 +213,6 @@ class SFLS_Ownership_Test extends SFLS_Test_Case {
 		$this->assertSame( (int) $stranger->ID, (int) SFLS_Licenses::find( (int) $manual['id'] )['user_id'] );
 		$this->assertSame( $before, SFLS_Licenses::find( (int) $own['id'] )['updated_at'], 'Dates are not touched.' );
 		$this->assertNotEmpty( get_option( SFLS_DB::OWNERS_MIGRATED ) );
-		$this->assertSame( '7', SFLS_DB::SCHEMA_VERSION );
+		$this->assertSame( '8', SFLS_DB::SCHEMA_VERSION );
 	}
 }

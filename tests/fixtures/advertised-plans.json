@@ -19,7 +19,7 @@
         },
         "agency": {
             "label": "Agency",
-            "sites": 0,
+            "sites": 25,
             "features": [
                 "csv_export",
                 "webhooks",
