@@ -14,6 +14,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/class-sfls-signing.php';
+
 /**
  * Release store.
  */
@@ -564,6 +566,7 @@ final class SFLS_Releases {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->delete( SFLS_DB::releases(), array( 'id' => $id ) );
 		self::flush();
+		SFLS_Signing::forget( $id );
 		do_action( 'sfls_release_deleted', $release );
 		return true;
 	}
@@ -622,7 +625,12 @@ final class SFLS_Releases {
 	 * The same version with the same sha256 returns the existing release
 	 * ("existing"). The same version with another package is refused
 	 * unless `replace` is true or the existing release is a draft; the old
-	 * file is kept until the release is deleted.
+	 * file is kept until the release is deleted. Replacing the package of a
+	 * published or yanked release from the API, GitHub or WP-CLI also needs
+	 * `confirm_replace` (the admin upload form is its own confirmation: a
+	 * ticked box behind a nonce), and every such replacement is logged
+	 * (SFLS_Signing::log_replacement). Stored packages are signed when a
+	 * signing key is configured.
 	 *
 	 * @param string $path Local zip.
 	 * @param array  $args {
@@ -634,6 +642,7 @@ final class SFLS_Releases {
 	 *     @type string $git_commit    Commit SHA.
 	 *     @type string $sha256        Expected sha256 (optional).
 	 *     @type bool   $replace       Replace another package of the same version.
+	 *     @type bool   $confirm_replace Second flag to replace a published package, not needed for upload.
 	 *     @type string $expect_version Version the zip must have (a tag like v2.3.4 is fine).
 	 *     @type string $notes         Private notes.
 	 * }
@@ -643,16 +652,17 @@ final class SFLS_Releases {
 		$args = wp_parse_args(
 			$args,
 			array(
-				'source'         => 'upload',
-				'channel'        => '',
-				'publish'        => false,
-				'changelog'      => '',
-				'git_ref'        => '',
-				'git_commit'     => '',
-				'sha256'         => '',
-				'replace'        => false,
-				'expect_version' => '',
-				'notes'          => '',
+				'source'          => 'upload',
+				'channel'         => '',
+				'publish'         => false,
+				'changelog'       => '',
+				'git_ref'         => '',
+				'git_commit'      => '',
+				'sha256'          => '',
+				'replace'         => false,
+				'confirm_replace' => false,
+				'expect_version'  => '',
+				'notes'           => '',
 			)
 		);
 
@@ -727,6 +737,9 @@ final class SFLS_Releases {
 					$published = self::publish( $existing['id'] );
 					$existing  = is_wp_error( $published ) ? $existing : $published;
 				}
+				if ( '' === SFLS_Signing::release_signature( $existing ) ) {
+					SFLS_Signing::sign_release( $existing );
+				}
 				return array(
 					'release' => $existing,
 					'result'  => 'existing',
@@ -743,9 +756,24 @@ final class SFLS_Releases {
 					array( 'status' => 409 )
 				);
 			}
+			$live = 'draft' !== $existing['status'] && self::has_package( $existing );
+			if ( $live && 'upload' !== $source && ! $args['confirm_replace'] ) {
+				return new WP_Error(
+					'replace_unconfirmed',
+					sprintf(
+						/* translators: %s: version */
+						__( 'Version %s is already released to customers. To replace its package, send confirm_replace=true together with replace=true.', 'subtleforms-license-server' ),
+						$version
+					),
+					array( 'status' => 409 )
+				);
+			}
 			$file = self::store_file( $path, $version, $sha256 );
 			if ( is_wp_error( $file ) ) {
 				return $file;
+			}
+			if ( $live ) {
+				SFLS_Signing::log_replacement( $existing, $sha256, $source );
 			}
 			$replaced = self::replaced_files( $existing );
 			if ( '' !== $existing['file'] && $existing['file'] !== $file ) {
@@ -764,6 +792,7 @@ final class SFLS_Releases {
 			}
 			self::update( $existing['id'], $fields );
 			$release = (array) self::get_by_id( $existing['id'] );
+			SFLS_Signing::sign_release( $release );
 			if ( $args['publish'] && 'published' !== $release['status'] ) {
 				$published = self::publish( $release['id'] );
 				$release   = is_wp_error( $published ) ? $release : $published;
@@ -792,6 +821,7 @@ final class SFLS_Releases {
 				)
 			)
 		);
+		SFLS_Signing::sign_release( $release );
 		if ( $args['publish'] ) {
 			$published = self::publish( $release['id'] );
 			$release   = is_wp_error( $published ) ? $release : $published;

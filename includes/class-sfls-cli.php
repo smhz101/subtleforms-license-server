@@ -206,6 +206,9 @@ final class SFLS_CLI_Releases {
 	 * [--replace]
 	 * : Replace the package of an existing version.
 	 *
+	 * [--confirm-replace]
+	 * : Needed with --replace when the version is published or yanked. The replacement is logged.
+	 *
 	 * [--porcelain]
 	 * : Output only the version.
 	 *
@@ -228,11 +231,12 @@ final class SFLS_CLI_Releases {
 		$result = SFLS_Releases::ingest(
 			$path,
 			array(
-				'source'    => 'cli',
-				'channel'   => (string) ( $assoc_args['channel'] ?? '' ),
-				'publish'   => ! empty( $assoc_args['publish'] ),
-				'changelog' => $changelog,
-				'replace'   => ! empty( $assoc_args['replace'] ),
+				'source'          => 'cli',
+				'channel'         => (string) ( $assoc_args['channel'] ?? '' ),
+				'publish'         => ! empty( $assoc_args['publish'] ),
+				'changelog'       => $changelog,
+				'replace'         => ! empty( $assoc_args['replace'] ),
+				'confirm_replace' => ! empty( $assoc_args['confirm-replace'] ),
 			)
 		);
 		if ( is_wp_error( $result ) ) {
@@ -410,3 +414,84 @@ final class SFLS_CLI_Tokens {
 		WP_CLI::success( 'Token revoked.' );
 	}
 }
+
+/**
+ * Package and response signing key (ed25519).
+ *
+ * ## EXAMPLES
+ *
+ *     wp sfls signing generate
+ *     wp sfls signing status
+ *     wp sfls signing sign-releases
+ */
+final class SFLS_CLI_Signing {
+
+	/**
+	 * Make a new key pair and print the two wp-config.php lines. Nothing is
+	 * stored: paste the lines into wp-config.php, and the public key into
+	 * SubtleForms Pro (src/Licensing/Signature.php) before its release.
+	 *
+	 * [--force]
+	 * : Print a new pair even though a key is already configured.
+	 *
+	 * @param array $args       Positional args.
+	 * @param array $assoc_args Flags.
+	 */
+	public function generate( $args, $assoc_args ): void {
+		if ( ! SFLS_Signing::sodium() ) {
+			WP_CLI::error( 'This PHP has no sodium (ed25519) support.' );
+		}
+		if ( SFLS_Signing::enabled() && empty( $assoc_args['force'] ) ) {
+			WP_CLI::error( 'A signing key is already configured. A new key breaks updates for every Pro site that ships the old public key. Use --force to print a new pair anyway.' );
+		}
+		$pair = SFLS_Signing::generate();
+		WP_CLI::line( sprintf( "define( 'SFLS_SIGNING_SECRET_KEY', '%s' );", $pair['secret'] ) );
+		WP_CLI::line( sprintf( "define( 'SFLS_SIGNING_PUBLIC_KEY', '%s' );", $pair['public'] ) );
+		WP_CLI::success( 'Add both lines to wp-config.php (keep the secret key out of backups and version control), then run wp sfls signing sign-releases.' );
+	}
+
+	/**
+	 * Show whether signing is on and the public key in use.
+	 */
+	public function status(): void {
+		if ( ! SFLS_Signing::enabled() ) {
+			WP_CLI::warning( 'Signing is off: SFLS_SIGNING_SECRET_KEY is not set or is not a base64 ed25519 secret key.' );
+			return;
+		}
+		WP_CLI::line( 'Public key: ' . SFLS_Signing::public_key() );
+		if ( ! SFLS_Signing::public_key_matches() ) {
+			WP_CLI::warning( 'SFLS_SIGNING_PUBLIC_KEY does not belong to SFLS_SIGNING_SECRET_KEY.' );
+		}
+		$unsigned = array();
+		foreach ( SFLS_Releases::rows() as $release ) {
+			if ( SFLS_Releases::has_package( $release ) && '' === SFLS_Signing::release_signature( $release ) ) {
+				$unsigned[] = $release['version'];
+			}
+		}
+		WP_CLI::success( $unsigned ? 'Signing is on. Unsigned releases: ' . implode( ', ', $unsigned ) . '.' : 'Signing is on. Every release is signed.' );
+	}
+
+	/**
+	 * Sign every release whose zip still matches its sha256.
+	 *
+	 * [--resign]
+	 * : Sign again releases that already have a signature (after a key change).
+	 *
+	 * @subcommand sign-releases
+	 *
+	 * @param array $args       Positional args.
+	 * @param array $assoc_args Flags.
+	 */
+	public function sign_releases( $args, $assoc_args ): void {
+		if ( ! SFLS_Signing::enabled() ) {
+			WP_CLI::error( 'Signing is off: set SFLS_SIGNING_SECRET_KEY in wp-config.php first (wp sfls signing generate).' );
+		}
+		$out = SFLS_Signing::sign_all( ! empty( $assoc_args['resign'] ) );
+		foreach ( $out['mismatch'] as $version ) {
+			WP_CLI::warning( sprintf( '%s not signed: its zip is missing or does not match the stored sha256.', $version ) );
+		}
+		WP_CLI::success( sprintf( '%d signed, %d already signed, %d not signed.', count( $out['signed'] ), count( $out['skipped'] ), count( $out['mismatch'] ) ) );
+	}
+}
+
+WP_CLI::add_command( 'sfls signing', 'SFLS_CLI_Signing' );

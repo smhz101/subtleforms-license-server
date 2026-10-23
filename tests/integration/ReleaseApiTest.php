@@ -28,6 +28,7 @@ class SFLS_Release_Api_Test extends SFLS_Test_Case {
 		parent::setUp();
 		$this->set_option( SFLS_Deploy_Tokens::OPTION, get_option( SFLS_Deploy_Tokens::OPTION, array() ) );
 		$this->set_option( SFLS_Releases::SETTINGS_OPTION, get_option( SFLS_Releases::SETTINGS_OPTION, array() ) );
+		$this->set_option( SFLS_Signing::REPLACEMENTS_OPTION, get_option( SFLS_Signing::REPLACEMENTS_OPTION, array() ) );
 		$this->token = SFLS_Deploy_Tokens::create( 'Test CI' )['token'];
 		$this->isolate_releases();
 		$this->filter( 'sfls_release_api_check_uploaded', '__return_false' );
@@ -180,7 +181,22 @@ class SFLS_Release_Api_Test extends SFLS_Test_Case {
 		$this->assertSame( 409, $refused->get_status() );
 		$this->assertSame( 'version_exists', $refused->get_data()['code'] );
 
-		$replaced = $this->api( 'POST', '/sfls/v1/releases', array( 'replace' => 'true' ), null, $this->upload( $other ) );
+		// replace=true alone is not enough for a published release (1.9.0).
+		$unconfirmed = $this->api( 'POST', '/sfls/v1/releases', array( 'replace' => 'true' ), null, $this->upload( $other ) );
+		$this->assertSame( 409, $unconfirmed->get_status() );
+		$this->assertSame( 'replace_unconfirmed', $unconfirmed->get_data()['code'] );
+		$this->assertSame( $stored['sha256'], SFLS_Releases::get( '9.4.0', true )['sha256'], 'Nothing changed.' );
+
+		$replaced = $this->api(
+			'POST',
+			'/sfls/v1/releases',
+			array(
+				'replace'         => 'true',
+				'confirm_replace' => 'true',
+			),
+			null,
+			$this->upload( $other )
+		);
 		$this->assertSame( 201, $replaced->get_status() );
 		$this->assertSame( 'replaced', $replaced->get_data()['result'] );
 		$this->assertSame( hash_file( 'sha256', $other ), $replaced->get_data()['release']['sha256'] );
