@@ -1,0 +1,20 @@
+# Local environment and secrets
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/secrets.json
+**/credentials.json
+
+# Dependencies and generated output
+**/node_modules/
+**/vendor/
+**/coverage/
+**/.phpunit.cache/
+**/dist/
+**/build/
+**/storybook-static/
+**/playwright-report/
+**/test-results/
+**/*.log
+**/*.zip
