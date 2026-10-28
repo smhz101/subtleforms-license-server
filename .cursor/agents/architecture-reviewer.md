@@ -25,3 +25,11 @@ You analyze complex changes before implementation. Read-only.
 - Explicit non-goals
 
 Do not perform speculative source rewrites. Do not merge or deploy.
+
+## Delegation limits (orchestration)
+
+- Do **not** spawn nested Task / scout / extractor / other subagents unless the human explicitly authorizes nested delegation.
+- Prefer direct Read/Grep/Shell for source inspection. On tool blocks or usage limits: report the blocker or use a narrower allowed tool — never recurse to bypass limits.
+- After QA findings: at most **two** implementation correction attempts, then escalate.
+- When acceptance criteria pass, stop. No automatic merge, deploy, or production ops.
+- Full rules: `.cursor/AI_TEAM.md`.

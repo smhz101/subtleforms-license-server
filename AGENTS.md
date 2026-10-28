@@ -58,4 +58,4 @@ Local inspection, tests on disposable WordPress, and drafting PRs are allowed.
 
 ## Cursor AI team
 
-Project subagents, skills, and commands live under `.cursor/` (see `.cursor/AI_TEAM.md`). They delegate to this file and `.cursor/rules/subtleforms-license-server.mdc`; they do not replace them.
+Project subagents, skills, and commands live under `.cursor/` (see `.cursor/AI_TEAM.md`). Orchestration and stop rules: `.cursor/AI_TEAM.md`. They delegate to this file and `.cursor/rules/subtleforms-license-server.mdc`; they do not replace them.
