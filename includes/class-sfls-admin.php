@@ -492,7 +492,7 @@ final class SFLS_Admin {
 		}
 		echo '</select></td></tr>';
 
-		echo '<tr><th scope="row"><label for="sfls-sites">' . esc_html__( 'Sites allowed', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-sites" type="number" min="0" required name="sites_allowed" value="' . esc_attr( (string) (int) $lic['sites_allowed'] ) . '" class="small-text"> <span class="description">' . esc_html__( '0 for unlimited. Local and staging sites are always free.', 'subtleforms-license-server' ) . '</span></td></tr>';
+		echo '<tr><th scope="row"><label for="sfls-sites">' . esc_html__( 'Sites allowed', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-sites" type="number" min="0" required name="sites_allowed" value="' . esc_attr( (string) (int) $lic['sites_allowed'] ) . '" class="small-text"> <span class="description">' . esc_html__( 'Enter 0 for unlimited. Local and staging sites are always free.', 'subtleforms-license-server' ) . '</span></td></tr>';
 
 		echo '<tr><th scope="row"><label for="sfls-expires">' . esc_html__( 'Expires', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-expires" type="date" name="expires_at" value="' . esc_attr( $expiry ) . '"> <span class="description">' . esc_html__( 'Leave empty for a lifetime license.', 'subtleforms-license-server' ) . '</span></td></tr>';
 
@@ -604,10 +604,11 @@ final class SFLS_Admin {
 				__( 'Customer', 'subtleforms-license-server' )   => (string) $lic['paddle_customer_id'],
 			);
 			foreach ( array_filter( $rows, 'strlen' ) as $label => $value ) {
-				echo '<li><span>' . esc_html( $label ) . '</span><span>' . esc_html( $value ) . '</span></li>';
+				$mono = __( 'Customer', 'subtleforms-license-server' ) === $label ? ' class="sfls-mono"' : '';
+				echo '<li><span>' . esc_html( $label ) . '</span><span' . $mono . '>' . esc_html( $value ) . '</span></li>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			}
 			if ( '' !== (string) $lic['paddle_subscription_id'] ) {
-				echo '<li><span>' . esc_html__( 'Subscription', 'subtleforms-license-server' ) . '</span><span><a href="' . esc_url( SFLS_Paddle::dashboard_url( (string) $lic['paddle_subscription_id'] ) ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( (string) $lic['paddle_subscription_id'] ) . '</a></span></li>';
+				echo '<li><span>' . esc_html__( 'Subscription', 'subtleforms-license-server' ) . '</span><span class="sfls-mono"><a href="' . esc_url( SFLS_Paddle::dashboard_url( (string) $lic['paddle_subscription_id'] ) ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( (string) $lic['paddle_subscription_id'] ) . '</a></span></li>';
 			}
 		}
 		echo '</ul>';
@@ -730,7 +731,7 @@ final class SFLS_Admin {
 			echo '<option value="' . esc_attr( $slug ) . '"' . selected( $slug, 'pro', false ) . '>' . esc_html( $plan['label'] . ' (' . SFLS_Plans::sites_label( (int) $plan['sites'] ) . ')' ) . '</option>';
 		}
 		echo '</select></td></tr>';
-		echo '<tr><th><label for="sfls-sites">' . esc_html__( 'Sites', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-sites" type="number" min="0" name="sites" class="small-text" placeholder="' . esc_attr__( 'plan', 'subtleforms-license-server' ) . '"> <span class="description">' . esc_html__( 'Empty for the plan default, 0 for unlimited.', 'subtleforms-license-server' ) . '</span></td></tr>';
+		echo '<tr><th><label for="sfls-sites">' . esc_html__( 'Sites', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-sites" type="number" min="0" name="sites" class="small-text" placeholder="' . esc_attr__( 'plan', 'subtleforms-license-server' ) . '"> <span class="description">' . esc_html__( 'Leave empty for the plan default. Enter 0 for unlimited.', 'subtleforms-license-server' ) . '</span></td></tr>';
 		echo '<tr><th><label for="sfls-months">' . esc_html__( 'Duration (months)', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-months" type="number" min="0" name="months" value="12" class="small-text"> <span class="description">' . esc_html__( '0 for lifetime.', 'subtleforms-license-server' ) . '</span></td></tr>';
 		echo '<tr><th><label for="sfls-count">' . esc_html__( 'How many', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-count" type="number" min="1" max="50" name="count" value="1" class="small-text"></td></tr>';
 		echo '<tr><th><label for="sfls-notes">' . esc_html__( 'Notes', 'subtleforms-license-server' ) . '</label></th><td><textarea id="sfls-notes" name="notes" rows="3" class="large-text"></textarea></td></tr>';
@@ -781,7 +782,7 @@ final class SFLS_Admin {
 		foreach ( SFLS_Plans::all() as $slug => $plan ) {
 			$v = $values[ $slug ];
 			echo '<tr><th scope="row"><strong>' . esc_html( $plan['label'] ) . '</strong><span class="sfls-plan-feats">' . esc_html( SFLS_Plans::feature_line( $slug ) ) . '</span></th>';
-			echo '<td data-colname="' . esc_attr__( 'Sites', 'subtleforms-license-server' ) . '"><input type="number" min="0" class="small-text" name="plans[' . esc_attr( $slug ) . '][sites]" value="' . esc_attr( $v['sites'] ) . '" aria-label="' . esc_attr( $plan['label'] . ' ' . __( 'sites', 'subtleforms-license-server' ) ) . '"><span class="description">' . esc_html__( '0 = unlimited', 'subtleforms-license-server' ) . '</span></td>';
+			echo '<td data-colname="' . esc_attr__( 'Sites', 'subtleforms-license-server' ) . '"><input type="number" min="0" class="small-text" name="plans[' . esc_attr( $slug ) . '][sites]" value="' . esc_attr( $v['sites'] ) . '" aria-label="' . esc_attr( $plan['label'] . ' ' . __( 'sites', 'subtleforms-license-server' ) ) . '"><span class="description">' . sprintf( /* translators: %d: default site limit of the plan */ esc_html__( 'Default %d. Enter 0 for unlimited.', 'subtleforms-license-server' ), (int) ( SFLS_Plans::get( $slug )['sites'] ?? 1 ) ) . '</span></td>';
 			foreach ( array(
 				'yearly'   => __( 'Yearly price', 'subtleforms-license-server' ),
 				'renewal'  => __( 'Renewal price', 'subtleforms-license-server' ),

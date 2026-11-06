@@ -101,7 +101,7 @@ final class SFLS_Plans {
 	}
 
 	/**
-	 * "5 sites" / "1 site" / "Unlimited sites".
+	 * "5 sites" / "1 site". "Unlimited sites" only when a license or product sets the limit to 0 on purpose.
 	 *
 	 * @param int $sites Site count, 0 for unlimited.
 	 */

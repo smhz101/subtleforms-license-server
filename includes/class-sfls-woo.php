@@ -341,7 +341,7 @@ final class SFLS_Woo {
 			array(
 				'id'                => '_sfls_sites',
 				'label'             => __( 'Sites', 'subtleforms-license-server' ),
-				'description'       => __( 'Leave empty for the plan default. 0 means unlimited.', 'subtleforms-license-server' ),
+				'description'       => __( 'Leave empty for the plan default. Enter 0 for unlimited.', 'subtleforms-license-server' ),
 				'type'              => 'number',
 				'custom_attributes' => array( 'min' => '0' ),
 			)

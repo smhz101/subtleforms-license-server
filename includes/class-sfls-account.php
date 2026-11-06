@@ -395,7 +395,7 @@ final class SFLS_Account {
 		} else {
 			echo '<div><dt>' . esc_html( empty( $lic['expires_at'] ) ? __( 'Term', 'subtleforms-license-server' ) : ( $state['valid'] && 'valid' === $state['status'] ? __( 'Renews', 'subtleforms-license-server' ) : __( 'Expired', 'subtleforms-license-server' ) ) ) . '</dt><dd>' . esc_html( SFLS_Licenses::expiry_label( $lic ) ) . '</dd></div>';
 		}
-		echo '<div><dt>' . esc_html__( 'Sites', 'subtleforms-license-server' ) . '</dt><dd>' . esc_html( SFLS_Licenses::used_slots( (int) $lic['id'] ) . ' / ' . ( $limit > 0 ? number_format_i18n( $limit ) : __( 'Unlimited', 'subtleforms-license-server' ) ) ) . '</dd></div>';
+		echo '<div><dt>' . esc_html__( 'Sites', 'subtleforms-license-server' ) . '</dt><dd>' . esc_html( SFLS_Licenses::used_slots( (int) $lic['id'] ) . ' / ' . ( $limit > 0 ? number_format_i18n( $limit ) : __( 'Unlimited sites', 'subtleforms-license-server' ) ) ) . '</dd></div>';
 		echo '<div><dt>' . esc_html__( 'Purchased', 'subtleforms-license-server' ) . '</dt><dd>' . esc_html( wp_date( $date_fmt, strtotime( $lic['created_at'] . ' UTC' ) ) );
 		if ( (int) $lic['order_id'] && function_exists( 'wc_get_order' ) ) {
 			$order = wc_get_order( (int) $lic['order_id'] );
