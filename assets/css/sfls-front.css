@@ -39,7 +39,7 @@
 	--sfls-button-text: var(--sfls-accent-contrast);
 	--sfls-button-bg-hover: var(--sfls-accent-hover);
 	--sfls-shadow-sm: 0 1px 2px rgba(0, 0, 0, .08);
-	--sfls-shadow-lg: var(--sfls-shadow-lg);
+	--sfls-shadow-lg: 0 12px 32px rgba(56, 88, 233, .12);
 	--sfls-menu-bg: #1d2327;
 	--sfls-menu-item-bg: #2c3338;
 	--sfls-menu-text: #f0f0f1;
