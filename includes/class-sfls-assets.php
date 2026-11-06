@@ -57,6 +57,12 @@ final class SFLS_Assets {
 	private static function inline_js(): string {
 		return <<<'JS'
 (function(){
+	var acc=function(){return document.querySelectorAll('details.sfls-license-acc');};
+	acc().forEach(function(d){d.addEventListener('toggle',function(){
+		if(!d.open){return;}
+		acc().forEach(function(o){if(o!==d&&o.open){o.open=false;}});
+	});});
+	if(location.hash){var t=document.getElementById(location.hash.slice(1)),p=t&&t.closest('details.sfls-license-acc');if(p){p.open=true;}}
 	document.addEventListener('click',function(e){
 		var c=e.target.closest('[data-sfls-confirm]');
 		if(c&&!window.confirm(c.getAttribute('data-sfls-confirm'))){e.preventDefault();return;}

@@ -27,6 +27,7 @@ Private plugin for subtleforms.com. See README.md for setup.
 == Changelog ==
 
 = 1.9.1 - 2026-11-07 =
+* Licenses: several licenses show as an accordion, one open at a time.
 * Fix: wp sfls create --user accepts a user ID, login or email, and the license gets that user and their email.
 * Fix: Site limit wording is the same in the admin, the account area and emails. Each plan shows its real default, and "Unlimited" appears only when the limit is set to 0.
 * Fix: Long Paddle IDs wrap inside the Billing card on the license screen.
