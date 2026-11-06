@@ -146,10 +146,12 @@ final class SFLS_Delivery {
 			/* translators: %s: plan name */
 			sprintf( __( '%s plan', 'subtleforms-license-server' ), SFLS_Plans::label( $lic['plan'] ) ),
 			SFLS_Plans::sites_label( (int) $lic['sites_allowed'] ),
-			$lic['expires_at']
-				/* translators: %s: date */
-				? sprintf( __( 'renews %s', 'subtleforms-license-server' ), SFLS_Licenses::expiry_label( $lic ) )
-				: __( 'lifetime', 'subtleforms-license-server' ),
+			! $lic['expires_at']
+				? __( 'lifetime', 'subtleforms-license-server' )
+				: ( SFLS_Licenses::renewal_confirmed( $lic )
+					/* translators: %s: date */
+					? sprintf( __( 'renews %s', 'subtleforms-license-server' ), SFLS_Licenses::expiry_label( $lic ) )
+					: __( 'renewal date confirming', 'subtleforms-license-server' ) ),
 		);
 		return implode( ' · ', $parts );
 	}

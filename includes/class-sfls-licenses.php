@@ -739,7 +739,7 @@ final class SFLS_Licenses {
 	}
 
 	/**
-	 * "2 of 5" / "1 of unlimited".
+	 * "2 of 5 sites used" / "1 site used, unlimited" (limit set to 0).
 	 *
 	 * @param array $lic License.
 	 */
@@ -808,6 +808,18 @@ final class SFLS_Licenses {
 
 	/**
 	 * Whether a license renews through a Paddle subscription.
+	 *
+	 * @param array $lic License.
+	 */
+	public static function renewal_confirmed( array $lic ): bool {
+		if ( 'paddle' !== self::billing_source( $lic ) ) {
+			return true;
+		}
+		return '' !== (string) ( $lic['paddle_subscription_id'] ?? '' ) && in_array( (string) ( $lic['billing_status'] ?? '' ), array( 'active', 'trialing', 'past_due' ), true );
+	}
+
+	/**
+	 * Whether a Paddle license is tied to a subscription.
 	 *
 	 * @param array $lic License.
 	 */
