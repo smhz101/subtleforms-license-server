@@ -868,7 +868,7 @@ final class SFLS_Woo_Paddle {
 	 * @param WC_Order $order Order.
 	 */
 	public static function trial_email_confirmed( WC_Order $order ): bool {
-		return ! SFLS_Settings::trial_verify() || SFLS_Trials::is_verified( (string) $order->get_billing_email() );
+		return ! SFLS_Settings::trial_verify() || SFLS_Trials::skip_code() || SFLS_Trials::is_verified( (string) $order->get_billing_email() );
 	}
 
 	/**

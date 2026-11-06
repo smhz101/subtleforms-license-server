@@ -360,6 +360,15 @@ final class SFLS_Trials {
 	}
 
 	/**
+	 * Whether the email code step is skipped. Only on local and development
+	 * environments by default, never on staging or production. Filter
+	 * `sfls_trial_skip_email_code` can change it.
+	 */
+	public static function skip_code(): bool {
+		return (bool) apply_filters( 'sfls_trial_skip_email_code', in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) );
+	}
+
+	/**
 	 * Whether the address was confirmed with a code in the last
 	 * VERIFIED_MINUTES.
 	 *
