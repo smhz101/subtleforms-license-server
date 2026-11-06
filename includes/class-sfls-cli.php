@@ -30,7 +30,7 @@ final class SFLS_CLI {
 	 * : User ID, login or email that owns the key.
 	 *
 	 * [--sites=<n>]
-	 * : Site limit (0 = unlimited). Defaults to the plan.
+	 * : Site limit. Defaults to the plan (Starter 1, Pro 5, Agency 25). Enter 0 for unlimited.
 	 *
 	 * [--months=<n>]
 	 * : Duration in months (0 = lifetime).
@@ -58,11 +58,13 @@ final class SFLS_CLI {
 		$count   = max( 1, (int) ( $assoc_args['count'] ?? 1 ) );
 		$user_id = 0;
 		$email   = (string) ( $assoc_args['email'] ?? '' );
-		if ( ! empty( $assoc_args['user'] ) ) {
-			$u    = $assoc_args['user'];
-			$user = is_numeric( $u ) ? get_userdata( (int) $u ) : ( get_user_by( 'login', $u ) ? get_user_by( 'login', $u ) : get_user_by( 'email', $u ) );
+		// WP-CLI reads a global --user itself, logs that user in and removes it from
+		// the flags, so fall back to the current user when it is not in $assoc_args.
+		$wanted = isset( $assoc_args['user'] ) ? (string) $assoc_args['user'] : ( get_current_user_id() ? (string) get_current_user_id() : '' );
+		if ( '' !== $wanted ) {
+			$user = self::find_user( $wanted );
 			if ( ! $user ) {
-				WP_CLI::error( 'User not found.' );
+				WP_CLI::error( sprintf( 'No user found for "%s". Use a user ID, login or email.', $wanted ) );
 			}
 			$user_id = (int) $user->ID;
 			$email   = '' !== $email ? $email : $user->user_email;
@@ -87,6 +89,28 @@ final class SFLS_CLI {
 		if ( ! isset( $assoc_args['porcelain'] ) ) {
 			WP_CLI::success( sprintf( '%d license(s) issued.', $count ) );
 		}
+	}
+
+	/**
+	 * Resolve a user from an ID, login or email.
+	 *
+	 * @param string $value User ID, login or email.
+	 */
+	public static function find_user( string $value ) {
+		$value = trim( $value );
+		if ( '' === $value ) {
+			return false;
+		}
+		foreach ( array( 'id', 'login', 'email' ) as $field ) {
+			if ( 'id' === $field && ! ctype_digit( $value ) ) {
+				continue;
+			}
+			$user = get_user_by( $field, $value );
+			if ( $user ) {
+				return $user;
+			}
+		}
+		return false;
 	}
 
 	/**
