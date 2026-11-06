@@ -1991,3 +1991,25 @@
 		flex-wrap: wrap;
 	}
 }
+
+/* Inside an accordion the summary already names the plan and status:
+   the card drops its own title and border so there is one box. */
+.sfls .sfls-license-acc .sfls-card {
+	border: 0;
+	box-shadow: none;
+	margin: 0;
+	padding-block-start: 0;
+}
+
+.sfls .sfls-license-acc .sfls-license-title {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip: rect(1px, 1px, 1px, 1px);
+	white-space: nowrap;
+}
+
+.sfls .sfls-license-acc .sfls-license-head {
+	justify-content: flex-end;
+}
