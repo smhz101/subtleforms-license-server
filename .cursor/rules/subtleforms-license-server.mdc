@@ -1,6 +1,17 @@
 ---
-description: SubtleForms standing rules for every task in this repository
-alwaysApply: true
+description: SubtleForms License Server standing rules for packages, coding, tests, and releases in this repository. Use for license-server work. Production publish/sign/deploy needs human authorization. Do not treat as Free or Pro policy.
+globs:
+  - "includes/**"
+  - "tests/**"
+  - "docs/dev/**"
+  - "blocks/**"
+  - "assets/**"
+  - "subtleforms-license-server.php"
+  - "AGENTS.md"
+  - "phpunit.xml"
+  - ".cursor/rules/**"
+  - ".github/workflows/**"
+alwaysApply: false
 ---
 
 # SubtleForms: standing rules
@@ -15,7 +26,7 @@ You work on ONE package at a time. The package file in docs/dev/packages/ is you
 ## Branch and commits
 - Branch: `pkg/<PACKAGE-ID>` from the release branch named in the package file. One commit per bug ID (or per tightly related group), message: `<ID>[, <ID>]: <what changed, plain sentence>`.
 - Never commit build/, dist/, node_modules/, vendor/ or playwright-report/. Never push to main. Open a pull request into the release branch when done.
-- Never merge anything. Open the pull request and stop. docs/dev/MERGING.md lists what a pull request needs before it can be merged.
+- Agents must never merge, push to main, tag, or deploy. Humans merge only when docs/dev/MERGING.md is satisfied.
 - No AI or tool attribution anywhere in git or GitHub: no `Co-Authored-By` lines, no "Generated with" or "Created by" lines, no tool or model names in commit messages, PR titles or PR bodies. Write them as plain notes from the team.
 
 ## Code rules
@@ -30,7 +41,7 @@ You work on ONE package at a time. The package file in docs/dev/packages/ is you
 3. Changelog: add ONE new file `docs/dev/changes/unreleased/<short-branch-slug>.md` with the first line `type: Added|Changed|Fixed|Security` and one plain sentence below it (format in docs/dev/changes/README.md). A pull request with no user-visible change adds none.
 
 ## Files only a release pull request edits
-Feature and fix pull requests must NOT edit `readme.txt`, `docs/dev/releases/`, the version in `subtleforms-license-server.php`, or `languages/*.pot`. Two pull requests that edit those lines conflict on every merge. The release pull request (`release/<version>`) bumps the version, runs `bin/compile-changes.sh <version> --apply` and regenerates the POT as its last step. The exact commands are in docs/dev/RELEASING.md. There is no CI here, so this is a rule for the author and the reviewer.
+Feature and fix pull requests must NOT edit `readme.txt`, `docs/dev/releases/`, the version in `subtleforms-license-server.php`, or `languages/*.pot`. Two pull requests that edit those lines conflict on every merge. The release pull request (`release/<version>`) bumps the version, runs `bin/compile-changes.sh <version> --apply` and regenerates the POT as its last step. The exact commands are in docs/dev/RELEASING.md. Pull requests run GitHub Actions Checks (see docs/dev/MERGING.md and BRANCH_PROTECTION.md): that is code CI for this plugin. Ingesting Pro zips, signing, yank/publish on subtleforms.com, and customer update delivery are production operations and require explicit human authorization.
 
 ## Report (keep it short; this is the only thing to write back)
 ```

@@ -55,6 +55,34 @@ The blocks are server-rendered (`blocks/*/block.json`); the editor script `asset
 
 Styles load only on pages that use a shortcode and are scoped under `.sfls`. Override colours with custom properties, for example `.sfls { --sfls-accent: #111; }`.
 
+### Theming tokens
+
+Every colour, radius, font and shadow is a custom property declared once, on `.sfls` (the front wrapper) at the top of `assets/css/sfls-front.css`. Set any of them on `.sfls` or a parent. Defaults give the plugin's own look.
+
+| Token | Default | Use |
+| --- | --- | --- |
+| `--sfls-font` | `inherit` | Font family of the whole area |
+| `--sfls-mono` | system monospace stack | Keys, codes, IDs |
+| `--sfls-text` | `#1e1e1e` | Body text |
+| `--sfls-muted` | `#646970` | Secondary text |
+| `--sfls-border`, `--sfls-border-strong` | `#dcdcde`, `#c3c4c7` | Borders |
+| `--sfls-surface` | `#fff` | Cards |
+| `--sfls-bg` | `#f6f7f7` | Subtle fills |
+| `--sfls-accent`, `--sfls-accent-hover`, `--sfls-accent-soft` | `#3858e9`, `#2145e6`, `#eef1fd` | Accent, hover, tint |
+| `--sfls-accent-contrast` | `#fff` | Text on the accent |
+| `--sfls-success`, `--sfls-warning`, `--sfls-danger` | `#007017`, `#8a4d00`, `#b32d2e` | Status colours |
+| `--sfls-success-soft`, `--sfls-warning-soft`, `--sfls-danger-soft` | tints | Status backgrounds |
+| `--sfls-info-border`, `--sfls-warning-border`, `--sfls-danger-border`, `--sfls-danger-border-soft` | tints | Status borders |
+| `--sfls-radius`, `--sfls-radius-sm`, `--sfls-radius-xs`, `--sfls-radius-md`, `--sfls-radius-lg`, `--sfls-radius-pill` | 10, 6, 4, 8, 14 px, 999px | Corner radii |
+| `--sfls-button-radius` | `var(--sfls-radius-sm)` | Buttons |
+| `--sfls-button-bg`, `--sfls-button-text`, `--sfls-button-bg-hover` | accent, contrast, accent hover | Primary button |
+| `--sfls-shadow-sm`, `--sfls-shadow-lg` | soft shadows | Toggle, popular plan |
+| `--sfls-menu-bg`, `--sfls-menu-item-bg`, `--sfls-menu-text`, `--sfls-menu-icon` | dark greys | Branding portal menu preview |
+
+The older names `--sfls-subtle`, `--sfls-on-accent`, `--sfls-ok(-soft)`, `--sfls-warn(-soft)` and `--sfls-bad(-soft)` still work as aliases.
+
+Example: `.sfls { --sfls-accent: #5046e6; --sfls-button-bg: #c8f169; --sfls-button-text: #111; --sfls-button-radius: 9999px; }`
+
 ## 4. What happens on a sale
 
 1. Payment completes (Stripe calls `$order->payment_complete()`). An order whose items are all license products goes straight to **Completed** through `woocommerce_payment_complete_order_status`, whatever the downloadable flag says. A paid order that also holds other items stays at **Processing** for shipping, and its keys are issued there. Cash on delivery waits for Completed. The order flag `_sfls_issued` (plus a short lock) makes sure keys are issued once.

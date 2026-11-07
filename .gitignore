@@ -1,0 +1,30 @@
+# Dependencies and tooling
+node_modules/
+vendor/
+composer.phar
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+secrets.json
+credentials.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Test / cache artifacts
+.phpunit.cache/
+.phpunit.result.cache
+coverage/
+*.log
+
+# Build / packaging leftovers (plugin ships from git; do not commit zips)
+*.zip
+dist/
+build/

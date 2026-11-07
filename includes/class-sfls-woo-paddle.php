@@ -868,7 +868,7 @@ final class SFLS_Woo_Paddle {
 	 * @param WC_Order $order Order.
 	 */
 	public static function trial_email_confirmed( WC_Order $order ): bool {
-		return ! SFLS_Settings::trial_verify() || SFLS_Trials::is_verified( (string) $order->get_billing_email() );
+		return ! SFLS_Settings::trial_verify() || SFLS_Trials::skip_code() || SFLS_Trials::is_verified( (string) $order->get_billing_email() );
 	}
 
 	/**
@@ -986,18 +986,26 @@ final class SFLS_Woo_Paddle {
 	 * @param WC_Order $order Order.
 	 */
 	private static function trial_code_form( WC_Order $order ): void {
-		$notice = (string) $order->get_meta( '_sfls_trial_code_notice' );
+		$notice    = (string) $order->get_meta( '_sfls_trial_code_notice' );
+		$notice_ok = '1' === (string) $order->get_meta( '_sfls_trial_code_notice_ok' );
 		if ( '' !== $notice ) {
 			$order->delete_meta_data( '_sfls_trial_code_notice' );
+			$order->delete_meta_data( '_sfls_trial_code_notice_ok' );
 			$order->save_meta_data();
 		}
 		$email = (string) $order->get_billing_email();
 		echo '<div class="sfls sfls-paddle-pay sfls-trial-code">';
 		echo '<h2 class="sfls-paddle-pay-title">' . esc_html__( 'Confirm your email', 'subtleforms-license-server' ) . '</h2>';
-		/* translators: %s: email address */
-		echo '<p>' . esc_html( sprintf( __( 'We emailed a 6 digit code to %s. Enter it to start your free trial.', 'subtleforms-license-server' ), $email ) ) . '</p>';
+		echo '<p class="sfls-trial-code-lead">' . esc_html__( 'Enter the 6-digit code we sent to', 'subtleforms-license-server' ) . '</p>';
+		echo '<p class="sfls-trial-code-email">' . esc_html( $email ) . '</p>';
+		echo '<p class="sfls-trial-code-help">' . esc_html__( 'This keeps free trials to one per person. Next you add a card, and nothing is charged until the trial ends.', 'subtleforms-license-server' ) . '</p>';
 		if ( '' !== $notice ) {
-			echo '<p class="sfls-paddle-error" role="alert">' . esc_html( $notice ) . '</p>';
+			printf(
+				'<p class="%1$s" role="%2$s">%3$s</p>',
+				$notice_ok ? 'sfls-paddle-ok' : 'sfls-paddle-error',
+				$notice_ok ? 'status' : 'alert',
+				esc_html( $notice )
+			);
 		}
 		echo '<form method="post" action="' . esc_url( $order->get_checkout_payment_url( true ) ) . '">';
 		wp_nonce_field( 'sfls_trial_code_' . $order->get_id(), 'sfls_trial_nonce' );
@@ -1005,8 +1013,11 @@ final class SFLS_Woo_Paddle {
 		echo '<p><label for="sfls-trial-code">' . esc_html__( 'Confirmation code', 'subtleforms-license-server' ) . '</label><br><input id="sfls-trial-code" type="text" name="sfls_trial_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required class="input-text"></p>';
 		echo '<p><button type="submit" name="sfls_trial_action" value="verify" class="button alt">' . esc_html__( 'Confirm and continue', 'subtleforms-license-server' ) . '</button> ';
 		echo '<button type="submit" name="sfls_trial_action" value="resend" class="button" formnovalidate>' . esc_html__( 'Email me a new code', 'subtleforms-license-server' ) . '</button></p>';
+		echo '<div class="sfls-trial-code-tips">';
 		/* translators: %d: minutes */
-		echo '<p class="sfls-muted">' . esc_html( sprintf( __( 'The code works for %d minutes.', 'subtleforms-license-server' ), SFLS_Trials::CODE_MINUTES ) ) . '</p>';
+		echo '<p class="sfls-muted">' . esc_html( sprintf( __( 'The code can take a minute to arrive and works for %d minutes. Not in your inbox? Check spam or promotions, then send a new code.', 'subtleforms-license-server' ), SFLS_Trials::CODE_MINUTES ) ) . '</p>';
+		echo '<p class="sfls-muted">' . esc_html__( 'Wrong email?', 'subtleforms-license-server' ) . ' <a href="' . esc_url( wc_get_checkout_url() ) . '">' . esc_html__( 'Go back and change it', 'subtleforms-license-server' ) . '</a></p>';
+		echo '</div>';
 		echo '</form></div>';
 	}
 
@@ -1040,6 +1051,7 @@ final class SFLS_Woo_Paddle {
 		// phpcs:enable
 		if ( is_wp_error( $result ) ) {
 			$order->update_meta_data( '_sfls_trial_code_notice', $result->get_error_message() );
+			$order->update_meta_data( '_sfls_trial_code_notice_ok', 'code_sent' === $result->get_error_code() ? '1' : '0' );
 			$order->save_meta_data();
 		}
 		wp_safe_redirect( $order->get_checkout_payment_url( true ) );

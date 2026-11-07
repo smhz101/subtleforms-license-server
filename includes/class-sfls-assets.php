@@ -57,6 +57,12 @@ final class SFLS_Assets {
 	private static function inline_js(): string {
 		return <<<'JS'
 (function(){
+	var acc=function(){return document.querySelectorAll('details.sfls-license-acc');};
+	acc().forEach(function(d){d.addEventListener('toggle',function(){
+		if(!d.open){return;}
+		acc().forEach(function(o){if(o!==d&&o.open){o.open=false;}});
+	});});
+	if(location.hash){var t=document.getElementById(location.hash.slice(1)),p=t&&t.closest('details.sfls-license-acc');if(p){p.open=true;}}
 	document.addEventListener('click',function(e){
 		var c=e.target.closest('[data-sfls-confirm]');
 		if(c&&!window.confirm(c.getAttribute('data-sfls-confirm'))){e.preventDefault();return;}
@@ -64,11 +70,13 @@ final class SFLS_Assets {
 		if(!b){return;}
 		e.preventDefault();
 		var text=b.getAttribute('data-sfls-copy'),label=b.querySelector('.sfls-copy-label')||b,orig=label.textContent;
-		var done=function(){label.textContent=b.getAttribute('data-sfls-copied')||'Copied';b.classList.add('is-copied');setTimeout(function(){label.textContent=orig;b.classList.remove('is-copied');},1600);};
+		var live=document.getElementById('sfls-live');
+		if(!live){live=document.createElement('div');live.id='sfls-live';live.style.cssText='position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap';live.setAttribute('aria-live','polite');live.setAttribute('role','status');document.body.appendChild(live);}
+		var done=function(){var msg=b.getAttribute('data-sfls-copied')||'Copied';label.textContent=msg;live.textContent='';setTimeout(function(){live.textContent=msg;},50);b.classList.add('is-copied');if(document.activeElement!==b){b.focus();}setTimeout(function(){label.textContent=orig;b.classList.remove('is-copied');live.textContent='';},1600);};
 		if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text).then(done,function(){});return;}
 		var t=document.createElement('textarea');t.value=text;t.setAttribute('readonly','');t.style.position='absolute';t.style.left='-9999px';document.body.appendChild(t);t.select();
 		try{document.execCommand('copy');done();}catch(x){}
-		document.body.removeChild(t);
+		document.body.removeChild(t);b.focus();
 	});
 })();
 JS;

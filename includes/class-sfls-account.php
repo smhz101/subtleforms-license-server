@@ -281,8 +281,9 @@ final class SFLS_Account {
 		echo '<p class="sfls-intro">' . esc_html__( 'Connect a site from SubtleForms › Settings › License in WordPress, or paste the key there. Local and staging sites never count towards your limit.', 'subtleforms-license-server' ) . '</p>';
 
 		$any_valid = false;
-		foreach ( $licenses as $lic ) {
-			$this->license_card( $lic, $release );
+		$accordion = count( $licenses ) > 1;
+		foreach ( array_values( $licenses ) as $i => $lic ) {
+			$this->license_card( $lic, $release, $accordion, 0 === $i );
 			$any_valid = $any_valid || SFLS_Licenses::state( $lic )['valid'];
 		}
 
@@ -301,15 +302,39 @@ final class SFLS_Account {
 	 * One license card.
 	 *
 	 * @param array $lic     License.
-	 * @param array $release Current release.
+	 * @param array $release   Current release.
+	 * @param bool  $accordion Wrap the card in an accordion item.
+	 * @param bool  $open      Open the accordion item by default.
 	 */
-	private function license_card( array $lic, array $release ): void {
+	private function license_card( array $lic, array $release, bool $accordion = false, bool $open = false ): void {
 		$state    = SFLS_Licenses::state( $lic );
 		$acts     = SFLS_Licenses::activations( (int) $lic['id'] );
 		$renew    = SFLS_Products::renew_url( $lic );
 		$upgrades = 'suspended' === $state['status'] ? array() : SFLS_Products::upgrade_options( $lic );
 		$date_fmt = get_option( 'date_format' );
 		$paddle   = SFLS_Licenses::is_paddle( $lic );
+
+		if ( $accordion ) {
+			if ( $paddle ) {
+				[ $term_label, $term_value ] = self::paddle_term( $lic, $state );
+			} else {
+				$term_label = empty( $lic['expires_at'] ) ? __( 'Term', 'subtleforms-license-server' ) : ( $state['valid'] && 'valid' === $state['status'] ? __( 'Renews', 'subtleforms-license-server' ) : __( 'Expired', 'subtleforms-license-server' ) );
+				$term_value = SFLS_Licenses::expiry_label( $lic );
+			}
+			$used  = SFLS_Licenses::used_slots( (int) $lic['id'] );
+			$cap   = (int) $lic['sites_allowed'];
+			$sites = $cap > 0
+				/* translators: 1: sites in use, 2: sites allowed */
+				? sprintf( __( '%1$s of %2$s sites', 'subtleforms-license-server' ), number_format_i18n( $used ), number_format_i18n( $cap ) )
+				/* translators: %s: sites in use */
+				: sprintf( __( '%s sites, no limit', 'subtleforms-license-server' ), number_format_i18n( $used ) );
+			echo '<details class="sfls-license-acc" name="sfls-licenses"' . ( $open ? ' open' : '' ) . '><summary class="sfls-license-acc__summary">';
+			echo '<span class="sfls-license-acc__plan">' . esc_html( SFLS_Plans::label( $lic['plan'] ) ) . '</span>';
+			echo wp_kses_post( SFLS_Connect::pill( $state['status'] ) );
+			echo '<span class="sfls-license-acc__meta">' . esc_html( $term_label . ': ' . $term_value ) . '</span>';
+			echo '<span class="sfls-license-acc__meta">' . esc_html( $sites ) . '</span>';
+			echo '<span class="sfls-license-acc__chevron" aria-hidden="true"></span></summary>';
+		}
 
 		echo '<article class="sfls-card sfls-license" id="license-' . esc_attr( (string) $lic['id'] ) . '">';
 
@@ -395,7 +420,7 @@ final class SFLS_Account {
 		} else {
 			echo '<div><dt>' . esc_html( empty( $lic['expires_at'] ) ? __( 'Term', 'subtleforms-license-server' ) : ( $state['valid'] && 'valid' === $state['status'] ? __( 'Renews', 'subtleforms-license-server' ) : __( 'Expired', 'subtleforms-license-server' ) ) ) . '</dt><dd>' . esc_html( SFLS_Licenses::expiry_label( $lic ) ) . '</dd></div>';
 		}
-		echo '<div><dt>' . esc_html__( 'Sites', 'subtleforms-license-server' ) . '</dt><dd>' . esc_html( SFLS_Licenses::used_slots( (int) $lic['id'] ) . ' / ' . ( $limit > 0 ? number_format_i18n( $limit ) : __( 'Unlimited', 'subtleforms-license-server' ) ) ) . '</dd></div>';
+		echo '<div><dt>' . esc_html__( 'Sites', 'subtleforms-license-server' ) . '</dt><dd>' . esc_html( SFLS_Licenses::used_slots( (int) $lic['id'] ) . ' / ' . ( $limit > 0 ? number_format_i18n( $limit ) : __( 'Unlimited sites', 'subtleforms-license-server' ) ) ) . '</dd></div>';
 		echo '<div><dt>' . esc_html__( 'Purchased', 'subtleforms-license-server' ) . '</dt><dd>' . esc_html( wp_date( $date_fmt, strtotime( $lic['created_at'] . ' UTC' ) ) );
 		if ( (int) $lic['order_id'] && function_exists( 'wc_get_order' ) ) {
 			$order = wc_get_order( (int) $lic['order_id'] );
@@ -449,6 +474,9 @@ final class SFLS_Account {
 		}
 		echo '</div>';
 		echo '</article>';
+		if ( $accordion ) {
+			echo '</details>';
+		}
 	}
 
 	// ── Paddle billing ──────────────────────────────────────────────────

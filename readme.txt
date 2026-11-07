@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.9.0
+Stable tag: 1.9.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,6 +25,16 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, 7 or 14 day free trials with one trial per customer, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.9.1 - 2026-11-07 =
+* Licenses: several licenses show as an accordion, one open at a time.
+* Fix: wp sfls create --user accepts a user ID, login or email, and the license gets that user and their email.
+* Fix: Site limit wording is the same in the admin, the account area and emails. Each plan shows its real default, and "Unlimited" appears only when the limit is set to 0.
+* Fix: Long Paddle IDs wrap inside the Billing card on the license screen.
+* Fix: The order received panel shows "renewal date confirming" until the Paddle subscription is active.
+* Change: The trial email code is skipped only on local and development environments, through the sfls_trial_skip_email_code filter. Staging and production always ask for it.
+* Change: Copy buttons announce "Copied" to screen readers and keep focus.
+* Change: Customer styles use logical properties for right-to-left languages, and every color, radius, font and shadow is an --sfls-* custom property (see README).
 
 = 1.9.0 - 2026-10-23 =
 * New: The server signs release packages and license answers with an ed25519 key, set up with the sfls signing commands.
