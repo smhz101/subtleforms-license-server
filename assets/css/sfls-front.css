@@ -2013,3 +2013,59 @@
 .sfls .sfls-license-acc .sfls-license-head {
 	justify-content: flex-end;
 }
+
+/* Trial email code step. */
+.sfls .sfls-trial-code-lead {
+	margin: 0;
+	color: var(--sfls-muted);
+}
+
+.sfls .sfls-trial-code-email {
+	display: inline-flex;
+	align-items: center;
+	justify-self: start;
+	align-self: flex-start;
+	max-inline-size: 100%;
+	margin: 0;
+	padding: 6px 14px;
+	border-radius: var(--sfls-radius-pill);
+	background: var(--sfls-accent-soft);
+	color: var(--sfls-text);
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.sfls .sfls-trial-code-help {
+	margin: 0;
+	color: var(--sfls-muted);
+	font-size: 14px;
+}
+
+.sfls .sfls-trial-code-tips {
+	display: grid;
+	gap: 4px;
+	padding-block-start: 12px;
+	border-block-start: 1px solid var(--sfls-border);
+}
+
+.sfls .sfls-trial-code-tips p {
+	margin: 0;
+}
+
+.sfls .sfls-paddle-ok,
+.sfls .sfls-paddle-error {
+	margin: 0;
+	padding: 10px 14px;
+	border-radius: var(--sfls-radius-md);
+	font-size: 14px;
+}
+
+.sfls .sfls-paddle-ok {
+	background: var(--sfls-success-soft);
+	color: var(--sfls-success);
+}
+
+.sfls .sfls-paddle-error {
+	background: var(--sfls-danger-soft);
+	color: var(--sfls-danger);
+}
