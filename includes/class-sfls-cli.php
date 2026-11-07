@@ -518,4 +518,6 @@ final class SFLS_CLI_Signing {
 	}
 }
 
-WP_CLI::add_command( 'sfls signing', 'SFLS_CLI_Signing' );
+if ( class_exists( 'WP_CLI' ) ) {
+	WP_CLI::add_command( 'sfls signing', 'SFLS_CLI_Signing' );
+}

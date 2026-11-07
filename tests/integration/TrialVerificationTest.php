@@ -21,6 +21,8 @@ class SFLS_Trial_Verification_Test extends SFLS_Test_Case {
 	 */
 	protected function setUp(): void {
 		parent::setUp();
+		// These tests are about the email code step: keep it on whatever the environment (local sites skip it by default).
+		$this->filter( 'sfls_trial_skip_email_code', '__return_false' );
 		$this->woo_paddle();
 		$this->settings(
 			array(
