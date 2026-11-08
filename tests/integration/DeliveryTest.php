@@ -181,4 +181,34 @@ class SFLS_Delivery_Test extends SFLS_Test_Case {
 		$this->assertStringContainsString( 'no charge', SFLS_Delivery::trial_phrase( $this->trial_license( array( 'cancels_at' => '2026-11-15 00:37:22' ) ) ) );
 		$this->assertSame( '', SFLS_Delivery::trial_phrase( $this->trial_license( array( 'billing_status' => 'active', 'trial' => 0 ) ) ) );
 	}
+
+	/**
+	 * Only a Paddle subscription "renews". A manual or one-off WooCommerce
+	 * license is "valid until" its date, and no date is "lifetime".
+	 */
+	public function test_license_line_term_by_billing(): void {
+		$base = array(
+			'plan'          => 'agency',
+			'sites_allowed' => 25,
+			'expires_at'    => '2027-11-08 01:30:44',
+		);
+
+		$manual = SFLS_Delivery::license_line( array_merge( $base, array( 'billing' => 'manual' ) ) );
+		$this->assertStringContainsString( 'valid until', $manual );
+		$this->assertStringNotContainsString( 'renews', $manual );
+
+		$woo = SFLS_Delivery::license_line( array_merge( $base, array( 'billing' => 'woocommerce', 'order_id' => 12 ) ) );
+		$this->assertStringContainsString( 'valid until', $woo );
+
+		$paddle = SFLS_Delivery::license_line(
+			array_merge(
+				$base,
+				array( 'billing' => 'paddle', 'billing_status' => 'active', 'paddle_subscription_id' => 'sub_active_test', 'trial' => 0 )
+			)
+		);
+		$this->assertStringContainsString( 'renews', $paddle );
+		$this->assertStringNotContainsString( 'valid until', $paddle );
+
+		$this->assertStringContainsString( 'lifetime', SFLS_Delivery::license_line( array_merge( $base, array( 'billing' => 'manual', 'expires_at' => null ) ) ) );
+	}
 }

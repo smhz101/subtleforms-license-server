@@ -137,7 +137,8 @@ final class SFLS_Delivery {
 	}
 
 	/**
-	 * "Pro plan · 5 sites · renews 11 October 2027".
+	 * "Pro plan · 5 sites · renews 11 October 2027", or "valid until" for a
+	 * license that does not renew by itself.
 	 *
 	 * @param array $lic License.
 	 */
@@ -148,12 +149,27 @@ final class SFLS_Delivery {
 			SFLS_Plans::sites_label( (int) $lic['sites_allowed'] ),
 			! $lic['expires_at']
 				? __( 'lifetime', 'subtleforms-license-server' )
-				: ( self::trial_phrase( $lic ) ?: ( SFLS_Licenses::renewal_confirmed( $lic )
-					/* translators: %s: date */
-					? sprintf( __( 'renews %s', 'subtleforms-license-server' ), SFLS_Licenses::expiry_label( $lic ) )
-					: __( 'renewal date confirming', 'subtleforms-license-server' ) ) ),
+				: ( self::trial_phrase( $lic ) ?: self::term_phrase( $lic ) ),
 		);
 		return implode( ' · ', $parts );
+	}
+
+	/**
+	 * End of the license term. Only a Paddle subscription renews by itself;
+	 * a manual or one-off WooCommerce license is valid until its date and is
+	 * then renewed by buying again.
+	 *
+	 * @param array $lic License with an expiry date.
+	 */
+	private static function term_phrase( array $lic ): string {
+		if ( ! SFLS_Licenses::is_paddle( $lic ) ) {
+			/* translators: %s: date */
+			return sprintf( __( 'valid until %s', 'subtleforms-license-server' ), SFLS_Licenses::expiry_label( $lic ) );
+		}
+		return SFLS_Licenses::renewal_confirmed( $lic )
+			/* translators: %s: date */
+			? sprintf( __( 'renews %s', 'subtleforms-license-server' ), SFLS_Licenses::expiry_label( $lic ) )
+			: __( 'renewal date confirming', 'subtleforms-license-server' );
 	}
 
 	/**

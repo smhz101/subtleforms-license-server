@@ -318,7 +318,7 @@ final class SFLS_Account {
 			if ( $paddle ) {
 				[ $term_label, $term_value ] = self::paddle_term( $lic, $state );
 			} else {
-				$term_label = empty( $lic['expires_at'] ) ? __( 'Term', 'subtleforms-license-server' ) : ( $state['valid'] && 'valid' === $state['status'] ? __( 'Renews', 'subtleforms-license-server' ) : __( 'Expired', 'subtleforms-license-server' ) );
+				$term_label = empty( $lic['expires_at'] ) ? __( 'Term', 'subtleforms-license-server' ) : ( $state['valid'] && 'valid' === $state['status'] ? __( 'Valid until', 'subtleforms-license-server' ) : __( 'Expired', 'subtleforms-license-server' ) );
 				$term_value = SFLS_Licenses::expiry_label( $lic );
 			}
 			$used  = SFLS_Licenses::used_slots( (int) $lic['id'] );
@@ -418,7 +418,7 @@ final class SFLS_Account {
 			[ $term_label, $term_value ] = self::paddle_term( $lic, $state );
 			echo '<div><dt>' . esc_html( $term_label ) . '</dt><dd>' . esc_html( $term_value ) . '</dd></div>';
 		} else {
-			echo '<div><dt>' . esc_html( empty( $lic['expires_at'] ) ? __( 'Term', 'subtleforms-license-server' ) : ( $state['valid'] && 'valid' === $state['status'] ? __( 'Renews', 'subtleforms-license-server' ) : __( 'Expired', 'subtleforms-license-server' ) ) ) . '</dt><dd>' . esc_html( SFLS_Licenses::expiry_label( $lic ) ) . '</dd></div>';
+			echo '<div><dt>' . esc_html( empty( $lic['expires_at'] ) ? __( 'Term', 'subtleforms-license-server' ) : ( $state['valid'] && 'valid' === $state['status'] ? __( 'Valid until', 'subtleforms-license-server' ) : __( 'Expired', 'subtleforms-license-server' ) ) ) . '</dt><dd>' . esc_html( SFLS_Licenses::expiry_label( $lic ) ) . '</dd></div>';
 		}
 		echo '<div><dt>' . esc_html__( 'Sites', 'subtleforms-license-server' ) . '</dt><dd>' . esc_html( SFLS_Licenses::used_slots( (int) $lic['id'] ) . ' / ' . ( $limit > 0 ? number_format_i18n( $limit ) : __( 'Unlimited sites', 'subtleforms-license-server' ) ) ) . '</dd></div>';
 		echo '<div><dt>' . esc_html__( 'Purchased', 'subtleforms-license-server' ) . '</dt><dd>' . esc_html( wp_date( $date_fmt, strtotime( $lic['created_at'] . ' UTC' ) ) );
