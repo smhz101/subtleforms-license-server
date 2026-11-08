@@ -148,12 +148,41 @@ final class SFLS_Delivery {
 			SFLS_Plans::sites_label( (int) $lic['sites_allowed'] ),
 			! $lic['expires_at']
 				? __( 'lifetime', 'subtleforms-license-server' )
-				: ( SFLS_Licenses::renewal_confirmed( $lic )
+				: ( self::trial_phrase( $lic ) ?: ( SFLS_Licenses::renewal_confirmed( $lic )
 					/* translators: %s: date */
 					? sprintf( __( 'renews %s', 'subtleforms-license-server' ), SFLS_Licenses::expiry_label( $lic ) )
-					: __( 'renewal date confirming', 'subtleforms-license-server' ) ),
+					: __( 'renewal date confirming', 'subtleforms-license-server' ) ) ),
 		);
 		return implode( ' · ', $parts );
+	}
+
+	/**
+	 * "trial ends 15 November 2026, then $49.00/year" for a license in its
+	 * Paddle free trial, so the line does not read as a charge on that date.
+	 * Empty when the license is not trialing or renewal is cancelled.
+	 *
+	 * @param array $lic License.
+	 */
+	public static function trial_phrase( array $lic ): string {
+		if ( empty( $lic['trial'] ) || empty( $lic['trial_ends_at'] ) || 'trialing' !== ( $lic['billing_status'] ?? '' ) ) {
+			return '';
+		}
+		$date = wp_date( (string) get_option( 'date_format' ), strtotime( $lic['trial_ends_at'] . ' UTC' ) );
+		if ( ! empty( $lic['cancels_at'] ) ) {
+			/* translators: %s: date */
+			return sprintf( __( 'trial ends %s, no charge', 'subtleforms-license-server' ), $date );
+		}
+		$plan = class_exists( 'SFLS_Paddle' ) ? SFLS_Paddle::plan( (string) $lic['plan'] ) : array();
+		if ( empty( $plan['amount'] ) ) {
+			/* translators: %s: date */
+			return sprintf( __( 'trial ends %s', 'subtleforms-license-server' ), $date );
+		}
+		$amount = (int) $plan['amount'] / 100;
+		$price  = function_exists( 'wc_price' )
+			? wp_strip_all_tags( html_entity_decode( wc_price( $amount, array( 'currency' => (string) ( $plan['currency'] ?? '' ) ) ) ) )
+			: '$' . number_format( $amount, 2 );
+		/* translators: 1: date, 2: yearly price */
+		return sprintf( __( 'trial ends %1$s, then %2$s/year', 'subtleforms-license-server' ), $date, $price );
 	}
 
 	/**
