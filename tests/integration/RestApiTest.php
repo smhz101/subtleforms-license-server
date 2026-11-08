@@ -72,6 +72,44 @@ class SFLS_Rest_Api_Test extends SFLS_Test_Case {
 	}
 
 	/**
+	 * Freeing a seat has its own bucket: a key switch is not refused when the
+	 * shared IP bucket (activate, validate, status) is used up.
+	 */
+	public function test_deactivate_is_not_refused_when_the_ip_bucket_is_used_up(): void {
+		$this->filter( 'sfls_rate_limit_enabled', '__return_true' );
+		$_SERVER['REMOTE_ADDR'] = '198.18.0.' . wp_rand( 1, 250 );
+		$lic                    = $this->make_license();
+		for ( $i = 0; $i < 31; $i++ ) {
+			$this->rest( 'POST', '/sfls/v1/license/validate', $this->params( $lic ) );
+		}
+		$this->assertSame( 429, $this->rest( 'POST', '/sfls/v1/license/validate', $this->params( $lic ) )->get_status(), 'The shared bucket is used up' );
+
+		$response = $this->rest( 'POST', '/sfls/v1/license/deactivate', $this->params( $lic ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['deactivated'] );
+	}
+
+	/**
+	 * Releases are limited at 60 per 10 minutes per address, and an address
+	 * that is refused does not affect another one.
+	 */
+	public function test_deactivate_is_refused_after_60_releases_from_one_ip(): void {
+		$this->filter( 'sfls_rate_limit_enabled', '__return_true' );
+		$_SERVER['REMOTE_ADDR'] = '198.18.0.' . wp_rand( 1, 250 );
+		$lic                    = $this->make_license();
+		for ( $i = 0; $i < 60; $i++ ) {
+			$this->assertNotSame( 429, $this->rest( 'POST', '/sfls/v1/license/deactivate', $this->params( $lic ) )->get_status(), "Release $i" );
+		}
+		$response = $this->rest( 'POST', '/sfls/v1/license/deactivate', $this->params( $lic ) );
+		$this->assertSame( 429, $response->get_status() );
+		$this->assertSame( 'rate_limited', $response->get_data()['reason'] );
+		$this->assertArrayHasKey( 'Retry-After', $response->get_headers() );
+
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.99';
+		$this->assertNotSame( 429, $this->rest( 'POST', '/sfls/v1/license/deactivate', $this->params( $lic ) )->get_status() );
+	}
+
+	/**
 	 * Per IP: the next request answers 429 with Retry-After.
 	 */
 	public function test_rate_limit_per_ip(): void {

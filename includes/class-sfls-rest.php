@@ -36,17 +36,21 @@ final class SFLS_REST {
 	const NS = 'sfls/v1';
 
 	/**
-	 * Requests per window of the buckets that do not use the default of 30:
-	 * update checks (every site checks on its own schedule, and many sit
-	 * behind one address) and the order status polling of the checkout page
+	 * Requests per window of each bucket ('ip' is the shared bucket of the
+	 * license routes and the fallback for a bucket not listed): releasing a
+	 * seat on a replaced key (its own bucket, so a key switch is never
+	 * refused by the shared one), update checks (every site checks on its own
+	 * schedule, and many sit behind one address) and the order status polling of the checkout page
 	 * (a request every 2 seconds for up to 2 minutes), plus an
 	 * address-wide ceiling for that polling that varying the order or
 	 * transaction cannot get around.
 	 */
 	const DEFAULT_LIMITS = array(
-		'update' => 60,
-		'poll'   => 240,
-		'pollip' => 600,
+		'ip'      => 30,
+		'release' => 60,
+		'update'  => 60,
+		'poll'    => 240,
+		'pollip'  => 600,
 	);
 
 	/**
@@ -226,7 +230,11 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function deactivate( WP_REST_Request $req ) {
-		$limited = $this->rate_limit( 'ip', SFLS_Licenses::client_ip() );
+		// Its own bucket, and not the shared 'ip' one: freeing a seat is cheap
+		// and repeating it changes nothing, and a key switch fires several
+		// other requests from the same address first. Sites that share an
+		// address (one host) must never be refused when they free a seat.
+		$limited = $this->rate_limit( 'release', SFLS_Licenses::client_ip() );
 		if ( $limited ) {
 			return $limited;
 		}
