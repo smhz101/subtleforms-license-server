@@ -172,15 +172,20 @@ final class SFLS_Delivery {
 			/* translators: %s: date */
 			return sprintf( __( 'trial ends %s, no charge', 'subtleforms-license-server' ), $date );
 		}
-		$plan = class_exists( 'SFLS_Paddle' ) ? SFLS_Paddle::plan( (string) $lic['plan'] ) : array();
-		if ( empty( $plan['amount'] ) ) {
+		// What this customer's subscription will charge (stored from Paddle, in
+		// its own currency), so a later change to the plan's price does not change
+		// the promise. The plan's current mapping is only a fallback.
+		$price = SFLS_Licenses::renewal_amount( $lic );
+		if ( null === $price && class_exists( 'SFLS_Paddle' ) ) {
+			$plan = SFLS_Paddle::plan( (string) $lic['plan'] );
+			if ( ! empty( $plan['amount'] ) ) {
+				$price = SFLS_Paddle::format_amount( (string) $plan['amount'], (string) ( $plan['currency'] ?? '' ) ?: 'USD' );
+			}
+		}
+		if ( null === $price || '' === $price ) {
 			/* translators: %s: date */
 			return sprintf( __( 'trial ends %s', 'subtleforms-license-server' ), $date );
 		}
-		$amount = (int) $plan['amount'] / 100;
-		$price  = function_exists( 'wc_price' )
-			? wp_strip_all_tags( html_entity_decode( wc_price( $amount, array( 'currency' => (string) ( $plan['currency'] ?? '' ) ) ) ) )
-			: '$' . number_format( $amount, 2 );
 		/* translators: 1: date, 2: yearly price */
 		return sprintf( __( 'trial ends %1$s, then %2$s/year', 'subtleforms-license-server' ), $date, $price );
 	}
