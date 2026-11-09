@@ -297,7 +297,16 @@ final class SFLS_REST {
 			// Pro caches this answer for hours, longer than a signed link lives,
 			// so the package is a stable address that hands out a fresh signed
 			// link at download time (see package()).
-			$response['package'] = self::package_address( $lic, $domain, 'beta' === $channel ? array( 'channel' => 'beta' ) : array() );
+			// The address names the version this answer offers (1.9.2), so the
+			// download is the package whose sha256 and signature are in this
+			// answer even when a newer release is published before the site
+			// installs it. Addresses cached before 1.9.2 have no version and
+			// still get the current release.
+			$extra = array( 'version' => $release['version'] );
+			if ( 'beta' === $channel ) {
+				$extra['channel'] = 'beta';
+			}
+			$response['package'] = self::package_address( $lic, $domain, $extra );
 			SFLS_Licenses::touch_activation( (int) $lic['id'], $domain, (string) $req->get_param( 'version' ) );
 		}
 
@@ -307,10 +316,12 @@ final class SFLS_REST {
 	/**
 	 * Package endpoint: checks the license and the site, then redirects to a
 	 * newly signed download link that works once within 15 minutes. Without
-	 * a version it serves the latest release of the channel and needs a valid
-	 * license. With a version it serves that release when the license may
-	 * download it (an expired license keeps the versions released while it
-	 * was valid).
+	 * a version (addresses cached before 1.9.2) it serves the latest release
+	 * of the channel and needs a valid license. With a version, which the
+	 * update check puts in the address since 1.9.2, it serves exactly that
+	 * release when the license may download it (an expired license keeps the
+	 * versions released while it was valid). A version that was yanked since
+	 * answers 410.
 	 *
 	 * @param WP_REST_Request $req Request.
 	 * @return WP_REST_Response
@@ -379,8 +390,22 @@ final class SFLS_REST {
 			return $this->error( 403, 'domain_not_activated', __( 'This site is not activated for this license.', 'subtleforms-license-server' ) );
 		}
 		$release = '' === $version ? SFLS_Releases::latest( self::channel( $req ) ) : SFLS_Releases::find( $version );
+		if ( '' !== $version && self::is_withdrawn( $version ) ) {
+			return $this->withdrawn();
+		}
 		if ( ! $release || ! SFLS_Releases::has_package( $release ) ) {
 			return $this->error( 404, 'no_package', __( 'No package is available.', 'subtleforms-license-server' ) );
+		}
+		if ( '' !== $version ) {
+			// A stable site cannot fetch a beta by editing version=. The answer is 410, so a site that
+			// left the beta channel after it cached the address clears it and checks again.
+			if ( 'beta' === $release['channel'] && 'beta' !== self::channel( $req ) ) {
+				return $this->error( 410, 'wrong_channel', __( 'This version is not on your update channel. Check for updates again to get the current version.', 'subtleforms-license-server' ) );
+			}
+			// "Make this the latest" rolled back below this version after the site checked: do not send it.
+			if ( SFLS_Releases::above_pin( $release ) ) {
+				return $this->withdrawn();
+			}
 		}
 		if ( ! SFLS_Releases::allowed( $lic, $release ) ) {
 			return $this->error( 403, 'expired', __( 'This version was released after your license expired. Renew to download it.', 'subtleforms-license-server' ) );
@@ -389,6 +414,26 @@ final class SFLS_REST {
 		$response->header( 'Location', SFLS_Releases::signed_url( $lic['license_key'], $domain, $release['version'] ) );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;
+	}
+
+	/**
+	 * Whether a release exists and is no longer published: yanked, or taken
+	 * back to a draft ("Unpublish to draft"). A version that never existed is
+	 * not withdrawn.
+	 *
+	 * @param string $version Version.
+	 */
+	private static function is_withdrawn( string $version ): bool {
+		$release = SFLS_Releases::get( $version );
+		return $release && ! SFLS_Releases::is_live( $release );
+	}
+
+	/**
+	 * The answer for a version that was offered and has been withdrawn since.
+	 * 410 tells the site this will not come back, and what to do.
+	 */
+	private function withdrawn(): WP_REST_Response {
+		return $this->error( 410, 'version_withdrawn', __( 'This version was withdrawn after your site last checked for updates. Check for updates again to get the current version.', 'subtleforms-license-server' ) );
 	}
 
 	/**
@@ -472,6 +517,9 @@ final class SFLS_REST {
 		}
 		$lic     = SFLS_Licenses::find_by_key( $key );
 		$release = '' === $version ? SFLS_Releases::latest( 'stable' ) : SFLS_Releases::find( $version );
+		if ( $lic && '' !== $version && self::is_withdrawn( $version ) ) {
+			return $this->withdrawn();
+		}
 		if ( ! $lic || ( $release && ! SFLS_Releases::allowed( $lic, $release ) ) || ( ! $release && ! SFLS_Licenses::state( $lic )['valid'] ) ) {
 			return $this->error( 403, 'expired', __( 'An active license is required to download updates.', 'subtleforms-license-server' ) );
 		}
