@@ -387,11 +387,22 @@ final class SFLS_REST {
 			return $this->error( 403, 'domain_not_activated', __( 'This site is not activated for this license.', 'subtleforms-license-server' ) );
 		}
 		$release = '' === $version ? SFLS_Releases::latest( self::channel( $req ) ) : SFLS_Releases::find( $version );
-		if ( '' !== $version && self::is_yanked( $version ) ) {
+		if ( '' !== $version && self::is_withdrawn( $version ) ) {
 			return $this->withdrawn();
 		}
 		if ( ! $release || ! SFLS_Releases::has_package( $release ) ) {
 			return $this->error( 404, 'no_package', __( 'No package is available.', 'subtleforms-license-server' ) );
+		}
+		if ( '' !== $version ) {
+			// A stable site cannot fetch a beta by editing version=. The answer is 410, so a site that
+			// left the beta channel after it cached the address clears it and checks again.
+			if ( 'beta' === $release['channel'] && 'beta' !== self::channel( $req ) ) {
+				return $this->error( 410, 'wrong_channel', __( 'This version is not on your update channel. Check for updates again to get the current version.', 'subtleforms-license-server' ) );
+			}
+			// "Make this the latest" rolled back below this version after the site checked: do not send it.
+			if ( SFLS_Releases::above_pin( $release ) ) {
+				return $this->withdrawn();
+			}
 		}
 		if ( ! SFLS_Releases::allowed( $lic, $release ) ) {
 			return $this->error( 403, 'expired', __( 'This version was released after your license expired. Renew to download it.', 'subtleforms-license-server' ) );
@@ -403,13 +414,15 @@ final class SFLS_REST {
 	}
 
 	/**
-	 * Whether a release was published and then pulled back.
+	 * Whether a release exists and is no longer published: yanked, or taken
+	 * back to a draft ("Unpublish to draft"). A version that never existed is
+	 * not withdrawn.
 	 *
 	 * @param string $version Version.
 	 */
-	private static function is_yanked( string $version ): bool {
+	private static function is_withdrawn( string $version ): bool {
 		$release = SFLS_Releases::get( $version );
-		return $release && 'yanked' === $release['status'];
+		return $release && ! SFLS_Releases::is_live( $release );
 	}
 
 	/**
@@ -501,7 +514,7 @@ final class SFLS_REST {
 		}
 		$lic     = SFLS_Licenses::find_by_key( $key );
 		$release = '' === $version ? SFLS_Releases::latest( 'stable' ) : SFLS_Releases::find( $version );
-		if ( $lic && '' !== $version && self::is_yanked( $version ) ) {
+		if ( $lic && '' !== $version && self::is_withdrawn( $version ) ) {
 			return $this->withdrawn();
 		}
 		if ( ! $lic || ( $release && ! SFLS_Releases::allowed( $lic, $release ) ) || ( ! $release && ! SFLS_Licenses::state( $lic )['valid'] ) ) {

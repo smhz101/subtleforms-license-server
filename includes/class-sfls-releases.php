@@ -358,6 +358,22 @@ final class SFLS_Releases {
 	}
 
 	/**
+	 * Whether a stable release is above the version an admin made the latest.
+	 * Mirrors latest(): stable versions above a live stable pin are not offered,
+	 * so an address that names one has to be refused.
+	 *
+	 * @param array $release Release.
+	 */
+	public static function above_pin( array $release ): bool {
+		$pin = self::pinned();
+		if ( '' === $pin || 'stable' !== $release['channel'] ) {
+			return false;
+		}
+		$pinned = self::get( $pin );
+		return $pinned && self::is_live( $pinned ) && 'stable' === $pinned['channel'] && version_compare( $release['version'], $pin, '>' );
+	}
+
+	/**
 	 * The current (latest stable) release, or an empty record.
 	 *
 	 * @return array
