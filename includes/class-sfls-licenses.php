@@ -295,7 +295,7 @@ final class SFLS_Licenses {
 	 * @return true|WP_Error WP_Error data carries the HTTP status.
 	 */
 	public static function activate_domain( array $lic, string $domain, string $version = '', string $source = 'api' ) {
-		// Seat checks always compare the normalised host, whichever caller sent it.
+		// Seat checks always compare the normalised host and path, whichever caller sent it.
 		$domain = self::normalize_domain( $domain );
 		if ( '' === $domain ) {
 			return new WP_Error( 'missing_parameters', __( 'license_key and site_url are required.', 'subtleforms-license-server' ), array( 'status' => 400 ) );
@@ -312,6 +312,7 @@ final class SFLS_Licenses {
 			);
 		}
 
+		self::upgrade_legacy_activation( (int) $lic['id'], $domain );
 		$existing = self::activation( (int) $lic['id'], $domain );
 		if ( ! $existing && ! empty( $lic['trial'] ) && ! self::is_local_domain( $domain ) && SFLS_Trials::site_used_by_other( $domain, (int) $lic['id'] ) ) {
 			return new WP_Error(
@@ -536,25 +537,94 @@ final class SFLS_Licenses {
 	// ── Domains ─────────────────────────────────────────────────────────
 
 	/**
-	 * Normalise a site URL or host to a bare lowercase host: no trailing dot,
-	 * internationalised names in ASCII (punycode) when intl is available, and
-	 * no "www.". Seat checks compare this form, so "Example.COM.", "www.example.com"
-	 * and "example.com" are one site.
+	 * Normalise a site URL or host to the identity a seat is kept for: the
+	 * lowercase host plus the path of the site, as in "example.com" for a site
+	 * at the root and "example.com/staging" for a copy in a subdirectory.
+	 *
+	 * The host has no trailing dot and no "www.", and internationalised names
+	 * are in ASCII (punycode) when intl is available. The path has no query,
+	 * fragment, trailing slash or repeated slash. Port, scheme and credentials
+	 * are not part of it. Seat checks compare this form, so "Example.COM.",
+	 * "www.example.com/" and "example.com" are one site, and "example.com/shop"
+	 * is another.
 	 *
 	 * @param string $url URL or host.
 	 */
 	public static function normalize_domain( string $url ): string {
-		$url  = trim( $url );
-		$host = wp_parse_url( str_contains( $url, '://' ) ? $url : 'https://' . $url, PHP_URL_HOST );
-		$host = strtolower( rtrim( (string) $host, '.' ) );
+		$url   = trim( $url );
+		$parts = wp_parse_url( str_contains( $url, '://' ) ? $url : 'https://' . $url );
+		$host  = strtolower( rtrim( (string) ( $parts['host'] ?? '' ), '.' ) );
 		if ( '' !== $host && preg_match( '/[^\x00-\x7F]/', $host ) && function_exists( 'idn_to_ascii' ) ) {
 			$ascii = defined( 'INTL_IDNA_VARIANT_UTS46' ) ? idn_to_ascii( $host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46 ) : idn_to_ascii( $host );
 			if ( is_string( $ascii ) && '' !== $ascii ) {
 				$host = strtolower( $ascii );
 			}
 		}
-		$host = (string) preg_replace( '/^www\./', '', $host );
-		return rtrim( $host, '.' );
+		$host = rtrim( (string) preg_replace( '/^www\./', '', $host ), '.' );
+		if ( '' === $host ) {
+			return '';
+		}
+
+		// Only characters that cannot break a signed link or a query string stay in the path.
+		$path = strtolower( (string) preg_replace( '/[^a-z0-9._~%\/-]/', '', strtolower( (string) ( $parts['path'] ?? '' ) ) ) );
+		$path = trim( (string) preg_replace( '#/{2,}#', '/', $path ), '/' );
+
+		// The columns hold 190 characters.
+		return rtrim( substr( '' === $path ? $host : $host . '/' . $path, 0, 190 ), '/' );
+	}
+
+	/**
+	 * The host part of a site identity: "example.com" for "example.com/staging".
+	 * Staging and local rules, trials and the connect check look at the host.
+	 *
+	 * @param string $domain Normalised domain, or a bare host.
+	 */
+	public static function host_of( string $domain ): string {
+		return explode( '/', trim( $domain ), 2 )[0];
+	}
+
+	/**
+	 * Seconds a host-only activation must have been quiet before the site
+	 * that sends its path may take it over (see upgrade_legacy_activation()).
+	 */
+	const LEGACY_QUIET_SECONDS = 2 * DAY_IN_SECONDS;
+
+	/**
+	 * Hand a host-only activation to the site that now identifies itself with
+	 * host and path.
+	 *
+	 * Before 1.9.2 a seat was kept for the host only, and Pro sent the host
+	 * only. A site in a subdirectory (example.com/shop) therefore holds a row
+	 * named "example.com", and so does a root site on that host. When the
+	 * subdirectory site updates Pro it asks for "example.com/shop" and finds no
+	 * row. Taking over the host-only row keeps it from using a second seat.
+	 *
+	 * The server cannot tell that site from a root site, or from a staging
+	 * copy of a root site, that still sends the host only. A root site on an
+	 * older Pro validates at least every twelve hours and keeps its row alive,
+	 * so a row is taken over only when it has been quiet for two days. A copy
+	 * of a live site never takes the seat of the site it was copied from; it
+	 * activates like any other new site.
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $domain     Normalised domain with a path.
+	 * @return bool True when a host-only row was renamed.
+	 */
+	public static function upgrade_legacy_activation( int $license_id, string $domain ): bool {
+		global $wpdb;
+		$host = self::host_of( $domain );
+		if ( $host === $domain || '' === $host || self::activation( $license_id, $domain ) ) {
+			return false;
+		}
+		$table = SFLS_DB::activations();
+		$quiet = gmdate( 'Y-m-d H:i:s', time() - self::LEGACY_QUIET_SECONDS );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$changed = (int) $wpdb->query( $wpdb->prepare( "UPDATE %i SET domain = %s, last_seen_at = %s WHERE license_id = %d AND domain = %s AND last_seen_at <= %s", $table, $domain, current_time( 'mysql', true ), $license_id, $host, $quiet ) );
+		if ( 1 === $changed ) {
+			self::log( $license_id, $domain, 'upgrade', 'api' );
+			return true;
+		}
+		return false;
 	}
 
 	/**
@@ -565,7 +635,7 @@ final class SFLS_Licenses {
 	 * @param string $domain Normalised domain.
 	 */
 	public static function is_dev_host( string $domain ): bool {
-		$domain = strtolower( trim( $domain, " \t\n\r\0\x0B." ) );
+		$domain = strtolower( trim( self::host_of( $domain ), " \t\n\r\0\x0B." ) );
 		if ( in_array( $domain, array( 'localhost', '127.0.0.1', '::1', '[::1]' ), true ) ) {
 			return true;
 		}
@@ -641,9 +711,10 @@ final class SFLS_Licenses {
 	 * Licenses › Settings. Other hosts can be added with the
 	 * `sfls_is_local_domain` filter.
 	 *
-	 * @param string $domain Normalised domain.
+	 * @param string $domain Normalised domain; only its host is looked at.
 	 */
 	public static function is_local_domain( string $domain ): bool {
+		$domain = self::host_of( $domain );
 		if ( self::is_dev_host( $domain ) ) {
 			return true;
 		}

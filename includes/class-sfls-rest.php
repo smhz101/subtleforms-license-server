@@ -504,7 +504,8 @@ final class SFLS_REST {
 			return $limited;
 		}
 		$code   = preg_replace( '/[^A-Za-z0-9]/', '', (string) $req->get_param( 'code' ) );
-		$domain = SFLS_Licenses::normalize_domain( sanitize_text_field( (string) $req->get_param( 'site_url' ) ) );
+		// Pro 2.8.2 and later keep the path of the site; older versions are known by their host.
+		$domain = SFLS_Connect::site_identity( sanitize_text_field( (string) $req->get_param( 'site_url' ) ), (string) $req->get_param( 'identity' ) );
 		$fail   = $this->error( 400, 'invalid_code', __( 'This connection code is invalid or has expired. Connect the site again.', 'subtleforms-license-server' ) );
 
 		if ( '' === $code || '' === $domain ) {
@@ -567,6 +568,10 @@ final class SFLS_REST {
 		if ( ! $lic ) {
 			return array( null, $domain, $this->error( 404, 'license_not_found', __( 'That license key was not found. Check it in your SubtleForms account.', 'subtleforms-license-server' ) ) );
 		}
+
+		// A site in a subdirectory that was activated by host only (before 1.9.2)
+		// takes over its quiet host-only row the first time it sends its path.
+		SFLS_Licenses::upgrade_legacy_activation( (int) $lic['id'], $domain );
 
 		return array( $lic, $domain, null );
 	}

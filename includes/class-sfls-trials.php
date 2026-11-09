@@ -257,7 +257,8 @@ final class SFLS_Trials {
 	 * @param string $domain     Normalised domain.
 	 */
 	public static function record_site( int $license_id, string $domain ): void {
-		self::claim( 'site', SFLS_Licenses::normalize_domain( $domain ), $license_id );
+		// A trial belongs to the host: a copy in a subdirectory is the same site.
+		self::claim( 'site', SFLS_Licenses::host_of( SFLS_Licenses::normalize_domain( $domain ) ), $license_id );
 	}
 
 	/**
@@ -267,7 +268,7 @@ final class SFLS_Trials {
 	 * @param int    $license_id The license asking (its own claims do not count).
 	 */
 	public static function site_used_by_other( string $domain, int $license_id = 0 ): bool {
-		$domain = SFLS_Licenses::normalize_domain( $domain );
+		$domain = SFLS_Licenses::host_of( SFLS_Licenses::normalize_domain( $domain ) );
 		if ( '' === $domain || SFLS_Licenses::is_local_domain( $domain ) ) {
 			return false;
 		}

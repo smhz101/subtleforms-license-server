@@ -18,11 +18,13 @@ class SFLS_Integration_Leftovers_Test extends SFLS_Test_Case {
 	 * Case, a trailing dot, www and URL forms all give one host.
 	 */
 	public function test_normalize_domain(): void {
-		foreach ( array( 'Example.COM', 'example.com.', 'www.example.com', 'WWW.Example.Com.', 'https://www.EXAMPLE.com./path?x=1', ' example.com ' ) as $in ) {
+		foreach ( array( 'Example.COM', 'example.com.', 'www.example.com', 'WWW.Example.Com.', 'https://www.EXAMPLE.com./?x=1', ' example.com ' ) as $in ) {
 			$this->assertSame( 'example.com', SFLS_Licenses::normalize_domain( $in ), $in );
 		}
 		$this->assertSame( 'shop.example.com', SFLS_Licenses::normalize_domain( 'https://Shop.Example.com' ) );
 		$this->assertSame( '', SFLS_Licenses::normalize_domain( '' ) );
+		// The path of a site is part of its identity (1.9.2), the query is not.
+		$this->assertSame( 'example.com/path', SFLS_Licenses::normalize_domain( 'https://www.EXAMPLE.com./path?x=1' ) );
 	}
 
 	/**

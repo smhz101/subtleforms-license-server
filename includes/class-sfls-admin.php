@@ -687,6 +687,7 @@ final class SFLS_Admin {
 		$events  = array(
 			'activate'   => __( 'Activated', 'subtleforms-license-server' ),
 			'deactivate' => __( 'Deactivated', 'subtleforms-license-server' ),
+			'upgrade'    => __( 'Site address updated', 'subtleforms-license-server' ),
 		);
 		$sources = array(
 			'api'     => __( 'Plugin (API)', 'subtleforms-license-server' ),

@@ -102,7 +102,22 @@ final class SFLS_Connect {
 			'state'  => substr( sanitize_text_field( $get( 'state' ) ), 0, 255 ),
 			'name'   => substr( sanitize_text_field( $get( 'name' ) ), 0, 100 ),
 			'v'      => substr( sanitize_text_field( $get( 'v' ) ), 0, 20 ),
+			'id'     => substr( sanitize_key( $get( 'id' ) ), 0, 2 ),
 		);
+	}
+
+	/**
+	 * The identity a connection is made for. Pro 2.8.2 and later send `id=2`
+	 * and are known by host and path. Older versions send the address of the
+	 * site too, but they check their license by host only, so a connection
+	 * from them is kept by host.
+	 *
+	 * @param string $site Address of the site.
+	 * @param string $id   Identity version the site sent.
+	 */
+	public static function site_identity( string $site, string $id ): string {
+		$domain = SFLS_Licenses::normalize_domain( $site );
+		return '2' === $id ? $domain : SFLS_Licenses::host_of( $domain );
 	}
 
 	/**
@@ -118,8 +133,8 @@ final class SFLS_Connect {
 		if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
 			return __( 'The return address is not a web address.', 'subtleforms-license-server' );
 		}
-		$site_host   = SFLS_Licenses::normalize_domain( $args['site'] );
-		$return_host = SFLS_Licenses::normalize_domain( $args['return'] );
+		$site_host   = SFLS_Licenses::host_of( SFLS_Licenses::normalize_domain( $args['site'] ) );
+		$return_host = SFLS_Licenses::host_of( SFLS_Licenses::normalize_domain( $args['return'] ) );
 		if ( '' === $site_host || $site_host !== $return_host ) {
 			return __( 'The return address does not belong to the site being connected. For your safety the connection was stopped.', 'subtleforms-license-server' );
 		}
@@ -198,7 +213,7 @@ final class SFLS_Connect {
 			return;
 		}
 
-		$domain = SFLS_Licenses::normalize_domain( $args['site'] );
+		$domain = self::site_identity( $args['site'], $args['id'] );
 		$result = SFLS_Licenses::activate_domain( $lic, $domain, $args['v'], 'connect' );
 		if ( is_wp_error( $result ) ) {
 			$this->error = $result->get_error_message();
@@ -325,7 +340,7 @@ final class SFLS_Connect {
 		}
 		$query = array();
 		wp_parse_str( (string) wp_parse_url( $back, PHP_URL_QUERY ), $query );
-		$site = SFLS_Licenses::normalize_domain( (string) ( $query['site'] ?? '' ) );
+		$site = self::site_identity( (string) ( $query['site'] ?? '' ), (string) ( $query['id'] ?? '' ) );
 		wp_enqueue_style( 'sfls-front' );
 		echo '<div class="sfls sfls-login-intro"><span class="sfls-logo" aria-hidden="true">' . self::logo_svg() . '</span><div><strong>' . esc_html__( 'Sign in to connect your site', 'subtleforms-license-server' ) . '</strong><p>' . // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static SVG.
 			esc_html(
@@ -471,7 +486,7 @@ body.sfls-connect-body{background:#f0f0f1;color:#1e1e1e;font-family:-apple-syste
 	 */
 	private function render_picker( array $args ): void {
 		$user     = wp_get_current_user();
-		$domain   = SFLS_Licenses::normalize_domain( $args['site'] );
+		$domain   = self::site_identity( $args['site'], $args['id'] );
 		$name     = '' !== $args['name'] ? $args['name'] : $domain;
 		$licenses = SFLS_Licenses::for_user( $user );
 		$error    = $this->error;
