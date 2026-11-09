@@ -533,6 +533,41 @@ final class SFLS_Account {
 	}
 
 	/**
+	 * Attribute that sends the Cancel form through Paddle's Retain cancellation
+	 * flow. Live Paddle subscriptions only: Retain does not load on sandbox.
+	 * Also loads Paddle.js and assets/js/sfls-retain.js, once.
+	 *
+	 * @param array $lic License.
+	 * @return string Attribute with a leading space, or an empty string.
+	 */
+	public static function retain_attr( array $lic ): string {
+		$config = SFLS_Paddle::config();
+		$sub_id = (string) ( $lic['paddle_subscription_id'] ?? '' );
+		if ( 'live' !== $config['env'] || '' === $config['client_token'] || 0 !== strpos( $sub_id, 'sub_' ) ) {
+			return '';
+		}
+		if ( ! wp_script_is( 'sfls-retain', 'enqueued' ) ) {
+			if ( ! wp_script_is( 'sfls-paddle-js', 'registered' ) ) {
+				// Paddle requires Paddle.js to be loaded from its CDN (it is not allowed to be self-hosted).
+				wp_register_script( 'sfls-paddle-js', SFLS_Paddle::JS_URL, array(), null, true ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- Paddle serves the current v2 build.
+			}
+			wp_enqueue_script( 'sfls-retain', SFLS_URL . 'assets/js/sfls-retain.js', array( 'sfls-paddle-js' ), SFLS_VERSION, true );
+			wp_localize_script(
+				'sfls-retain',
+				'sflsRetain',
+				array(
+					'token' => $config['client_token'],
+					'i18n'  => array(
+						'scheduled' => __( 'Your cancellation is scheduled. It can take a minute to show here.', 'subtleforms-license-server' ),
+						'kept'      => __( 'Thanks for staying. Your subscription has been updated.', 'subtleforms-license-server' ),
+					),
+				)
+			);
+		}
+		return ' data-sfls-retain-subscription="' . esc_attr( $sub_id ) . '"';
+	}
+
+	/**
 	 * Billing state and buttons of a Paddle license.
 	 *
 	 * @param array $lic   License.
@@ -564,7 +599,11 @@ final class SFLS_Account {
 			echo '<form method="post" class="sfls-inline-form" action="' . esc_url( $action ) . '">';
 			self::billing_fields( $lic, 'payment' );
 			echo '<button type="submit" class="sfls-btn sfls-btn--' . ( 'past_due' === $status ? 'primary' : 'secondary' ) . ' sfls-btn--sm">' . esc_html__( 'Update payment method', 'subtleforms-license-server' ) . '</button></form>';
-			echo '<form method="post" class="sfls-inline-form" action="' . esc_url( $action ) . '">';
+			$retain = '';
+			if ( empty( $lic['cancels_at'] ) ) {
+				$retain = self::retain_attr( $lic );
+			}
+			echo '<form method="post" class="sfls-inline-form" action="' . esc_url( $action ) . '"' . $retain . '>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in retain_attr().
 			if ( ! empty( $lic['cancels_at'] ) ) {
 				self::billing_fields( $lic, 'resume' );
 				echo '<button type="submit" class="sfls-btn sfls-btn--primary sfls-btn--sm">' . esc_html__( 'Resume', 'subtleforms-license-server' ) . '</button>';
@@ -573,7 +612,10 @@ final class SFLS_Account {
 				$confirm = ! empty( $lic['trial'] )
 					? __( 'Cancel auto-renew? Pro keeps working until the trial ends and you will not be charged.', 'subtleforms-license-server' )
 					: __( 'Cancel auto-renew? Pro keeps working until the end of the period you paid for. You can resume before then.', 'subtleforms-license-server' );
-				echo '<button type="submit" class="sfls-btn sfls-btn--ghost sfls-btn--sm" data-sfls-confirm="' . esc_attr( $confirm ) . '">' . esc_html__( 'Cancel auto-renew', 'subtleforms-license-server' ) . '</button>';
+				// Paddle's cancellation flow asks its own questions; the confirm text is
+				// only used if the flow cannot load and the form posts directly.
+				$confirm_attr = ( '' === $retain ? ' data-sfls-confirm="' : ' data-sfls-retain-confirm="' ) . esc_attr( $confirm ) . '"';
+				echo '<button type="submit" class="sfls-btn sfls-btn--ghost sfls-btn--sm"' . $confirm_attr . '>' . esc_html__( 'Cancel auto-renew', 'subtleforms-license-server' ) . '</button>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped above.
 			}
 			echo '</form>';
 		}
