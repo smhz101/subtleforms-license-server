@@ -123,7 +123,7 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function validate_now( WP_REST_Request $req ) {
-		[ $lic, $domain, $error ] = $this->resolve( $req );
+		[ $lic, $domain, $error ] = $this->resolve( $req, true );
 		if ( $error ) {
 			return $error;
 		}
@@ -134,11 +134,14 @@ final class SFLS_REST {
 			// Same shape as every other error (valid, reason, error). It stays
 			// HTTP 200, which Pro reads as "inactive" rather than "invalid", and
 			// keeps "message" for Pro versions that read that field (LS-10).
-			$text = __( 'This site is not activated for this license.', 'subtleforms-license-server' );
+			$removed = SFLS_Licenses::was_removed( (int) $lic['id'], $domain );
+			$text    = $removed
+				? __( 'This site was removed from the license in your account.', 'subtleforms-license-server' )
+				: __( 'This site is not activated for this license.', 'subtleforms-license-server' );
 			return rest_ensure_response(
 				array(
 					'valid'   => false,
-					'reason'  => 'domain_not_activated',
+					'reason'  => $removed ? 'site_removed' : 'domain_not_activated',
 					'error'   => $text,
 					'message' => $text,
 				) + array_diff_key( self::with_data( $payload ), array( 'valid' => 1, 'status' => 1 ) )
@@ -504,7 +507,8 @@ final class SFLS_REST {
 			return $limited;
 		}
 		$code   = preg_replace( '/[^A-Za-z0-9]/', '', (string) $req->get_param( 'code' ) );
-		$domain = SFLS_Licenses::normalize_domain( sanitize_text_field( (string) $req->get_param( 'site_url' ) ) );
+		// Pro 2.8.2 and later keep the path of the site; older versions are known by their host.
+		$domain = SFLS_Connect::site_identity( esc_url_raw( (string) $req->get_param( 'site_url' ), array( 'http', 'https' ) ), (string) $req->get_param( 'identity' ) );
 		$fail   = $this->error( 400, 'invalid_code', __( 'This connection code is invalid or has expired. Connect the site again.', 'subtleforms-license-server' ) );
 
 		if ( '' === $code || '' === $domain ) {
@@ -542,10 +546,12 @@ final class SFLS_REST {
 	/**
 	 * Look up the license and domain of a request.
 	 *
-	 * @param WP_REST_Request $req Request.
+	 * @param WP_REST_Request $req     Request.
+	 * @param bool            $upgrade Whether a quiet host-only row may be handed to this host/path
+	 *                                 (validate only; activate does it itself, and deactivate never does).
 	 * @return array{0:?array,1:string,2:?WP_REST_Response}
 	 */
-	private function resolve( WP_REST_Request $req ): array {
+	private function resolve( WP_REST_Request $req, bool $upgrade = false ): array {
 		$key    = strtoupper( sanitize_text_field( (string) $req->get_param( 'license_key' ) ) );
 		$domain = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site_url' ) );
 
@@ -566,6 +572,14 @@ final class SFLS_REST {
 		$lic = SFLS_Licenses::find_by_key( $key );
 		if ( ! $lic ) {
 			return array( null, $domain, $this->error( 404, 'license_not_found', __( 'That license key was not found. Check it in your SubtleForms account.', 'subtleforms-license-server' ) ) );
+		}
+
+		// A site in a subdirectory that was activated by host only (before 1.9.2)
+		// takes over its quiet host-only row the first time it validates with its
+		// path. Deactivate never does this: a copy must not be able to rename the
+		// seat of the site it was copied from and then delete it.
+		if ( $upgrade ) {
+			SFLS_Licenses::upgrade_legacy_activation( (int) $lic['id'], $domain );
 		}
 
 		return array( $lic, $domain, null );
@@ -646,7 +660,7 @@ final class SFLS_REST {
 			return $limited;
 		}
 		// A site that can still be activated is not counted against the key.
-		$newcomer = $valid && ( SFLS_Licenses::has_free_slot( $lic ) || SFLS_Licenses::is_local_domain( $domain ) );
+		$newcomer = $valid && ( SFLS_Licenses::has_seat_for( $lic, $domain ) || SFLS_Licenses::is_local_domain( $domain ) );
 		$scale    = $lic ? self::failure_scale( $lic ) * self::CEILING_FACTOR : self::CEILING_FACTOR;
 		if ( ! $newcomer ) {
 			$limited = $this->rate_limit( 'ceiling', $key, false, $scale );

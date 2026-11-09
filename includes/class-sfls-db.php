@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '10';
+	const SCHEMA_VERSION = '11';
 
 	/**
 	 * Licence IDs whose Agency seats were already more than the plan's 25
@@ -204,6 +204,8 @@ final class SFLS_DB {
   plugin_version varchar(20) NOT NULL DEFAULT '',
   activated_at datetime NOT NULL,
   last_seen_at datetime NOT NULL,
+  legacy tinyint(1) NOT NULL DEFAULT 0,
+  legacy_joined_by varchar(190) NOT NULL DEFAULT '',
   PRIMARY KEY  (id),
   UNIQUE KEY license_domain (license_id,domain),
   KEY license_id (license_id)
@@ -402,6 +404,14 @@ final class SFLS_DB {
 			self::migrate_agency_seats();
 		}
 
+		// Schema 11: a host-only activation that exists now is a legacy row, decided
+		// once here and never from the version a site reports later. Only when
+		// crossing the boundary, so a host-only row added after the deploy stays a
+		// current root site with a seat of its own.
+		if ( '' !== $previous && version_compare( $previous, '11', '<' ) ) {
+			self::mark_legacy_activations();
+		}
+
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
 
 		// Private folder for release packages.
@@ -450,6 +460,17 @@ final class SFLS_DB {
 			update_option( self::AGENCY_OVER_LIMIT, $over, false );
 		}
 		return $over;
+	}
+
+	/**
+	 * Schema 11: mark every host-only activation (no path) as a legacy row.
+	 * install() calls it only when the stored schema version is below 11.
+	 * Returns how many rows were marked.
+	 */
+	public static function mark_legacy_activations(): int {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->query( $wpdb->prepare( 'UPDATE %i SET legacy = 1 WHERE domain NOT LIKE %s', self::activations(), '%/%' ) );
 	}
 
 	/**
@@ -521,7 +542,7 @@ final class SFLS_DB {
 	 */
 	public static function prune(): int {
 		global $wpdb;
-		$counters = self::prune_counters(); // Counters are not activity history: always pruned.
+		$counters = self::prune_counters() + SFLS_Licenses::prune_legacy_rows(); // Not activity history: always pruned.
 		$days     = SFLS_Settings::retention_days();
 		if ( $days <= 0 ) {
 			return $counters;

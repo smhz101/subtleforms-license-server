@@ -687,6 +687,7 @@ final class SFLS_Admin {
 		$events  = array(
 			'activate'   => __( 'Activated', 'subtleforms-license-server' ),
 			'deactivate' => __( 'Deactivated', 'subtleforms-license-server' ),
+			'upgrade'    => __( 'Site address updated', 'subtleforms-license-server' ),
 		);
 		$sources = array(
 			'api'     => __( 'Plugin (API)', 'subtleforms-license-server' ),
@@ -1582,7 +1583,7 @@ final class SFLS_Admin {
 				$msg = __( 'All sites deactivated.', 'subtleforms-license-server' );
 				break;
 			case 'deactivate':
-				$domain = SFLS_Licenses::normalize_domain( sanitize_text_field( wp_unslash( $_GET['domain'] ?? '' ) ) );
+				$domain = SFLS_Licenses::normalize_domain( esc_url_raw( wp_unslash( $_GET['domain'] ?? '' ), array( 'http', 'https' ) ) );
 				SFLS_Licenses::remove_activation( $id, $domain, 'admin' );
 				/* translators: %s: domain */
 				$msg = sprintf( __( '%s deactivated.', 'subtleforms-license-server' ), $domain );
