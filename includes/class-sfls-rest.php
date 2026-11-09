@@ -134,11 +134,14 @@ final class SFLS_REST {
 			// Same shape as every other error (valid, reason, error). It stays
 			// HTTP 200, which Pro reads as "inactive" rather than "invalid", and
 			// keeps "message" for Pro versions that read that field (LS-10).
-			$text = __( 'This site is not activated for this license.', 'subtleforms-license-server' );
+			$removed = SFLS_Licenses::was_removed( (int) $lic['id'], $domain );
+			$text    = $removed
+				? __( 'This site was removed from the license in your account.', 'subtleforms-license-server' )
+				: __( 'This site is not activated for this license.', 'subtleforms-license-server' );
 			return rest_ensure_response(
 				array(
 					'valid'   => false,
-					'reason'  => 'domain_not_activated',
+					'reason'  => $removed ? 'site_removed' : 'domain_not_activated',
 					'error'   => $text,
 					'message' => $text,
 				) + array_diff_key( self::with_data( $payload ), array( 'valid' => 1, 'status' => 1 ) )
@@ -657,7 +660,7 @@ final class SFLS_REST {
 			return $limited;
 		}
 		// A site that can still be activated is not counted against the key.
-		$newcomer = $valid && ( SFLS_Licenses::has_free_slot( $lic ) || SFLS_Licenses::is_local_domain( $domain ) );
+		$newcomer = $valid && ( SFLS_Licenses::has_seat_for( $lic, $domain ) || SFLS_Licenses::is_local_domain( $domain ) );
 		$scale    = $lic ? self::failure_scale( $lic ) * self::CEILING_FACTOR : self::CEILING_FACTOR;
 		if ( ! $newcomer ) {
 			$limited = $this->rate_limit( 'ceiling', $key, false, $scale );

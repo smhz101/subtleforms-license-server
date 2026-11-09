@@ -46,6 +46,8 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 			array(
 				'license_key' => $lic['license_key'],
 				'site_url'    => $site,
+				// Pro 2.8.2 and later send the path and report their version.
+				'version'     => '2.8.2',
 			)
 		);
 	}
@@ -203,6 +205,8 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 		$this->assertSame( 200, $activated->get_status(), 'No second seat is needed.' );
 		$this->assertSame( array( 'legacy-act.example.com/blog' ), $this->domains( $lic ) );
 
+
+		// The update check does not rename anything: only activate and validate do.
 		$lic2 = $this->make_license( array( 'plan' => 'starter' ) );
 		SFLS_Licenses::add_activation( (int) $lic2['id'], 'legacy-upd.example.com' );
 		$this->seen_ago( (int) $lic2['id'], 'legacy-upd.example.com', 5 * DAY_IN_SECONDS );
@@ -214,8 +218,8 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 				'site_url'    => 'https://legacy-upd.example.com/blog',
 			)
 		)->get_data();
-		$this->assertNotSame( '', $check['package'], 'The update check sees the upgraded row.' );
-		$this->assertSame( array( 'legacy-upd.example.com/blog' ), $this->domains( $lic2 ) );
+		$this->assertSame( '', $check['package'] );
+		$this->assertSame( array( 'legacy-upd.example.com' ), $this->domains( $lic2 ) );
 	}
 
 	/**
@@ -231,15 +235,18 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 		$this->assertFalse( $validate['valid'] );
 		$this->assertSame( 'domain_not_activated', $validate['reason'] );
 
+		// The host-only row may be a root site on an older Pro, so the copy is
+		// counted with it as one seat; it never takes the row over.
 		$activate = $this->call( 'activate', $lic, 'https://live-root.example.com/staging' );
-		$this->assertSame( 'activation_limit', $activate->get_data()['reason'], 'The copy has no seat of its own.' );
-
-		$this->assertSame( array( 'live-root.example.com' ), $this->domains( $lic ), 'The live site keeps its row.' );
+		$this->assertSame( 200, $activate->get_status() );
+		$this->assertSame( 1, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
+		$this->assertSame( array( 'live-root.example.com', 'live-root.example.com/staging' ), $this->domains( $lic ), 'The live site keeps its row.' );
 		$this->assertTrue( $this->call( 'validate', $lic, 'https://live-root.example.com' )->get_data()['valid'] );
 	}
 
 	/**
-	 * With a free seat the copy simply activates, next to the live site.
+	 * With a free seat the copy simply activates, next to the live site, and
+	 * the two rows are one seat while the host-only row is a legacy one.
 	 */
 	public function test_a_copy_beside_a_live_host_only_row_activates_with_a_free_seat(): void {
 		$lic = $this->make_license( array( 'plan' => 'pro' ) );
@@ -247,6 +254,7 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 
 		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://live-free.example.com/staging' )->get_status() );
 		$this->assertSame( array( 'live-free.example.com', 'live-free.example.com/staging' ), $this->domains( $lic ) );
+		$this->assertSame( 1, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
 		$this->assertTrue( $this->call( 'validate', $lic, 'https://live-free.example.com' )->get_data()['valid'] );
 	}
 
@@ -332,5 +340,149 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 		$this->assertTrue( SFLS_Trials::site_used_by_other( 'trial-host.example.com', 0 ) );
 		$this->assertTrue( SFLS_Trials::site_used_by_other( 'https://trial-host.example.com/other', 0 ) );
 		$this->assertFalse( SFLS_Trials::site_used_by_other( 'trial-host.example.com', (int) $lic['id'] ) );
+	}
+
+	/**
+	 * Deactivating never runs the legacy rename: a copy that deactivates first
+	 * leaves a quiet host-only row alone and still hears "deactivated".
+	 */
+	public function test_deactivate_from_a_path_leaves_a_quiet_host_only_row(): void {
+		$lic = $this->make_license( array( 'plan' => 'starter' ) );
+		SFLS_Licenses::add_activation( (int) $lic['id'], 'quiet-prod.example.com', '2.8.1' );
+		$this->seen_ago( (int) $lic['id'], 'quiet-prod.example.com', 4 * DAY_IN_SECONDS );
+
+		$res = $this->call( 'deactivate', $lic, 'https://quiet-prod.example.com/staging' );
+		$this->assertSame( 200, $res->get_status() );
+		$this->assertTrue( $res->get_data()['deactivated'] );
+		$this->assertSame( array( 'quiet-prod.example.com' ), $this->domains( $lic ) );
+		$this->assertNotContains( 'upgrade', wp_list_pluck( SFLS_Licenses::log_entries( (int) $lic['id'], 10 ), 'event' ) );
+	}
+
+	/**
+	 * A subdirectory site that activates while its host-only row is quiet and
+	 * the license has a free seat ends with one row, not two.
+	 */
+	public function test_subdirectory_upgrade_with_a_free_seat_ends_with_one_row(): void {
+		$lic = $this->make_license( array( 'plan' => 'pro' ) );
+		SFLS_Licenses::add_activation( (int) $lic['id'], 'free-seat.example.com', '2.8.1' );
+		$this->seen_ago( (int) $lic['id'], 'free-seat.example.com', 40 * HOUR_IN_SECONDS );
+
+		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://free-seat.example.com/shop' )->get_status() );
+		$this->assertSame( array( 'free-seat.example.com/shop' ), $this->domains( $lic ) );
+		$this->assertSame( 1, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
+	}
+
+	/**
+	 * The quiet window is 36 hours, shorter than Pro's 48 hour grace.
+	 */
+	public function test_the_quiet_window_is_shorter_than_the_pro_grace(): void {
+		$this->assertSame( 36 * HOUR_IN_SECONDS, SFLS_Licenses::LEGACY_QUIET_SECONDS );
+		$lic = $this->make_license( array( 'plan' => 'starter' ) );
+		SFLS_Licenses::add_activation( (int) $lic['id'], 'window.example.com', '2.8.1' );
+		$this->seen_ago( (int) $lic['id'], 'window.example.com', 30 * HOUR_IN_SECONDS );
+		$this->call( 'validate', $lic, 'https://window.example.com/a' );
+		$this->assertSame( array( 'window.example.com' ), $this->domains( $lic ), 'Not quiet long enough.' );
+		$this->seen_ago( (int) $lic['id'], 'window.example.com', 37 * HOUR_IN_SECONDS );
+		$this->assertTrue( $this->call( 'validate', $lic, 'https://window.example.com/a' )->get_data()['valid'] );
+		$this->assertSame( array( 'window.example.com/a' ), $this->domains( $lic ) );
+	}
+
+	/**
+	 * A path multisite: the root keeps the legacy row alive, its subsites
+	 * activate as host/path identities and count with it as one seat, even on a
+	 * full license. Once the row goes quiet it is dropped and each site is a seat.
+	 */
+	public function test_path_multisite_root_and_subsites_share_one_seat_until_the_legacy_row_goes(): void {
+		$lic = $this->make_license( array( 'plan' => 'starter' ) );
+		SFLS_Licenses::add_activation( (int) $lic['id'], 'network.example.com', '2.8.1' );
+		$this->seen_ago( (int) $lic['id'], 'network.example.com', 6 * HOUR_IN_SECONDS );
+
+		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://network.example.com/one' )->get_status() );
+		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://network.example.com/two' )->get_status() );
+		$this->assertSame( 3, count( $this->domains( $lic ) ) );
+		$this->assertSame( 1, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
+		$data = $this->call( 'validate', $lic, 'https://network.example.com/one' )->get_data();
+		$this->assertSame( 1, (int) $data['sites_used'] );
+		$this->assertTrue( $this->call( 'validate', $lic, 'https://network.example.com' )->get_data()['valid'], 'The root is untouched.' );
+
+		// The root moves to the new identity (or is gone): its legacy row goes quiet and is dropped.
+		$this->seen_ago( (int) $lic['id'], 'network.example.com', 40 * HOUR_IN_SECONDS );
+		$this->assertSame( 2, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
+		$this->assertSame( array( 'network.example.com/one', 'network.example.com/two' ), $this->domains( $lic ) );
+
+		// A one-site license now refuses a third site: one seat per site.
+		$third = $this->call( 'activate', $lic, 'https://network.example.com/three' );
+		$this->assertSame( 'activation_limit', $third->get_data()['reason'] );
+	}
+
+	/**
+	 * A host-only row of Pro 2.8.2 or later is a root site with a seat of its own.
+	 */
+	public function test_a_current_root_site_keeps_a_seat_apart_from_a_copy(): void {
+		$lic = $this->make_license( array( 'plan' => 'starter' ) );
+		$this->call( 'activate', $lic, 'https://current-root.example.com' );
+		$this->assertSame( 'activation_limit', $this->call( 'activate', $lic, 'https://current-root.example.com/staging' )->get_data()['reason'] );
+	}
+
+	/**
+	 * The connect exchange and the picker compute the same identity for a
+	 * percent-encoded path.
+	 */
+	public function test_encoded_paths_give_one_identity_in_the_picker_and_the_exchange(): void {
+		$lic = $this->make_license( array( 'plan' => 'pro' ) );
+		$site = 'https://enc.example.com/caf%C3%A9';
+		$picker = SFLS_Connect::site_identity( esc_url_raw( $site, array( 'http', 'https' ) ), '2' );
+		$this->assertSame( 'enc.example.com/caf%c3%a9', $picker );
+
+		$code = 'ENCODEDPATH' . wp_generate_password( 8, false );
+		set_transient(
+			'sfls_code_' . hash( 'sha256', $code ),
+			array(
+				'license_id' => (int) $lic['id'],
+				'domain'     => $picker,
+				'user_id'    => 1,
+			),
+			300
+		);
+		$res  = $this->rest(
+			'POST',
+			'/sfls/v1/connect/exchange',
+			array(
+				'code'     => $code,
+				'site_url' => $site,
+				'identity' => '2',
+			)
+		);
+		$this->assertSame( 200, $res->get_status(), wp_json_encode( $res->get_data() ) );
+		$this->assertSame( $lic['license_key'], $res->get_data()['license_key'] );
+	}
+
+	/**
+	 * A site removed through the account page or wp-admin answers site_removed;
+	 * one removed through the API, or never activated, answers domain_not_activated.
+	 */
+	public function test_a_site_removed_in_the_account_answers_site_removed(): void {
+		$lic = $this->make_license( array( 'plan' => 'pro' ) );
+		$this->call( 'activate', $lic, 'https://removed.example.com' );
+		SFLS_Licenses::remove_activation( (int) $lic['id'], 'removed.example.com', 'account' );
+
+		$data = $this->call( 'validate', $lic, 'https://removed.example.com' )->get_data();
+		$this->assertFalse( $data['valid'] );
+		$this->assertSame( 'site_removed', $data['reason'] );
+
+		$this->assertSame( 'domain_not_activated', $this->call( 'validate', $lic, 'https://never.example.com' )->get_data()['reason'] );
+
+		// Activating again clears it; an API deactivate afterwards is not a removal.
+		$this->call( 'activate', $lic, 'https://removed.example.com' );
+		$this->assertTrue( $this->call( 'validate', $lic, 'https://removed.example.com' )->get_data()['valid'] );
+		$this->call( 'deactivate', $lic, 'https://removed.example.com' );
+		$this->assertSame( 'domain_not_activated', $this->call( 'validate', $lic, 'https://removed.example.com' )->get_data()['reason'] );
+
+		// Admin removal counts too, and a marker older than 30 days is gone.
+		$this->call( 'activate', $lic, 'https://removed.example.com' );
+		SFLS_Licenses::remove_activation( (int) $lic['id'], 'removed.example.com', 'admin' );
+		$this->assertSame( 'site_removed', $this->call( 'validate', $lic, 'https://removed.example.com' )->get_data()['reason'] );
+		update_option( SFLS_Licenses::REMOVED_OPTION, array( $lic['id'] . '|removed.example.com' => time() - 31 * DAY_IN_SECONDS ) );
+		$this->assertSame( 'domain_not_activated', $this->call( 'validate', $lic, 'https://removed.example.com' )->get_data()['reason'] );
 	}
 }

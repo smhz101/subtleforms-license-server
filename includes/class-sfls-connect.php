@@ -377,7 +377,7 @@ final class SFLS_Connect {
 		if ( SFLS_Licenses::activation( (int) $lic['id'], $domain ) || SFLS_Licenses::is_local_domain( $domain ) ) {
 			return '';
 		}
-		if ( ! SFLS_Licenses::has_free_slot( $lic ) ) {
+		if ( ! SFLS_Licenses::has_seat_for( $lic, $domain ) ) {
 			return __( 'Every site on this license is in use. Disconnect one in your account, or upgrade.', 'subtleforms-license-server' );
 		}
 		return '';

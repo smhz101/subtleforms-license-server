@@ -264,14 +264,26 @@ final class SFLS_Licenses {
 	}
 
 	/**
-	 * Count activations that use up a site slot (local/dev sites are free).
+	 * Count the sites that use up a seat (local/dev sites are free).
+	 *
+	 * While a host-only row from an older Pro exists for a host, it and every
+	 * host/path row of the same host on the same license are one seat (see
+	 * legacy_hosts()). A legacy row that has been quiet for LEGACY_QUIET_SECONDS
+	 * and has a host/path sibling is deleted first.
 	 *
 	 * @param int $license_id License ID.
 	 */
 	public static function used_slots( int $license_id ): int {
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}sfls_activations WHERE license_id = %d AND is_local = 0", $license_id ) );
+		$rows   = self::seat_rows( $license_id );
+		$legacy = self::legacy_hosts( $rows );
+		$seats  = array();
+		foreach ( $rows as $row ) {
+			$domain = (string) $row['domain'];
+			$host   = self::host_of( $domain );
+			// A host/path row beside a legacy row is the same seat.
+			$seats[ ( $host !== $domain && isset( $legacy[ $host ] ) ) ? $host : $domain ] = true;
+		}
+		return count( $seats );
 	}
 
 	/**
@@ -282,6 +294,106 @@ final class SFLS_Licenses {
 	public static function has_free_slot( array $lic ): bool {
 		$limit = (int) $lic['sites_allowed'];
 		return $limit <= 0 || self::used_slots( (int) $lic['id'] ) < $limit;
+	}
+
+	/**
+	 * Whether a domain can be activated without taking a new seat: it has a
+	 * path and a legacy host-only row of its host is on the license already.
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $domain     Normalised domain.
+	 */
+	public static function joins_existing_seat( int $license_id, string $domain ): bool {
+		$host = self::host_of( $domain );
+		if ( $host === $domain || self::is_local_domain( $domain ) ) {
+			return false;
+		}
+		return isset( self::legacy_hosts( self::seat_rows( $license_id, false ) )[ $host ] );
+	}
+
+	/**
+	 * Whether a license has a seat for this domain, counting a legacy row of
+	 * the same host as the seat the domain would join.
+	 *
+	 * @param array  $lic    License.
+	 * @param string $domain Normalised domain.
+	 */
+	public static function has_seat_for( array $lic, string $domain ): bool {
+		return self::joins_existing_seat( (int) $lic['id'], $domain ) || self::has_free_slot( $lic );
+	}
+
+	/**
+	 * Non-local rows of a license, after dropping legacy rows that are quiet
+	 * and have a host/path sibling.
+	 *
+	 * @param int  $license_id License ID.
+	 * @param bool $prune      Whether to delete quiet legacy rows first.
+	 * @return array[]
+	 */
+	private static function seat_rows( int $license_id, bool $prune = true ): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT domain, plugin_version, last_seen_at FROM {$wpdb->prefix}sfls_activations WHERE license_id = %d AND is_local = 0", $license_id ), ARRAY_A );
+		if ( ! $prune ) {
+			return $rows;
+		}
+		$legacy = self::legacy_hosts( $rows );
+		$quiet  = gmdate( 'Y-m-d H:i:s', time() - self::LEGACY_QUIET_SECONDS );
+		$kept   = array();
+		foreach ( $rows as $row ) {
+			$domain = (string) $row['domain'];
+			if ( isset( $legacy[ $domain ] ) && (string) $row['last_seen_at'] <= $quiet && self::has_path_sibling( $rows, $domain ) ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->delete(
+					SFLS_DB::activations(),
+					array(
+						'license_id' => $license_id,
+						'domain'     => $domain,
+					)
+				);
+				self::log( $license_id, $domain, 'upgrade', 'cleanup' );
+				continue;
+			}
+			$kept[] = $row;
+		}
+		return $kept;
+	}
+
+	/**
+	 * Whether a row of the list is a host/path row of the given host.
+	 *
+	 * @param array[] $rows Rows.
+	 * @param string  $host Host.
+	 */
+	private static function has_path_sibling( array $rows, string $host ): bool {
+		foreach ( $rows as $row ) {
+			$domain = (string) $row['domain'];
+			if ( $domain !== $host && self::host_of( $domain ) === $host ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The hosts that have a legacy row in a list of rows: a host-only row kept
+	 * for a Pro older than 2.8.2, or for a client that never reported its
+	 * version. A host-only row of Pro 2.8.2 or later is a site at the root of
+	 * its host, and it keeps a seat of its own beside a site in a subdirectory.
+	 *
+	 * @param array[] $rows Rows with domain and plugin_version.
+	 * @return array<string,true>
+	 */
+	private static function legacy_hosts( array $rows ): array {
+		$hosts = array();
+		foreach ( $rows as $row ) {
+			$domain  = (string) $row['domain'];
+			$version = (string) $row['plugin_version'];
+			if ( self::host_of( $domain ) === $domain && ( '' === $version || version_compare( $version, self::SITE_PATH_PRO_VERSION, '<' ) ) ) {
+				$hosts[ $domain ] = true;
+			}
+		}
+		return $hosts;
 	}
 
 	/**
@@ -321,7 +433,7 @@ final class SFLS_Licenses {
 				array( 'status' => 403 )
 			);
 		}
-		if ( ! $existing && ! self::is_local_domain( $domain ) && ! self::has_free_slot( $lic ) ) {
+		if ( ! $existing && ! self::is_local_domain( $domain ) && ! self::has_seat_for( $lic, $domain ) ) {
 			return self::seat_error( (int) $lic['sites_allowed'] );
 		}
 
@@ -376,7 +488,7 @@ final class SFLS_Licenses {
 		$wpdb->query( 'START TRANSACTION' );
 		$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}sfls_licenses WHERE id = %d FOR UPDATE", $license_id ) );
 		$fresh = self::find( $license_id );
-		if ( ! $fresh || ! self::has_free_slot( $fresh ) ) {
+		if ( ! $fresh || ! self::has_seat_for( $fresh, $domain ) ) {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
@@ -395,6 +507,7 @@ final class SFLS_Licenses {
 	 */
 	public static function add_activation( int $license_id, string $domain, string $version = '' ): void {
 		global $wpdb;
+		self::clear_removed( $license_id, $domain );
 		$now = current_time( 'mysql', true );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->replace(
@@ -453,6 +566,69 @@ final class SFLS_Licenses {
 		);
 		if ( $deleted ) {
 			self::log( $license_id, $domain, 'deactivate', $source );
+			if ( in_array( $source, array( 'account', 'admin' ), true ) ) {
+				self::mark_removed( $license_id, $domain );
+			}
+		}
+	}
+
+	/**
+	 * Option that remembers sites removed through the account page or wp-admin.
+	 */
+	const REMOVED_OPTION = 'sfls_removed_sites';
+
+	/**
+	 * Days a removal is remembered.
+	 */
+	const REMOVED_DAYS = 30;
+
+	/**
+	 * Remember that a site was removed on purpose (account page or wp-admin),
+	 * so its next validate answers site_removed and Pro does not take the seat
+	 * back. Entries older than 30 days are dropped whenever one is written.
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $domain     Normalised domain.
+	 */
+	private static function mark_removed( int $license_id, string $domain ): void {
+		$list = self::removed_list();
+		$list[ $license_id . '|' . $domain ] = time();
+		update_option( self::REMOVED_OPTION, $list, false );
+	}
+
+	/**
+	 * The removal markers younger than 30 days.
+	 *
+	 * @return array<string,int>
+	 */
+	private static function removed_list(): array {
+		$list   = get_option( self::REMOVED_OPTION, array() );
+		$cutoff = time() - self::REMOVED_DAYS * DAY_IN_SECONDS;
+		return array_filter( is_array( $list ) ? $list : array(), static fn( $at ) => (int) $at > $cutoff );
+	}
+
+	/**
+	 * Whether a site was removed through the account page or wp-admin within
+	 * the last 30 days and has not been activated again since.
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $domain     Normalised domain.
+	 */
+	public static function was_removed( int $license_id, string $domain ): bool {
+		return isset( self::removed_list()[ $license_id . '|' . $domain ] );
+	}
+
+	/**
+	 * Forget a removal (the site was activated again).
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $domain     Normalised domain.
+	 */
+	private static function clear_removed( int $license_id, string $domain ): void {
+		$list = self::removed_list();
+		if ( isset( $list[ $license_id . '|' . $domain ] ) ) {
+			unset( $list[ $license_id . '|' . $domain ] );
+			update_option( self::REMOVED_OPTION, $list, false );
 		}
 	}
 
@@ -584,10 +760,23 @@ final class SFLS_Licenses {
 	}
 
 	/**
-	 * Seconds a host-only activation must have been quiet before the site
-	 * that sends its path may take it over (see upgrade_legacy_activation()).
+	 * First Pro version that sends its site address with the path.
 	 */
-	const LEGACY_QUIET_SECONDS = 2 * DAY_IN_SECONDS;
+	const SITE_PATH_PRO_VERSION = '2.8.2';
+
+	/**
+	 * Seconds a legacy host-only activation must have been quiet before a site
+	 * that sends its path may take it over, or before it is dropped because
+	 * host/path rows of the same host exist (see upgrade_legacy_activation()).
+	 *
+	 * 36 hours, not 48: a root site on an older Pro validates at least every 12
+	 * hours, so a live row never goes quiet for 36. A row that has been quiet
+	 * that long belongs to a site that moved to the new identity or is gone,
+	 * and it is released before the 48 hour fallback grace of a Pro that still
+	 * sends the host only has run out, so a full license does not leave a site
+	 * without Pro while the old row waits to become eligible.
+	 */
+	const LEGACY_QUIET_SECONDS = 36 * HOUR_IN_SECONDS;
 
 	/**
 	 * Hand a host-only activation to the site that now identifies itself with
@@ -602,7 +791,7 @@ final class SFLS_Licenses {
 	 * The server cannot tell that site from a root site, or from a staging
 	 * copy of a root site, that still sends the host only. A root site on an
 	 * older Pro validates at least every twelve hours and keeps its row alive,
-	 * so a row is taken over only when it has been quiet for two days. A copy
+	 * so a row is taken over only when it has been quiet for 36 hours. A copy
 	 * of a live site never takes the seat of the site it was copied from; it
 	 * activates like any other new site.
 	 *
