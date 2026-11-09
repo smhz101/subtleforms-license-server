@@ -53,6 +53,7 @@ foreach ( array(
 	'sfls_release_files_private',
 	'sfls_release_signatures',
 	'sfls_release_replacements',
+	'sfls_signing_check',
 	'woocommerce_sfls_paddle_settings',
 	'sfls_delete_data_on_uninstall',
 ) as $sfls_option ) {

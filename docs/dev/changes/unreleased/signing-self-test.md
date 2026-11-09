@@ -1,0 +1,2 @@
+type: Added
+The server now checks its signing key every day, when a Licenses screen opens and when a signed route has to refuse. If SFLS_SIGNING_SECRET_KEY is missing, malformed, damaged or does not belong to the public key Pro ships, an error notice stays on the admin screens and the admin address gets one email a day ("SubtleForms license server: signing key check failed"), and one more when it is fixed. While the key is unusable the signed routes answer 503 signing_unavailable instead of an unsigned 200, so Pro sites keep their last known license state.

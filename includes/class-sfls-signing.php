@@ -62,10 +62,18 @@ final class SFLS_Signing {
 	private static ?string $test_secret = null;
 
 	/**
+	 * Public key used by the test suite instead of SFLS_SIGNING_PUBLIC_KEY (base64).
+	 *
+	 * @var string|null
+	 */
+	private static ?string $test_public = null;
+
+	/**
 	 * Hook in.
 	 */
 	public static function register(): void {
 		add_filter( 'rest_request_after_callbacks', array( __CLASS__, 'sign_rest_response' ), 100, 3 );
+		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'guard_unsigned' ), 10, 3 );
 	}
 
 	// ── Keys ────────────────────────────────────────────────────────────
@@ -91,12 +99,31 @@ final class SFLS_Signing {
 	}
 
 	/**
+	 * Base64 secret key as configured, '' when none is.
+	 */
+	private static function configured_secret(): string {
+		return null !== self::$test_secret ? self::$test_secret : ( defined( 'SFLS_SIGNING_SECRET_KEY' ) ? (string) SFLS_SIGNING_SECRET_KEY : '' );
+	}
+
+	/**
 	 * Raw secret key, '' when none is configured or it is malformed.
 	 */
 	private static function secret_key(): string {
-		$encoded = null !== self::$test_secret ? self::$test_secret : ( defined( 'SFLS_SIGNING_SECRET_KEY' ) ? (string) SFLS_SIGNING_SECRET_KEY : '' );
+		$encoded = self::configured_secret();
 		$raw     = '' !== $encoded ? base64_decode( $encoded, true ) : false; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Key encoding.
 		return ( is_string( $raw ) && 64 === strlen( $raw ) ) ? $raw : '';
+	}
+
+	/**
+	 * Why there is no usable secret key: 'missing' when none is configured,
+	 * 'malformed' when the value is not a base64 ed25519 secret key, '' when
+	 * it is fine.
+	 */
+	public static function key_problem(): string {
+		if ( '' === self::configured_secret() ) {
+			return 'missing';
+		}
+		return '' === self::secret_key() ? 'malformed' : '';
 	}
 
 	/**
@@ -118,23 +145,40 @@ final class SFLS_Signing {
 	}
 
 	/**
+	 * The public key Pro ships, as recorded in SFLS_SIGNING_PUBLIC_KEY (base64).
+	 * Null when the constant is not defined.
+	 */
+	public static function shipped_public_key(): ?string {
+		if ( null !== self::$test_public ) {
+			return self::$test_public;
+		}
+		if ( null !== self::$test_secret ) {
+			return null;
+		}
+		return defined( 'SFLS_SIGNING_PUBLIC_KEY' ) ? (string) SFLS_SIGNING_PUBLIC_KEY : null;
+	}
+
+	/**
 	 * Whether SFLS_SIGNING_PUBLIC_KEY, when defined, belongs to the secret key.
 	 */
 	public static function public_key_matches(): bool {
-		if ( ! defined( 'SFLS_SIGNING_PUBLIC_KEY' ) || null !== self::$test_secret ) {
+		$shipped = self::shipped_public_key();
+		if ( null === $shipped ) {
 			return true;
 		}
-		return hash_equals( self::public_key(), (string) SFLS_SIGNING_PUBLIC_KEY );
+		return hash_equals( self::public_key(), $shipped );
 	}
 
 	/**
 	 * Use this secret key (base64) instead of the constant. Test suite only.
 	 *
 	 * @param string|null $secret Base64 secret key, null to go back to the constant.
+	 * @param string|null $public Base64 public key standing in for SFLS_SIGNING_PUBLIC_KEY, null for none.
 	 */
-	public static function use_test_key( ?string $secret ): void {
+	public static function use_test_key( ?string $secret, ?string $public = null ): void {
 		if ( defined( 'SFLS_TESTING' ) && SFLS_TESTING ) {
 			self::$test_secret = $secret;
+			self::$test_public = $public;
 		}
 	}
 
@@ -398,6 +442,54 @@ final class SFLS_Signing {
 	}
 
 	// ── Responses ───────────────────────────────────────────────────────
+
+	/**
+	 * Whether a signed route must refuse to answer while the server cannot
+	 * sign. On by default; a development server that never had a key can
+	 * return false from the sfls_require_signing filter to keep answering
+	 * unsigned.
+	 */
+	public static function required(): bool {
+		return (bool) apply_filters( 'sfls_require_signing', true );
+	}
+
+	/**
+	 * Answer 503 signing_unavailable on a signed route while the secret key is
+	 * missing or malformed, instead of an unsigned 200. The request is refused
+	 * before the endpoint runs, so nothing is changed on the server (no seat
+	 * taken, no rate limit counted) for an answer that cannot be trusted.
+	 * Pro maps every 5xx to "unreachable" and keeps the last known license
+	 * state (Client::parseResponse). The first refusal also runs the key
+	 * check, so the admin notice and the email do not wait for the daily run.
+	 *
+	 * @param mixed           $result  Short-circuit value, null to dispatch.
+	 * @param WP_REST_Server  $server  Server.
+	 * @param WP_REST_Request $request Request.
+	 * @return mixed
+	 */
+	public static function guard_unsigned( $result, $server, $request ) {
+		unset( $server );
+		if ( null !== $result || ! $request instanceof WP_REST_Request || ! preg_match( self::SIGNED_ROUTES, (string) $request->get_route() ) ) {
+			return $result;
+		}
+		if ( self::enabled() || ! self::required() ) {
+			return $result;
+		}
+		if ( class_exists( 'SFLS_Signing_Check' ) ) {
+			SFLS_Signing_Check::run();
+		}
+		$response = new WP_REST_Response(
+			array(
+				'valid'  => false,
+				'reason' => 'signing_unavailable',
+				'error'  => __( 'The license server cannot sign its answers right now. Try again later.', 'subtleforms-license-server' ),
+			),
+			503
+		);
+		$response->header( 'Retry-After', '3600' );
+		$response->header( 'Cache-Control', 'no-store' );
+		return $response;
+	}
 
 	/**
 	 * Add package fields and the signature to license API answers.
