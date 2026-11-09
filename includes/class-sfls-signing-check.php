@@ -8,11 +8,14 @@
  * key and verifies it with the public key Pro ships (SFLS_SIGNING_PUBLIC_KEY
  * when it is defined, else the one derived from the secret key).
  *
- * It runs from the daily `sfls_daily` event, when a Licenses screen loads and
- * when a signed route has to refuse because the key is missing. On failure it
- * shows an error notice on the admin screens and emails the admin address,
+ * It runs from the daily `sfls_daily` event, when a Licenses screen loads, on
+ * any admin screen (at most every five minutes) while a failure notice is
+ * showing, and from a one-off event that a refused signed route schedules
+ * (never inline: a refused request only reads the stored result). On failure
+ * it shows an error notice on the admin screens and emails the admin address,
  * once a day while the check keeps failing. When it passes again the notice
- * goes away and one "recovered" email is sent.
+ * goes away and one "recovered" email is sent. Both emails are claimed with an
+ * atomic lock before they are sent, so overlapping requests send one.
  *
  * @package SFLS
  */
@@ -41,6 +44,29 @@ final class SFLS_Signing_Check {
 	const SAVE_EVERY = 60;
 
 	/**
+	 * Seconds a stored result counts as fresh: a refused signed route does not
+	 * ask for a new check inside this time, and an admin screen does not
+	 * re-check a failure inside it.
+	 */
+	const RECHECK_EVERY = 5 * MINUTE_IN_SECONDS;
+
+	/**
+	 * One-off event that runs the check outside the request that asked for it.
+	 */
+	const EVENT = 'sfls_signing_check_now';
+
+	/**
+	 * Lock option of the failure email. Its value is the time it was claimed;
+	 * a lock older than MAIL_EVERY is free again.
+	 */
+	const MAIL_LOCK = 'sfls_signing_mail_lock';
+
+	/**
+	 * Lock option of the recovery email. Removed when a new failure starts.
+	 */
+	const RECOVERY_LOCK = 'sfls_signing_recovery_lock';
+
+	/**
 	 * Result of this request, so a screen that asks twice checks once.
 	 *
 	 * @var array|null
@@ -52,6 +78,7 @@ final class SFLS_Signing_Check {
 	 */
 	public static function register(): void {
 		add_action( SFLS_Reminders::HOOK, array( __CLASS__, 'run' ) );
+		add_action( self::EVENT, array( __CLASS__, 'run' ) );
 		add_action( 'admin_init', array( __CLASS__, 'on_admin_load' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'notice' ) );
 	}
@@ -153,7 +180,10 @@ final class SFLS_Signing_Check {
 
 	/**
 	 * Check the key, store the result, and send the failure or recovery email
-	 * when it is due. Returns the stored state.
+	 * when it is due. Each email is claimed with a lock before it is sent, so
+	 * requests that overlap (the first one is still talking to the mail server
+	 * when the next reads the old state) send one email between them. Returns
+	 * the stored state.
 	 *
 	 * @return array{ok:bool,code:string,message:string,fix:string,checked_at:int,failing_since:int,last_mail:int}
 	 */
@@ -174,13 +204,27 @@ final class SFLS_Signing_Check {
 		if ( ! $result['ok'] ) {
 			$new['failing_since'] = ! $old['ok'] && $old['failing_since'] > 0 ? $old['failing_since'] : $now;
 			$new['last_mail']     = $old['ok'] ? 0 : $old['last_mail'];
+			if ( $old['ok'] ) {
+				// A new failure: the next recovery gets its own email.
+				delete_option( self::RECOVERY_LOCK );
+			}
 			if ( $now - $new['last_mail'] >= self::MAIL_EVERY ) {
-				$new['last_mail'] = $now;
-				self::mail_failure( $new );
+				if ( self::claim( self::MAIL_LOCK, $now ) ) {
+					$new['last_mail'] = $now;
+					self::mail_failure( $new );
+				} else {
+					// Another request holds the window: keep its time, so the state this request
+					// saves does not hand the window out again.
+					$new['last_mail'] = max( $new['last_mail'], self::lock_time( self::MAIL_LOCK ) );
+				}
 				$dirty = true;
 			}
 		} elseif ( ! $old['ok'] ) {
-			self::mail_recovery( $old, $now );
+			if ( self::claim( self::RECOVERY_LOCK, $now ) ) {
+				// The failure window is over: a later failure mails at once.
+				delete_option( self::MAIL_LOCK );
+				self::mail_recovery( $old, $now );
+			}
 			$dirty = true;
 		}
 
@@ -192,6 +236,66 @@ final class SFLS_Signing_Check {
 	}
 
 	/**
+	 * Claim an email window. True for exactly one caller: the lock is created
+	 * with a plain INSERT IGNORE on the unique option name (add_option() is not
+	 * enough: it ends in INSERT ... ON DUPLICATE KEY UPDATE, so a second caller
+	 * that passed its cache check overwrites the first caller's lock and also
+	 * gets true). A lock older than MAIL_EVERY is free again; it is taken over
+	 * with a compare-and-swap update, which only one caller can win.
+	 *
+	 * @param string $name Lock option name.
+	 * @param int    $now  Time of the claim.
+	 */
+	private static function claim( string $name, int $now ): bool {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- An atomic claim cannot go through the options API or the cache.
+		$won = 1 === (int) $wpdb->query(
+			$wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, (string) $now )
+		);
+		if ( ! $won ) {
+			$held = self::lock_time( $name );
+			if ( $held > 0 && $now - $held >= self::MAIL_EVERY ) {
+				$won = 1 === (int) $wpdb->query(
+					$wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", (string) $now, $name, (string) $held )
+				);
+			}
+		}
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		wp_cache_delete( $name, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		return $won;
+	}
+
+	/**
+	 * When a lock was claimed, 0 when there is none. Read from the database,
+	 * not the options cache, which another request may have outdated.
+	 *
+	 * @param string $name Lock option name.
+	 */
+	private static function lock_time( string $name ): int {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Must see the row another request just wrote.
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+	}
+
+	/**
+	 * Ask for a check without running it in this request. A refused signed
+	 * route calls this on every refusal, so it only reads the stored result and,
+	 * when that is older than five minutes (or there is none), schedules one
+	 * check for the next cron run. It never schedules a second one while one is
+	 * waiting.
+	 */
+	public static function request_check(): void {
+		$checked = self::state()['checked_at'];
+		if ( $checked > 0 && time() - $checked < self::RECHECK_EVERY ) {
+			return;
+		}
+		if ( false === wp_next_scheduled( self::EVENT ) ) {
+			wp_schedule_single_event( time(), self::EVENT );
+		}
+	}
+
+	/**
 	 * Daily event and screen loads share this: the result of this request.
 	 */
 	public static function current(): array {
@@ -200,11 +304,22 @@ final class SFLS_Signing_Check {
 
 	/**
 	 * Check when a Licenses screen loads, so the owner sees a problem at once.
+	 * On any other admin screen the check runs only while a failure notice is
+	 * showing and the stored result is five minutes old, so a restored key
+	 * clears the notice without waiting for the daily run.
 	 */
 	public static function on_admin_load(): void {
+		if ( ! current_user_can( SFLS_Admin::CAP ) ) {
+			return;
+		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only screen name.
 		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
-		if ( 0 === strpos( $page, 'sfls' ) && current_user_can( SFLS_Admin::CAP ) ) {
+		if ( 0 === strpos( $page, 'sfls' ) ) {
+			self::current();
+			return;
+		}
+		$state = self::state();
+		if ( ! $state['ok'] && time() - $state['checked_at'] >= self::RECHECK_EVERY ) {
 			self::current();
 		}
 	}

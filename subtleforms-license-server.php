@@ -74,6 +74,7 @@ register_deactivation_hook(
 	__FILE__,
 	static function () {
 		SFLS_Reminders::unschedule();
+		wp_clear_scheduled_hook( SFLS_Signing_Check::EVENT );
 		delete_option( 'sfls_flush_rewrite' );
 		flush_rewrite_rules();
 	}

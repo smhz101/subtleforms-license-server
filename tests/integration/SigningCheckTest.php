@@ -27,6 +27,9 @@ class SFLS_Signing_Check_Test extends SFLS_Test_Case {
 	protected function setUp(): void {
 		parent::setUp();
 		$this->set_option( SFLS_Signing_Check::OPTION, null );
+		$this->set_option( SFLS_Signing_Check::MAIL_LOCK, null );
+		$this->set_option( SFLS_Signing_Check::RECOVERY_LOCK, null );
+		wp_clear_scheduled_hook( SFLS_Signing_Check::EVENT );
 		$this->pair = SFLS_Signing::generate();
 		SFLS_Signing::use_test_key( $this->pair['secret'] );
 		$this->forget_request_result();
@@ -37,6 +40,7 @@ class SFLS_Signing_Check_Test extends SFLS_Test_Case {
 	 */
 	protected function tearDown(): void {
 		SFLS_Signing::use_test_key( null );
+		wp_clear_scheduled_hook( SFLS_Signing_Check::EVENT );
 		unset( $_GET['page'] );
 		$this->forget_request_result();
 		parent::tearDown();
@@ -70,6 +74,64 @@ class SFLS_Signing_Check_Test extends SFLS_Test_Case {
 		$state              = (array) get_option( SFLS_Signing_Check::OPTION );
 		$state['last_mail'] = time() - $seconds;
 		update_option( SFLS_Signing_Check::OPTION, $state, false );
+		update_option( SFLS_Signing_Check::MAIL_LOCK, time() - $seconds, false );
+	}
+
+	/**
+	 * Make the next outgoing email "slow": while it is being sent, another
+	 * request runs the check and reads the state the first one has not saved
+	 * yet. The nested runs send what they decide to send into the same mail log.
+	 *
+	 * @param int $others How many overlapping requests arrive while the first email is sent.
+	 */
+	private function overlap_during_first_mail( int $others = 1 ): void {
+		$left = $others;
+		$this->filter(
+			'pre_wp_mail',
+			static function ( $pre ) use ( &$left ) {
+				while ( $left > 0 ) {
+					--$left;
+					SFLS_Signing_Check::run();
+				}
+				return $pre;
+			},
+			5
+		);
+	}
+
+	/**
+	 * Call a private static method.
+	 *
+	 * @param string $method Method.
+	 * @param mixed  ...$args Arguments.
+	 * @return mixed
+	 */
+	private function call_private( string $method, ...$args ) {
+		$ref = new ReflectionMethod( SFLS_Signing_Check::class, $method );
+		$ref->setAccessible( true );
+		return $ref->invoke( null, ...$args );
+	}
+
+	/**
+	 * Store a result as if the last check ran this long ago.
+	 *
+	 * @param bool $ok      Whether it passed.
+	 * @param int  $seconds Seconds ago.
+	 */
+	private function stored_result( bool $ok, int $seconds ): void {
+		update_option(
+			SFLS_Signing_Check::OPTION,
+			array(
+				'ok'            => $ok,
+				'code'          => $ok ? '' : 'key_missing',
+				'message'       => $ok ? '' : 'SFLS_SIGNING_SECRET_KEY is not defined.',
+				'fix'           => $ok ? '' : 'Put it back.',
+				'checked_at'    => time() - $seconds,
+				'failing_since' => $ok ? 0 : time() - $seconds,
+				'last_mail'     => 0,
+			),
+			false
+		);
 	}
 
 	/**
@@ -304,8 +366,14 @@ class SFLS_Signing_Check_Test extends SFLS_Test_Case {
 		}
 		$this->assertEmpty( SFLS_Licenses::activations( (int) $lic['id'] ), 'The refused activate did not take a seat.' );
 
-		// The refusal told the owner without waiting for the daily run.
+		// The refusals did not run the check or send anything in their own requests ...
+		$this->assertSame( array(), $this->mails );
+		$this->assertSame( 0, SFLS_Signing_Check::state()['checked_at'] );
+		// ... they asked for one check, which tells the owner without waiting for the daily run.
+		$this->assertNotFalse( wp_next_scheduled( SFLS_Signing_Check::EVENT ) );
+		do_action( SFLS_Signing_Check::EVENT );
 		$this->assertCount( 1, $this->mails_with( 'SubtleForms license server: signing key check failed' ) );
+		$this->assertFalse( SFLS_Signing_Check::state()['ok'] );
 	}
 
 	/**
@@ -351,5 +419,226 @@ class SFLS_Signing_Check_Test extends SFLS_Test_Case {
 
 		$this->assertNotSame( 503, $response->get_status() );
 		$this->assertArrayNotHasKey( 'signature', $response->get_data() );
+	}
+
+	/**
+	 * Two requests that fail at the same moment send one email: the second
+	 * reads the old state while the first is still talking to the mail server.
+	 */
+	public function test_overlapping_failing_runs_send_one_email(): void {
+		SFLS_Signing::use_test_key( '' );
+		$this->overlap_during_first_mail( 3 );
+
+		SFLS_Signing_Check::run();
+
+		$this->assertCount( 1, $this->mails_with( 'SubtleForms license server: signing key check failed' ) );
+		$this->assertCount( 1, $this->mails );
+		$this->assertGreaterThan( 0, SFLS_Signing_Check::state()['last_mail'], 'The saved state keeps the time of the email.' );
+		$this->assertFalse( SFLS_Signing_Check::state()['ok'] );
+	}
+
+	/**
+	 * A run that finds the window already claimed by another request sends
+	 * nothing and does not hand the window out again when it saves its state.
+	 */
+	public function test_a_claimed_window_sends_nothing(): void {
+		SFLS_Signing::use_test_key( '' );
+		$this->assertTrue( $this->call_private( 'claim', SFLS_Signing_Check::MAIL_LOCK, time() ) );
+
+		$state = SFLS_Signing_Check::run();
+
+		$this->assertSame( array(), $this->mails );
+		$this->assertFalse( $state['ok'] );
+		$this->assertGreaterThan( 0, SFLS_Signing_Check::state()['last_mail'] );
+
+		// The next run, with the state saved by the one that lost, still sends nothing.
+		SFLS_Signing_Check::run();
+		$this->assertSame( array(), $this->mails );
+	}
+
+	/**
+	 * The claim is exactly-once: a second claim of a held lock fails and leaves
+	 * the first claimer's value alone (add_option() would have overwritten it
+	 * and answered true), and a lock from an earlier day is taken over once.
+	 */
+	public function test_the_claim_is_exactly_once(): void {
+		$name = SFLS_Signing_Check::MAIL_LOCK;
+		$now  = time();
+
+		$this->assertTrue( $this->call_private( 'claim', $name, $now ) );
+		$this->assertFalse( $this->call_private( 'claim', $name, $now + 1 ) );
+		$this->assertFalse( $this->call_private( 'claim', $name, $now + DAY_IN_SECONDS - 1 ) );
+		$this->assertSame( $now, $this->call_private( 'lock_time', $name ), 'The first claim is still the stored one.' );
+
+		// A day later the lock is free again, for one caller.
+		$this->assertTrue( $this->call_private( 'claim', $name, $now + DAY_IN_SECONDS ) );
+		$this->assertFalse( $this->call_private( 'claim', $name, $now + DAY_IN_SECONDS ) );
+		$this->assertSame( $now + DAY_IN_SECONDS, $this->call_private( 'lock_time', $name ) );
+		$this->assertSame( (string) ( $now + DAY_IN_SECONDS ), (string) get_option( $name ), 'The options API sees the claim.' );
+	}
+
+	/**
+	 * Overlapping requests that recover at the same moment send one
+	 * "recovered" email.
+	 */
+	public function test_overlapping_recoveries_send_one_email(): void {
+		SFLS_Signing::use_test_key( '' );
+		SFLS_Signing_Check::run();
+		$this->assertCount( 1, $this->mails );
+
+		SFLS_Signing::use_test_key( $this->pair['secret'] );
+		$this->overlap_during_first_mail( 3 );
+		$state = SFLS_Signing_Check::run();
+
+		$this->assertTrue( $state['ok'] );
+		$this->assertCount( 1, $this->mails_with( 'SubtleForms license server: signing key check recovered' ) );
+		$this->assertCount( 2, $this->mails, 'One failure email and one recovery email.' );
+		$this->assertTrue( SFLS_Signing_Check::state()['ok'] );
+	}
+
+	/**
+	 * A failure that starts after a recovery is mailed at once, and so is its
+	 * recovery, even inside the same day.
+	 */
+	public function test_a_new_failure_after_a_recovery_is_mailed_again(): void {
+		$failed    = 'SubtleForms license server: signing key check failed';
+		$recovered = 'SubtleForms license server: signing key check recovered';
+
+		SFLS_Signing::use_test_key( '' );
+		SFLS_Signing_Check::run();
+		SFLS_Signing::use_test_key( $this->pair['secret'] );
+		SFLS_Signing_Check::run();
+		SFLS_Signing::use_test_key( '' );
+		SFLS_Signing_Check::run();
+		SFLS_Signing::use_test_key( $this->pair['secret'] );
+		SFLS_Signing_Check::run();
+
+		$this->assertCount( 2, $this->mails_with( $failed ) );
+		$this->assertCount( 2, $this->mails_with( $recovered ) );
+	}
+
+	/**
+	 * A refused signed route does not check the key in its own request: it
+	 * schedules one check, never a second one while it waits, and sends nothing.
+	 */
+	public function test_the_guard_schedules_one_check_and_does_not_mail(): void {
+		$this->filter( 'sfls_require_signing', '__return_true', 20 );
+		SFLS_Signing::use_test_key( '' );
+		$lic = $this->make_license();
+
+		for ( $i = 0; $i < 3; $i++ ) {
+			$response = $this->rest( 'POST', '/sfls/v1/license/validate', array( 'license_key' => $lic['license_key'], 'site_url' => 'https://guard.example.com' ) );
+			$this->assertSame( 503, $response->get_status() );
+		}
+
+		$this->assertSame( array(), $this->mails );
+		$this->assertSame( array(), (array) get_option( SFLS_Signing_Check::OPTION, array() ), 'Nothing was stored by the refused requests.' );
+		$events = array_filter( (array) _get_cron_array(), static fn( $hooks ) => isset( $hooks[ SFLS_Signing_Check::EVENT ] ) );
+		$this->assertCount( 1, $events );
+		$this->assertCount( 1, reset( $events )[ SFLS_Signing_Check::EVENT ] );
+
+		// The event is the check: it stores the failure and sends the one email.
+		do_action( SFLS_Signing_Check::EVENT );
+		$this->assertCount( 1, $this->mails );
+		$this->assertFalse( SFLS_Signing_Check::state()['ok'] );
+	}
+
+	/**
+	 * A stored result younger than five minutes is enough for the guard; an
+	 * older one asks for a new check.
+	 */
+	public function test_the_guard_asks_for_a_check_only_when_the_result_is_five_minutes_old(): void {
+		SFLS_Signing::use_test_key( '' );
+
+		$this->stored_result( false, 240 );
+		SFLS_Signing_Check::request_check();
+		$this->assertFalse( wp_next_scheduled( SFLS_Signing_Check::EVENT ), 'Four minutes old: fresh.' );
+
+		$this->stored_result( false, 301 );
+		SFLS_Signing_Check::request_check();
+		SFLS_Signing_Check::request_check();
+		$this->assertNotFalse( wp_next_scheduled( SFLS_Signing_Check::EVENT ), 'Five minutes old: ask for a check.' );
+		$this->assertSame( array(), $this->mails );
+
+		// The check that runs refreshes the result, so the next refusals leave it alone.
+		wp_clear_scheduled_hook( SFLS_Signing_Check::EVENT );
+		do_action( SFLS_Signing_Check::EVENT );
+		SFLS_Signing_Check::request_check();
+		$this->assertFalse( wp_next_scheduled( SFLS_Signing_Check::EVENT ) );
+	}
+
+	/**
+	 * After the key is restored a check that passes anywhere clears the notice
+	 * for every later request.
+	 */
+	public function test_a_passing_check_anywhere_clears_the_notice(): void {
+		SFLS_Signing::use_test_key( '' );
+		SFLS_Signing_Check::run();
+		$this->as_admin();
+		$this->forget_request_result();
+		$this->assertStringContainsString( 'notice-error', $this->notice_html() );
+
+		SFLS_Signing::use_test_key( $this->pair['secret'] );
+		do_action( SFLS_Signing_Check::EVENT );
+
+		$this->forget_request_result();
+		$this->assertSame( '', $this->notice_html() );
+	}
+
+	/**
+	 * While the notice shows, any admin screen re-checks the key, at most every
+	 * five minutes, so a restored key clears the notice without waiting a day.
+	 */
+	public function test_other_admin_screens_recheck_while_the_notice_shows(): void {
+		$this->as_admin();
+		$_GET['page'] = 'plugins';
+
+		// Inside five minutes: nothing runs, the notice stays.
+		$this->stored_result( false, 120 );
+		SFLS_Signing::use_test_key( $this->pair['secret'] );
+		SFLS_Signing_Check::on_admin_load();
+		$this->forget_request_result();
+		$this->assertStringContainsString( 'notice-error', $this->notice_html() );
+		$this->assertFalse( SFLS_Signing_Check::state()['ok'] );
+
+		// Five minutes old and the key is back: the screen load clears it and sends the one recovery email.
+		$this->stored_result( false, 301 );
+		$this->forget_request_result();
+		SFLS_Signing_Check::on_admin_load();
+		$this->assertTrue( SFLS_Signing_Check::state()['ok'] );
+		$this->assertSame( '', $this->notice_html(), 'Cleared on the same page load.' );
+		$this->assertCount( 1, $this->mails_with( 'SubtleForms license server: signing key check recovered' ) );
+
+		// Still failing: the re-check keeps the notice and sends no new failure email inside the day.
+		SFLS_Signing::use_test_key( '' );
+		$this->stored_result( false, 301 );
+		update_option( SFLS_Signing_Check::MAIL_LOCK, time() - 301, false );
+		$state = (array) get_option( SFLS_Signing_Check::OPTION );
+		$state['last_mail'] = time() - 301;
+		update_option( SFLS_Signing_Check::OPTION, $state, false );
+		$this->forget_request_result();
+		$before = count( $this->mails );
+		SFLS_Signing_Check::on_admin_load();
+		$this->assertFalse( SFLS_Signing_Check::state()['ok'] );
+		$this->assertCount( $before, $this->mails );
+		$this->assertGreaterThan( time() - 60, SFLS_Signing_Check::state()['checked_at'], 'The re-check is stored, so the next screen load waits five minutes.' );
+	}
+
+	/**
+	 * A working key and no notice: other admin screens do not run the check,
+	 * and people who cannot manage licenses never trigger it.
+	 */
+	public function test_other_admin_screens_do_not_check_without_a_notice(): void {
+		$_GET['page'] = 'plugins';
+		$this->as_admin();
+		SFLS_Signing_Check::on_admin_load();
+		$this->assertSame( 0, SFLS_Signing_Check::state()['checked_at'], 'No stored result and no failure: nothing ran.' );
+
+		$this->stored_result( false, 3600 );
+		SFLS_Signing::use_test_key( $this->pair['secret'] );
+		wp_set_current_user( $this->make_user( 'shopper' )->ID );
+		$this->forget_request_result();
+		SFLS_Signing_Check::on_admin_load();
+		$this->assertFalse( SFLS_Signing_Check::state()['ok'], 'A user who cannot manage licenses does not trigger the check.' );
 	}
 }

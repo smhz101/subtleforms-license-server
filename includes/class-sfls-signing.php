@@ -459,8 +459,10 @@ final class SFLS_Signing {
 	 * before the endpoint runs, so nothing is changed on the server (no seat
 	 * taken, no rate limit counted) for an answer that cannot be trusted.
 	 * Pro maps every 5xx to "unreachable" and keeps the last known license
-	 * state (Client::parseResponse). The first refusal also runs the key
-	 * check, so the admin notice and the email do not wait for the daily run.
+	 * state (Client::parseResponse). A refusal never runs the key check in the
+	 * request: it asks for one (a single cron event, at most every five
+	 * minutes), so a flood of refused requests costs one stored-result read each
+	 * and the admin notice and email do not wait for the daily run.
 	 *
 	 * @param mixed           $result  Short-circuit value, null to dispatch.
 	 * @param WP_REST_Server  $server  Server.
@@ -476,7 +478,7 @@ final class SFLS_Signing {
 			return $result;
 		}
 		if ( class_exists( 'SFLS_Signing_Check' ) ) {
-			SFLS_Signing_Check::run();
+			SFLS_Signing_Check::request_check();
 		}
 		$response = new WP_REST_Response(
 			array(
