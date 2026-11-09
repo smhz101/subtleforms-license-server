@@ -505,7 +505,7 @@ final class SFLS_REST {
 		}
 		$code   = preg_replace( '/[^A-Za-z0-9]/', '', (string) $req->get_param( 'code' ) );
 		// Pro 2.8.2 and later keep the path of the site; older versions are known by their host.
-		$domain = SFLS_Connect::site_identity( sanitize_text_field( (string) $req->get_param( 'site_url' ) ), (string) $req->get_param( 'identity' ) );
+		$domain = SFLS_Connect::site_identity( esc_url_raw( (string) $req->get_param( 'site_url' ), array( 'http', 'https' ) ), (string) $req->get_param( 'identity' ) );
 		$fail   = $this->error( 400, 'invalid_code', __( 'This connection code is invalid or has expired. Connect the site again.', 'subtleforms-license-server' ) );
 
 		if ( '' === $code || '' === $domain ) {

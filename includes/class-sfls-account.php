@@ -682,7 +682,7 @@ final class SFLS_Account {
 			wp_safe_redirect( $back );
 			exit;
 		}
-		$domain = SFLS_Licenses::normalize_domain( sanitize_text_field( wp_unslash( $_GET['domain'] ?? '' ) ) );
+		$domain = SFLS_Licenses::normalize_domain( esc_url_raw( wp_unslash( $_GET['domain'] ?? '' ), array( 'http', 'https' ) ) );
 		SFLS_Licenses::remove_activation( $id, $domain, 'account' );
 		/* translators: %s: domain */
 		wc_add_notice( sprintf( __( '%s was disconnected. You can use the key on another site now.', 'subtleforms-license-server' ), $domain ) );
