@@ -345,6 +345,7 @@ final class SFLS_Checkout_Paddle {
 					'trialThen' => __( 'Your free trial ends on %1$s. Then %2$s a year, cancel anytime from your account.', 'subtleforms-license-server' ),
 					/* translators: %s: date */
 					'renews'    => __( 'Renews automatically on %s.', 'subtleforms-license-server' ),
+					'renewsPending' => __( 'Renewal date confirming.', 'subtleforms-license-server' ),
 					/* translators: %s: email */
 					'emailed'   => __( 'We also emailed the key to %s.', 'subtleforms-license-server' ),
 					'copied'    => __( 'Copied', 'subtleforms-license-server' ),

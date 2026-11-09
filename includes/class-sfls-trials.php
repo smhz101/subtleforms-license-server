@@ -257,7 +257,8 @@ final class SFLS_Trials {
 	 * @param string $domain     Normalised domain.
 	 */
 	public static function record_site( int $license_id, string $domain ): void {
-		self::claim( 'site', SFLS_Licenses::normalize_domain( $domain ), $license_id );
+		// A trial belongs to the host: a copy in a subdirectory is the same site.
+		self::claim( 'site', SFLS_Licenses::host_of( SFLS_Licenses::normalize_domain( $domain ) ), $license_id );
 	}
 
 	/**
@@ -267,7 +268,7 @@ final class SFLS_Trials {
 	 * @param int    $license_id The license asking (its own claims do not count).
 	 */
 	public static function site_used_by_other( string $domain, int $license_id = 0 ): bool {
-		$domain = SFLS_Licenses::normalize_domain( $domain );
+		$domain = SFLS_Licenses::host_of( SFLS_Licenses::normalize_domain( $domain ) );
 		if ( '' === $domain || SFLS_Licenses::is_local_domain( $domain ) ) {
 			return false;
 		}
@@ -357,6 +358,15 @@ final class SFLS_Trials {
 	 */
 	private static function code_hash( string $email, string $code ): string {
 		return hash_hmac( 'sha256', $code, self::email_hash( $email ) . wp_salt( 'secure_auth' ) );
+	}
+
+	/**
+	 * Whether the email code step is skipped. Only on local and development
+	 * environments by default, never on staging or production. Filter
+	 * `sfls_trial_skip_email_code` can change it.
+	 */
+	public static function skip_code(): bool {
+		return (bool) apply_filters( 'sfls_trial_skip_email_code', in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) );
 	}
 
 	/**

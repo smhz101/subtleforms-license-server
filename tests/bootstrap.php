@@ -43,6 +43,9 @@ global $wpdb, $table_prefix, $wp, $wp_query, $wp_the_query, $wp_rewrite, $wp_fil
 
 require_once $sfls_wp_path . '/wp-load.php';
 
+// The test site has no signing key: signed routes answer as before (unsigned) unless a test asks for the 503 guard.
+add_filter( 'sfls_require_signing', '__return_false' );
+
 if ( ! defined( 'SFLS_VERSION' ) || ! class_exists( 'WooCommerce' ) ) {
 	fwrite( STDERR, "The SubtleForms License Server plugin and WooCommerce must be active on the test site.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
 	exit( 1 );

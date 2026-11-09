@@ -68,6 +68,9 @@
 		} else if ( data.renews ) {
 			trial.textContent = format( i18n.renews, data.renews );
 			trial.hidden = false;
+		} else if ( data.renews_pending ) {
+			trial.textContent = i18n.renewsPending;
+			trial.hidden = false;
 		}
 		if ( data.email ) {
 			field( 'emailed' ).textContent = format( i18n.emailed, data.email );

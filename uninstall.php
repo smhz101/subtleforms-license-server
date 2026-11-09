@@ -53,6 +53,9 @@ foreach ( array(
 	'sfls_release_files_private',
 	'sfls_release_signatures',
 	'sfls_release_replacements',
+	'sfls_signing_check',
+	'sfls_signing_mail_lock',
+	'sfls_signing_recovery_lock',
 	'woocommerce_sfls_paddle_settings',
 	'sfls_delete_data_on_uninstall',
 ) as $sfls_option ) {
@@ -64,6 +67,7 @@ require_once __DIR__ . '/includes/class-sfls-db.php';
 SFLS_DB::remove_leftovers();
 
 wp_clear_scheduled_hook( 'sfls_daily' );
+wp_clear_scheduled_hook( 'sfls_signing_check_now' );
 
 // Release packages in uploads/sfls-private and uploaded logos in uploads/sfls-branding.
 $sfls_uploads = wp_upload_dir( null, false );

@@ -1,6 +1,6 @@
 # Publishing SubtleForms Pro from Git and CI
 
-SubtleForms License Server 1.6.0 accepts new Pro releases in three ways:
+SubtleForms License Server 1.9.1 accepts new Pro releases in three ways:
 
 1. **Upload by hand** in **Licenses › Pro releases** (or `wp sfls release add`).
 2. **Direct upload from CI** with a deploy token: the CI job builds the zip and POSTs it to `/wp-json/sfls/v1/releases`. This is what the GitHub Actions workflow in the SubtleForms Pro repository (`.github/workflows/release.yml`) does.

@@ -55,6 +55,34 @@ The blocks are server-rendered (`blocks/*/block.json`); the editor script `asset
 
 Styles load only on pages that use a shortcode and are scoped under `.sfls`. Override colours with custom properties, for example `.sfls { --sfls-accent: #111; }`.
 
+### Theming tokens
+
+Every colour, radius, font and shadow is a custom property declared once, on `.sfls` (the front wrapper) at the top of `assets/css/sfls-front.css`. Set any of them on `.sfls` or a parent. Defaults give the plugin's own look.
+
+| Token | Default | Use |
+| --- | --- | --- |
+| `--sfls-font` | `inherit` | Font family of the whole area |
+| `--sfls-mono` | system monospace stack | Keys, codes, IDs |
+| `--sfls-text` | `#1e1e1e` | Body text |
+| `--sfls-muted` | `#646970` | Secondary text |
+| `--sfls-border`, `--sfls-border-strong` | `#dcdcde`, `#c3c4c7` | Borders |
+| `--sfls-surface` | `#fff` | Cards |
+| `--sfls-bg` | `#f6f7f7` | Subtle fills |
+| `--sfls-accent`, `--sfls-accent-hover`, `--sfls-accent-soft` | `#3858e9`, `#2145e6`, `#eef1fd` | Accent, hover, tint |
+| `--sfls-accent-contrast` | `#fff` | Text on the accent |
+| `--sfls-success`, `--sfls-warning`, `--sfls-danger` | `#007017`, `#8a4d00`, `#b32d2e` | Status colours |
+| `--sfls-success-soft`, `--sfls-warning-soft`, `--sfls-danger-soft` | tints | Status backgrounds |
+| `--sfls-info-border`, `--sfls-warning-border`, `--sfls-danger-border`, `--sfls-danger-border-soft` | tints | Status borders |
+| `--sfls-radius`, `--sfls-radius-sm`, `--sfls-radius-xs`, `--sfls-radius-md`, `--sfls-radius-lg`, `--sfls-radius-pill` | 10, 6, 4, 8, 14 px, 999px | Corner radii |
+| `--sfls-button-radius` | `var(--sfls-radius-sm)` | Buttons |
+| `--sfls-button-bg`, `--sfls-button-text`, `--sfls-button-bg-hover` | accent, contrast, accent hover | Primary button |
+| `--sfls-shadow-sm`, `--sfls-shadow-lg` | soft shadows | Toggle, popular plan |
+| `--sfls-menu-bg`, `--sfls-menu-item-bg`, `--sfls-menu-text`, `--sfls-menu-icon` | dark greys | Branding portal menu preview |
+
+The older names `--sfls-subtle`, `--sfls-on-accent`, `--sfls-ok(-soft)`, `--sfls-warn(-soft)` and `--sfls-bad(-soft)` still work as aliases.
+
+Example: `.sfls { --sfls-accent: #5046e6; --sfls-button-bg: #c8f169; --sfls-button-text: #111; --sfls-button-radius: 9999px; }`
+
 ## 4. What happens on a sale
 
 1. Payment completes (Stripe calls `$order->payment_complete()`). An order whose items are all license products goes straight to **Completed** through `woocommerce_payment_complete_order_status`, whatever the downloadable flag says. A paid order that also holds other items stays at **Processing** for shipping, and its keys are issued there. Cash on delivery waits for Completed. The order flag `_sfls_issued` (plus a short lock) makes sure keys are issued once.
@@ -131,6 +159,44 @@ Every version is a row in `wp_sfls_releases` with a channel (stable or beta), a 
 * **Git and CI**: Licenses › Settings › Releases has deploy tokens, the release API and the GitHub webhook connection. See [docs/CI.md](docs/CI.md) for both CI paths, the GitHub Actions workflow in the Pro repository and WP-CLI (`wp sfls release …`).
 
 Update downloads: `/update/check` returns `package` = `/update/package?lid&site_url&ptoken[&channel]` (since 1.7.0 the license ID and a token for that license and site, never the key; a request with `license_key` instead still works). That address checks the license and the site and redirects to a signed `/update/download` link for that version that expires after 15 minutes and works once (used tokens are kept in `wp_sfls_download_tokens`). WordPress follows the redirect when it installs the update, so a cached update check never hands out a dead link. Links signed by 1.5 (without a version) still download the current release.
+
+## 10. Signing key check (1.9.2)
+
+The server signs every license answer (`/license/activate`, `/license/validate`, `/update/check`) with the ed25519 key in `SFLS_SIGNING_SECRET_KEY`, and Pro refuses answers without a valid signature. From 1.9.2 the server **fails closed**: while the secret key is missing, malformed or damaged, those three routes answer `503 signing_unavailable` instead of an unsigned `200`. Pro maps every 5xx to "unreachable", so sites keep their last known license state and the 48 hour grace period, but nothing can be activated, validated or checked for updates until the key is back.
+
+**Before deploying 1.9.2 to production, run `wp sfls signing status` there.** If the secret key is not set on production, every activate, validate and update/check turns into a 503 the moment 1.9.2 ships. On 1.9.1 or older the command prints only the signing lines:
+
+```
+$ wp sfls signing status
+Warning: Signing is off: SFLS_SIGNING_SECRET_KEY is not set or is not a base64 ed25519 secret key.
+```
+
+That output means: stop, put the original `SFLS_SIGNING_SECRET_KEY` line back into wp-config.php (the same key whose public half Pro ships as `SFLS_SIGNING_PUBLIC_KEY`), run the command again, and deploy only when it ends with `Success: Signing is on.` Never generate a new key to get past this: a new key breaks updates for every Pro site that ships the old public key.
+
+On 1.9.2 the command also runs the key check (it signs a sample answer and verifies it with the public key Pro ships) and stores the result. With a working key:
+
+```
+$ wp sfls signing status
+Signing: OK, checked 2026-11-09 06:44 UTC
+Public key: <base64 public key>
+Success: Signing is on. Every release is signed.
+```
+
+With the key missing:
+
+```
+$ wp sfls signing status
+Warning: Signing: FAILED, SFLS_SIGNING_SECRET_KEY is not defined, so the server cannot sign its answers and the signed routes answer 503. Checked 2026-11-09 06:44 UTC Put the original SFLS_SIGNING_SECRET_KEY line back into wp-config.php. Pro sites keep their last known license state until the server signs again.
+Warning: Signing is off: SFLS_SIGNING_SECRET_KEY is not set or is not a base64 ed25519 secret key.
+```
+
+The check also runs:
+
+* every day with the `sfls_daily` event, and when a Licenses screen opens;
+* on any admin screen while the failure notice is showing, at most once every five minutes, so a restored key clears the notice without waiting for the next day;
+* from a one-off event that a refused signed route schedules when the stored result is older than five minutes (the refused request itself only reads the stored result, it never runs the check or sends mail).
+
+While it fails, an error notice shows on the admin screens and the admin address gets one email a day ("SubtleForms license server: signing key check failed"). When a check passes again the notice goes away and one "recovered" email is sent. Each email is claimed with a lock (`sfls_signing_mail_lock`, `sfls_signing_recovery_lock`) before it is sent, so requests that overlap send one. A development server that never had a key can keep answering unsigned with `add_filter( 'sfls_require_signing', '__return_false' );`.
 
 ## Selling with Paddle (1.5.0: WooCommerce checkout, Paddle payments)
 

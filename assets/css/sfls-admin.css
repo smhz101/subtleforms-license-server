@@ -179,6 +179,18 @@
 	color: #646970;
 }
 
+.sfls-meta-list li span:last-child {
+	min-width: 0;
+	text-align: right;
+	overflow-wrap: anywhere;
+}
+
+.sfls-meta-list li .sfls-mono,
+.sfls-meta-list li .sfls-mono a {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	overflow-wrap: anywhere;
+}
+
 .sfls-acts {
 	margin-bottom: 8px;
 }

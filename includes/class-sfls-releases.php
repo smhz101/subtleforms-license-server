@@ -358,6 +358,22 @@ final class SFLS_Releases {
 	}
 
 	/**
+	 * Whether a stable release is above the version an admin made the latest.
+	 * Mirrors latest(): stable versions above a live stable pin are not offered,
+	 * so an address that names one has to be refused.
+	 *
+	 * @param array $release Release.
+	 */
+	public static function above_pin( array $release ): bool {
+		$pin = self::pinned();
+		if ( '' === $pin || 'stable' !== $release['channel'] ) {
+			return false;
+		}
+		$pinned = self::get( $pin );
+		return $pinned && self::is_live( $pinned ) && 'stable' === $pinned['channel'] && version_compare( $release['version'], $pin, '>' );
+	}
+
+	/**
 	 * The current (latest stable) release, or an empty record.
 	 *
 	 * @return array
@@ -1088,14 +1104,17 @@ final class SFLS_Releases {
 	}
 
 	/**
-	 * Releases a license may download, highest first.
+	 * Releases a license may download, highest first. Stable versions above
+	 * the version an admin made the latest are left out, as latest() and
+	 * above_pin() do, so the list never offers a version the package and
+	 * download routes refuse.
 	 *
 	 * @param array  $lic     License.
 	 * @param string $channel stable (no betas) or beta.
 	 * @return array[]
 	 */
 	public static function allowed_for( array $lic, string $channel = 'beta' ): array {
-		return array_values( array_filter( self::published( 'beta' === $channel ? '' : 'stable' ), static fn( $r ) => self::allowed( $lic, $r ) ) );
+		return array_values( array_filter( self::published( 'beta' === $channel ? '' : 'stable' ), static fn( $r ) => self::allowed( $lic, $r ) && ! self::above_pin( $r ) ) );
 	}
 
 	/**

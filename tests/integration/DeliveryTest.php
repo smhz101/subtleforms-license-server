@@ -114,4 +114,101 @@ class SFLS_Delivery_Test extends SFLS_Test_Case {
 		$html  = SFLS_Delivery::panel_html( $order );
 		$this->assertStringContainsString( 'appears here as soon as your payment is confirmed', $html );
 	}
+
+	/**
+	 * A trialing Paddle license, as SFLS_Billing::fields_for() stores it.
+	 *
+	 * @param array $over Fields to change.
+	 */
+	private function trial_license( array $over = array() ): array {
+		return array_merge(
+			array(
+				'plan'                   => 'starter',
+				'billing'                => 'paddle',
+				'billing_status'         => 'trialing',
+				'paddle_subscription_id' => 'sub_trial_test',
+				'trial'                  => 1,
+				'trial_ends_at'          => '2026-11-15 00:37:22',
+				'cancels_at'             => null,
+				'billing_amount'         => '4900',
+				'billing_currency'       => 'USD',
+			),
+			$over
+		);
+	}
+
+	/**
+	 * The trial line promises what the subscription will charge, not the plan's current price.
+	 */
+	public function test_trial_phrase_uses_the_subscription_amount(): void {
+		$config = (array) get_option( 'sfls_paddle', array() );
+		$plans  = (array) ( $config['plans'] ?? array() );
+		$plans['starter'] = array_merge( (array) ( $plans['starter'] ?? array() ), array( 'amount' => '5900', 'currency' => 'USD' ) );
+		$this->set_option( 'sfls_paddle', array_merge( $config, array( 'plans' => $plans ) ) );
+
+		$line = SFLS_Delivery::trial_phrase( $this->trial_license() );
+		$this->assertStringContainsString( 'trial ends', $line );
+		$this->assertStringContainsString( '49.00/year', $line );
+		$this->assertStringNotContainsString( '59', $line );
+	}
+
+	/**
+	 * Zero-decimal currencies are not divided by 100.
+	 */
+	public function test_trial_phrase_zero_decimal_currency(): void {
+		$line = SFLS_Delivery::trial_phrase( $this->trial_license( array( 'billing_amount' => '4900', 'billing_currency' => 'JPY' ) ) );
+		$this->assertMatchesRegularExpression( '/4,?900\/year/', $line );
+		$this->assertStringNotContainsString( '49.00', $line );
+	}
+
+	/**
+	 * Without a stored amount the plan's mapping is the fallback.
+	 */
+	public function test_trial_phrase_falls_back_to_the_plan_price(): void {
+		$config = (array) get_option( 'sfls_paddle', array() );
+		$plans  = (array) ( $config['plans'] ?? array() );
+		$plans['starter'] = array_merge( (array) ( $plans['starter'] ?? array() ), array( 'amount' => '4900', 'currency' => 'USD' ) );
+		$this->set_option( 'sfls_paddle', array_merge( $config, array( 'plans' => $plans ) ) );
+
+		$line = SFLS_Delivery::trial_phrase( $this->trial_license( array( 'billing_amount' => '', 'billing_currency' => '' ) ) );
+		$this->assertStringContainsString( '49.00/year', $line );
+	}
+
+	/**
+	 * A cancelled trial is never charged; a paid license keeps "renews".
+	 */
+	public function test_trial_phrase_cancelled_and_paid(): void {
+		$this->assertStringContainsString( 'no charge', SFLS_Delivery::trial_phrase( $this->trial_license( array( 'cancels_at' => '2026-11-15 00:37:22' ) ) ) );
+		$this->assertSame( '', SFLS_Delivery::trial_phrase( $this->trial_license( array( 'billing_status' => 'active', 'trial' => 0 ) ) ) );
+	}
+
+	/**
+	 * Only a Paddle subscription "renews". A manual or one-off WooCommerce
+	 * license is "valid until" its date, and no date is "lifetime".
+	 */
+	public function test_license_line_term_by_billing(): void {
+		$base = array(
+			'plan'          => 'agency',
+			'sites_allowed' => 25,
+			'expires_at'    => '2027-11-08 01:30:44',
+		);
+
+		$manual = SFLS_Delivery::license_line( array_merge( $base, array( 'billing' => 'manual' ) ) );
+		$this->assertStringContainsString( 'valid until', $manual );
+		$this->assertStringNotContainsString( 'renews', $manual );
+
+		$woo = SFLS_Delivery::license_line( array_merge( $base, array( 'billing' => 'woocommerce', 'order_id' => 12 ) ) );
+		$this->assertStringContainsString( 'valid until', $woo );
+
+		$paddle = SFLS_Delivery::license_line(
+			array_merge(
+				$base,
+				array( 'billing' => 'paddle', 'billing_status' => 'active', 'paddle_subscription_id' => 'sub_active_test', 'trial' => 0 )
+			)
+		);
+		$this->assertStringContainsString( 'renews', $paddle );
+		$this->assertStringNotContainsString( 'valid until', $paddle );
+
+		$this->assertStringContainsString( 'lifetime', SFLS_Delivery::license_line( array_merge( $base, array( 'billing' => 'manual', 'expires_at' => null ) ) ) );
+	}
 }

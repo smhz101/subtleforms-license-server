@@ -36,17 +36,21 @@ final class SFLS_REST {
 	const NS = 'sfls/v1';
 
 	/**
-	 * Requests per window of the buckets that do not use the default of 30:
-	 * update checks (every site checks on its own schedule, and many sit
-	 * behind one address) and the order status polling of the checkout page
+	 * Requests per window of each bucket ('ip' is the shared bucket of the
+	 * license routes and the fallback for a bucket not listed): releasing a
+	 * seat on a replaced key (its own bucket, so a key switch is never
+	 * refused by the shared one), update checks (every site checks on its own
+	 * schedule, and many sit behind one address) and the order status polling of the checkout page
 	 * (a request every 2 seconds for up to 2 minutes), plus an
 	 * address-wide ceiling for that polling that varying the order or
 	 * transaction cannot get around.
 	 */
 	const DEFAULT_LIMITS = array(
-		'update' => 60,
-		'poll'   => 240,
-		'pollip' => 600,
+		'ip'      => 30,
+		'release' => 60,
+		'update'  => 60,
+		'poll'    => 240,
+		'pollip'  => 600,
 	);
 
 	/**
@@ -123,7 +127,7 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function validate_now( WP_REST_Request $req ) {
-		[ $lic, $domain, $error ] = $this->resolve( $req );
+		[ $lic, $domain, $error ] = $this->resolve( $req, true );
 		if ( $error ) {
 			return $error;
 		}
@@ -134,11 +138,14 @@ final class SFLS_REST {
 			// Same shape as every other error (valid, reason, error). It stays
 			// HTTP 200, which Pro reads as "inactive" rather than "invalid", and
 			// keeps "message" for Pro versions that read that field (LS-10).
-			$text = __( 'This site is not activated for this license.', 'subtleforms-license-server' );
+			$removed = SFLS_Licenses::was_removed( (int) $lic['id'], $domain );
+			$text    = $removed
+				? __( 'This site was removed from the license in your account.', 'subtleforms-license-server' )
+				: __( 'This site is not activated for this license.', 'subtleforms-license-server' );
 			return rest_ensure_response(
 				array(
 					'valid'   => false,
-					'reason'  => 'domain_not_activated',
+					'reason'  => $removed ? 'site_removed' : 'domain_not_activated',
 					'error'   => $text,
 					'message' => $text,
 				) + array_diff_key( self::with_data( $payload ), array( 'valid' => 1, 'status' => 1 ) )
@@ -226,7 +233,11 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function deactivate( WP_REST_Request $req ) {
-		$limited = $this->rate_limit( 'ip', SFLS_Licenses::client_ip() );
+		// Its own bucket, and not the shared 'ip' one: freeing a seat is cheap
+		// and repeating it changes nothing, and a key switch fires several
+		// other requests from the same address first. Sites that share an
+		// address (one host) must never be refused when they free a seat.
+		$limited = $this->rate_limit( 'release', SFLS_Licenses::client_ip() );
 		if ( $limited ) {
 			return $limited;
 		}
@@ -294,7 +305,16 @@ final class SFLS_REST {
 			// Pro caches this answer for hours, longer than a signed link lives,
 			// so the package is a stable address that hands out a fresh signed
 			// link at download time (see package()).
-			$response['package'] = self::package_address( $lic, $domain, 'beta' === $channel ? array( 'channel' => 'beta' ) : array() );
+			// The address names the version this answer offers (1.9.2), so the
+			// download is the package whose sha256 and signature are in this
+			// answer even when a newer release is published before the site
+			// installs it. Addresses cached before 1.9.2 have no version and
+			// still get the current release.
+			$extra = array( 'version' => $release['version'] );
+			if ( 'beta' === $channel ) {
+				$extra['channel'] = 'beta';
+			}
+			$response['package'] = self::package_address( $lic, $domain, $extra );
 			SFLS_Licenses::touch_activation( (int) $lic['id'], $domain, (string) $req->get_param( 'version' ) );
 		}
 
@@ -304,10 +324,12 @@ final class SFLS_REST {
 	/**
 	 * Package endpoint: checks the license and the site, then redirects to a
 	 * newly signed download link that works once within 15 minutes. Without
-	 * a version it serves the latest release of the channel and needs a valid
-	 * license. With a version it serves that release when the license may
-	 * download it (an expired license keeps the versions released while it
-	 * was valid).
+	 * a version (addresses cached before 1.9.2) it serves the latest release
+	 * of the channel and needs a valid license. With a version, which the
+	 * update check puts in the address since 1.9.2, it serves exactly that
+	 * release when the license may download it (an expired license keeps the
+	 * versions released while it was valid). A version that was yanked since
+	 * answers 410.
 	 *
 	 * @param WP_REST_Request $req Request.
 	 * @return WP_REST_Response
@@ -376,8 +398,22 @@ final class SFLS_REST {
 			return $this->error( 403, 'domain_not_activated', __( 'This site is not activated for this license.', 'subtleforms-license-server' ) );
 		}
 		$release = '' === $version ? SFLS_Releases::latest( self::channel( $req ) ) : SFLS_Releases::find( $version );
+		if ( '' !== $version && self::is_withdrawn( $version ) ) {
+			return $this->withdrawn();
+		}
 		if ( ! $release || ! SFLS_Releases::has_package( $release ) ) {
 			return $this->error( 404, 'no_package', __( 'No package is available.', 'subtleforms-license-server' ) );
+		}
+		if ( '' !== $version ) {
+			// A stable site cannot fetch a beta by editing version=. The answer is 410, so a site that
+			// left the beta channel after it cached the address clears it and checks again.
+			if ( 'beta' === $release['channel'] && 'beta' !== self::channel( $req ) ) {
+				return $this->error( 410, 'wrong_channel', __( 'This version is not on your update channel. Check for updates again to get the current version.', 'subtleforms-license-server' ) );
+			}
+			// "Make this the latest" rolled back below this version after the site checked: do not send it.
+			if ( SFLS_Releases::above_pin( $release ) ) {
+				return $this->withdrawn();
+			}
 		}
 		if ( ! SFLS_Releases::allowed( $lic, $release ) ) {
 			return $this->error( 403, 'expired', __( 'This version was released after your license expired. Renew to download it.', 'subtleforms-license-server' ) );
@@ -386,6 +422,26 @@ final class SFLS_REST {
 		$response->header( 'Location', SFLS_Releases::signed_url( $lic['license_key'], $domain, $release['version'] ) );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;
+	}
+
+	/**
+	 * Whether a release exists and is no longer published: yanked, or taken
+	 * back to a draft ("Unpublish to draft"). A version that never existed is
+	 * not withdrawn.
+	 *
+	 * @param string $version Version.
+	 */
+	private static function is_withdrawn( string $version ): bool {
+		$release = SFLS_Releases::get( $version );
+		return $release && ! SFLS_Releases::is_live( $release );
+	}
+
+	/**
+	 * The answer for a version that was offered and has been withdrawn since.
+	 * 410 tells the site this will not come back, and what to do.
+	 */
+	private function withdrawn(): WP_REST_Response {
+		return $this->error( 410, 'version_withdrawn', __( 'This version was withdrawn after your site last checked for updates. Check for updates again to get the current version.', 'subtleforms-license-server' ) );
 	}
 
 	/**
@@ -469,11 +525,19 @@ final class SFLS_REST {
 		}
 		$lic     = SFLS_Licenses::find_by_key( $key );
 		$release = '' === $version ? SFLS_Releases::latest( 'stable' ) : SFLS_Releases::find( $version );
+		if ( $lic && '' !== $version && self::is_withdrawn( $version ) ) {
+			return $this->withdrawn();
+		}
 		if ( ! $lic || ( $release && ! SFLS_Releases::allowed( $lic, $release ) ) || ( ! $release && ! SFLS_Licenses::state( $lic )['valid'] ) ) {
 			return $this->error( 403, 'expired', __( 'An active license is required to download updates.', 'subtleforms-license-server' ) );
 		}
 		if ( ! $release || ! SFLS_Releases::has_package( $release ) ) {
 			return $this->error( 404, 'no_package', __( 'No package is available.', 'subtleforms-license-server' ) );
+		}
+		if ( '' !== $version && SFLS_Releases::above_pin( $release ) ) {
+			// A link signed before "Make this the latest" rolled back below this version: do not serve it.
+			// Checked before the token is used up, so the refused request does not burn the link.
+			return $this->withdrawn();
 		}
 		if ( ! SFLS_Releases::consume_token( $token ) ) {
 			return $this->error( 403, 'link_used', __( 'This download link was already used. Check for updates again to get a new one.', 'subtleforms-license-server' ) );
@@ -504,7 +568,8 @@ final class SFLS_REST {
 			return $limited;
 		}
 		$code   = preg_replace( '/[^A-Za-z0-9]/', '', (string) $req->get_param( 'code' ) );
-		$domain = SFLS_Licenses::normalize_domain( sanitize_text_field( (string) $req->get_param( 'site_url' ) ) );
+		// Pro 2.8.2 and later keep the path of the site; older versions are known by their host.
+		$domain = SFLS_Connect::site_identity( esc_url_raw( (string) $req->get_param( 'site_url' ), array( 'http', 'https' ) ), (string) $req->get_param( 'identity' ) );
 		$fail   = $this->error( 400, 'invalid_code', __( 'This connection code is invalid or has expired. Connect the site again.', 'subtleforms-license-server' ) );
 
 		if ( '' === $code || '' === $domain ) {
@@ -542,10 +607,12 @@ final class SFLS_REST {
 	/**
 	 * Look up the license and domain of a request.
 	 *
-	 * @param WP_REST_Request $req Request.
+	 * @param WP_REST_Request $req     Request.
+	 * @param bool            $upgrade Whether a quiet host-only row may be handed to this host/path
+	 *                                 (validate only; activate does it itself, and deactivate never does).
 	 * @return array{0:?array,1:string,2:?WP_REST_Response}
 	 */
-	private function resolve( WP_REST_Request $req ): array {
+	private function resolve( WP_REST_Request $req, bool $upgrade = false ): array {
 		$key    = strtoupper( sanitize_text_field( (string) $req->get_param( 'license_key' ) ) );
 		$domain = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site_url' ) );
 
@@ -566,6 +633,14 @@ final class SFLS_REST {
 		$lic = SFLS_Licenses::find_by_key( $key );
 		if ( ! $lic ) {
 			return array( null, $domain, $this->error( 404, 'license_not_found', __( 'That license key was not found. Check it in your SubtleForms account.', 'subtleforms-license-server' ) ) );
+		}
+
+		// A site in a subdirectory that was activated by host only (before 1.9.2)
+		// takes over its quiet host-only row the first time it validates with its
+		// path. Deactivate never does this: a copy must not be able to rename the
+		// seat of the site it was copied from and then delete it.
+		if ( $upgrade ) {
+			SFLS_Licenses::upgrade_legacy_activation( (int) $lic['id'], $domain );
 		}
 
 		return array( $lic, $domain, null );
@@ -646,7 +721,7 @@ final class SFLS_REST {
 			return $limited;
 		}
 		// A site that can still be activated is not counted against the key.
-		$newcomer = $valid && ( SFLS_Licenses::has_free_slot( $lic ) || SFLS_Licenses::is_local_domain( $domain ) );
+		$newcomer = $valid && ( SFLS_Licenses::has_seat_for( $lic, $domain ) || SFLS_Licenses::is_local_domain( $domain ) );
 		$scale    = $lic ? self::failure_scale( $lic ) * self::CEILING_FACTOR : self::CEILING_FACTOR;
 		if ( ! $newcomer ) {
 			$limited = $this->rate_limit( 'ceiling', $key, false, $scale );
