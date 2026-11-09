@@ -289,4 +289,107 @@ class SFLS_Pinned_Download_Test extends SFLS_Test_Case {
 		$this->assertSame( 403, $download->get_status() );
 		$this->assertSame( 'invalid_signature', $download->get_data()['reason'] );
 	}
+
+	/**
+	 * The versions list of a site.
+	 *
+	 * @param array  $lic     License.
+	 * @param string $channel stable | beta.
+	 */
+	private function versions( array $lic, string $channel = 'stable' ): array {
+		$data = $this->rest(
+			'GET',
+			'/sfls/v1/update/versions',
+			array(
+				'license_key' => $lic['license_key'],
+				'site_url'    => self::SITE,
+				'channel'     => $channel,
+			)
+		)->get_data();
+		return wp_list_pluck( $data['versions'], 'version' );
+	}
+
+	/**
+	 * The versions list hides stable versions above a new pin, so it offers
+	 * only versions the package address will serve.
+	 */
+	public function test_the_versions_list_hides_versions_above_the_pin(): void {
+		$this->add_release( '9.8.0' );
+		$this->add_release( '9.8.1' );
+		$this->add_release( '9.8.2' );
+		$lic = $this->site_license();
+		$this->assertSame( array( '9.8.2', '9.8.1', '9.8.0' ), $this->versions( $lic ) );
+
+		$this->assertTrue( SFLS_Releases::pin( '9.8.1' ) );
+
+		$this->assertSame( array( '9.8.1', '9.8.0' ), $this->versions( $lic ) );
+
+		// Every version the list still offers is served.
+		$data = $this->rest( 'GET', '/sfls/v1/update/versions', array( 'license_key' => $lic['license_key'], 'site_url' => self::SITE ) )->get_data();
+		foreach ( $data['versions'] as $row ) {
+			$this->assertSame( 302, $this->package( $row['package'] )->get_status(), $row['version'] );
+		}
+
+		SFLS_Releases::unpin();
+		$this->assertSame( array( '9.8.2', '9.8.1', '9.8.0' ), $this->versions( $lic ) );
+	}
+
+	/**
+	 * A signed download link handed out before a rollback does not serve the
+	 * version above the pin, and the refused request does not use the link up.
+	 */
+	public function test_a_signed_link_for_a_version_above_the_pin_answers_410(): void {
+		$this->add_release( '9.8.0' );
+		$this->add_release( '9.8.1' );
+		$lic   = $this->site_license();
+		$check = $this->check( $lic );
+		$this->assertSame( '9.8.1', $check['new_version'] );
+		$link = $this->package( $check['package'] )->get_headers()['Location'];
+
+		$this->assertTrue( SFLS_Releases::pin( '9.8.0' ) );
+
+		$download = $this->rest( 'GET', '/sfls/v1/update/download', $this->args( $link ) );
+		$this->assertSame( 410, $download->get_status() );
+		$this->assertSame( 'version_withdrawn', $download->get_data()['reason'] );
+		$this->assertStringContainsString( 'Check for updates again', $download->get_data()['error'] );
+		$this->assertSame( '', $this->served_version( $link ), 'The pinned server never streams the higher version.' );
+
+		// Without the pin the same link is served, so the refusal did not burn it.
+		SFLS_Releases::unpin();
+		$this->assertSame( '9.8.1', $this->served_version( $link ) );
+	}
+
+	/**
+	 * The version at the pin itself and below it still downloads on a signed link.
+	 */
+	public function test_a_signed_link_at_the_pin_is_served(): void {
+		$this->add_release( '9.8.0' );
+		$this->add_release( '9.8.1' );
+		$lic   = $this->site_license();
+		$this->assertTrue( SFLS_Releases::pin( '9.8.0' ) );
+		$fresh = $this->check( $lic );
+		$link  = $this->package( $fresh['package'] )->get_headers()['Location'];
+
+		$this->assertSame( '9.8.0', $this->served_version( $link ) );
+	}
+
+	/**
+	 * Beta sites are not hidden from their own channel: a beta above the pin
+	 * stays in the list and downloads, while stable versions above the pin go.
+	 */
+	public function test_the_beta_channel_is_unaffected_by_the_pin(): void {
+		$this->add_release( '9.8.0' );
+		$this->add_release( '9.8.1' );
+		$this->add_release( '9.9.0-beta.1', array( 'channel' => 'beta' ) );
+		$lic = $this->site_license();
+		$this->assertTrue( SFLS_Releases::pin( '9.8.0' ) );
+
+		$this->assertSame( array( '9.9.0-beta.1', '9.8.0' ), $this->versions( $lic, 'beta' ) );
+		$this->assertSame( array( '9.8.0' ), $this->versions( $lic, 'stable' ) );
+
+		$beta = $this->check( $lic, 'beta' );
+		$this->assertSame( '9.9.0-beta.1', $beta['new_version'] );
+		$link = $this->package( $beta['package'] )->get_headers()['Location'];
+		$this->assertSame( '9.9.0-beta.1', $this->served_version( $link ) );
+	}
 }

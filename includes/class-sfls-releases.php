@@ -1104,14 +1104,17 @@ final class SFLS_Releases {
 	}
 
 	/**
-	 * Releases a license may download, highest first.
+	 * Releases a license may download, highest first. Stable versions above
+	 * the version an admin made the latest are left out, as latest() and
+	 * above_pin() do, so the list never offers a version the package and
+	 * download routes refuse.
 	 *
 	 * @param array  $lic     License.
 	 * @param string $channel stable (no betas) or beta.
 	 * @return array[]
 	 */
 	public static function allowed_for( array $lic, string $channel = 'beta' ): array {
-		return array_values( array_filter( self::published( 'beta' === $channel ? '' : 'stable' ), static fn( $r ) => self::allowed( $lic, $r ) ) );
+		return array_values( array_filter( self::published( 'beta' === $channel ? '' : 'stable' ), static fn( $r ) => self::allowed( $lic, $r ) && ! self::above_pin( $r ) ) );
 	}
 
 	/**
