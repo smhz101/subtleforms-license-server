@@ -205,6 +205,33 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 	}
 
 	/**
+	 * Cancel form opens Paddle's Retain flow on live Paddle accounts only.
+	 */
+	public function test_cancel_form_retain_attribute(): void {
+		[ $lic, $sub, $user ] = $this->paid();
+		wp_set_current_user( $user->ID );
+		$render = static function (): string {
+			ob_start();
+			( new SFLS_Account() )->licenses_page();
+			return (string) ob_get_clean();
+		};
+		$attr = 'data-sfls-retain-subscription="' . $sub['id'] . '"';
+
+		$this->assertStringNotContainsString( 'data-sfls-retain-subscription', $render(), 'Sandbox: direct cancel.' );
+
+		SFLS_Paddle::save_config( array( 'env' => 'live' ) );
+		$this->assertStringContainsString( $attr, $render() );
+		$this->assertTrue( wp_script_is( 'sfls-retain', 'enqueued' ) );
+
+		SFLS_Paddle::save_config( array( 'client_token' => '' ) );
+		$this->assertStringNotContainsString( 'data-sfls-retain-subscription', $render(), 'No client token.' );
+
+		SFLS_Paddle::save_config( array( 'client_token' => 'live_clienttoken' ) );
+		SFLS_Licenses::update( (int) $lic['id'], array( 'paddle_subscription_id' => '' ) );
+		$this->assertSame( '', SFLS_Account::retain_attr( SFLS_Licenses::find( (int) $lic['id'] ) ), 'Not a Paddle subscription.' );
+	}
+
+	/**
 	 * A trial card says when it ends, that it covers 1 site, and offers Cancel.
 	 */
 	public function test_members_area_trial_card(): void {
