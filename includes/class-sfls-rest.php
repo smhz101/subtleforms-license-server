@@ -534,6 +534,11 @@ final class SFLS_REST {
 		if ( ! $release || ! SFLS_Releases::has_package( $release ) ) {
 			return $this->error( 404, 'no_package', __( 'No package is available.', 'subtleforms-license-server' ) );
 		}
+		if ( '' !== $version && SFLS_Releases::above_pin( $release ) ) {
+			// A link signed before "Make this the latest" rolled back below this version: do not serve it.
+			// Checked before the token is used up, so the refused request does not burn the link.
+			return $this->withdrawn();
+		}
 		if ( ! SFLS_Releases::consume_token( $token ) ) {
 			return $this->error( 403, 'link_used', __( 'This download link was already used. Check for updates again to get a new one.', 'subtleforms-license-server' ) );
 		}

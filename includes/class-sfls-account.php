@@ -703,14 +703,16 @@ final class SFLS_Account {
 	/**
 	 * The latest release with its changelog, then every older published
 	 * version (betas included, yanked and draft versions never) with its own
-	 * changelog and download button. Each button leads to a fresh signed,
+	 * changelog and download button. Stable versions above the version an
+	 * admin made the latest ("Make this the latest") are left out, as the
+	 * download route refuses them. Each button leads to a fresh signed,
 	 * single-use link for that license and version.
 	 *
 	 * @param WP_User $user Customer.
 	 */
 	public static function downloads_html( WP_User $user ): string {
 		$latest = SFLS_Releases::latest( 'stable' );
-		$all    = SFLS_Releases::published();
+		$all    = array_values( array_filter( SFLS_Releases::published(), static fn( $r ) => ! SFLS_Releases::above_pin( $r ) ) );
 		if ( ! $latest && $all ) {
 			$latest = $all[0]; // Only betas so far.
 		}
@@ -845,6 +847,20 @@ final class SFLS_Account {
 		$release = 'latest' === $version ? SFLS_Releases::latest( 'stable' ) : SFLS_Releases::find( $version );
 		if ( ! $release || ! SFLS_Releases::has_package( $release ) ) {
 			wc_add_notice( __( 'That version is not available for download.', 'subtleforms-license-server' ), 'error' );
+			wp_safe_redirect( $back );
+			exit;
+		}
+		if ( SFLS_Releases::above_pin( $release ) ) {
+			// Reached by an old page or a copied address after "Make this the latest" rolled back below it.
+			// Nothing is signed: the download route would answer 410.
+			$current = SFLS_Releases::latest( 'stable' );
+			wc_add_notice(
+				$current
+					/* translators: %s: version */
+					? sprintf( __( 'That version was withdrawn. The latest available version is %s.', 'subtleforms-license-server' ), $current['version'] )
+					: __( 'That version was withdrawn.', 'subtleforms-license-server' ),
+				'error'
+			);
 			wp_safe_redirect( $back );
 			exit;
 		}
