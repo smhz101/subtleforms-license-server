@@ -478,6 +478,12 @@ final class SFLS_CLI_Signing {
 	 * Show whether signing is on and the public key in use.
 	 */
 	public function status(): void {
+		$check = SFLS_Signing_Check::run();
+		if ( $check['ok'] ) {
+			WP_CLI::line( SFLS_Signing_Check::summary( $check ) );
+		} else {
+			WP_CLI::warning( SFLS_Signing_Check::summary( $check ) . ' ' . $check['fix'] );
+		}
 		if ( ! SFLS_Signing::enabled() ) {
 			WP_CLI::warning( 'Signing is off: SFLS_SIGNING_SECRET_KEY is not set or is not a base64 ed25519 secret key.' );
 			return;

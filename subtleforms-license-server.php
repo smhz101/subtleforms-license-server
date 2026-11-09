@@ -39,6 +39,7 @@ require_once SFLS_DIR . 'includes/class-sfls-woo.php';
 require_once SFLS_DIR . 'includes/class-sfls-account.php';
 require_once SFLS_DIR . 'includes/class-sfls-shortcodes.php';
 require_once SFLS_DIR . 'includes/class-sfls-reminders.php';
+require_once SFLS_DIR . 'includes/class-sfls-signing-check.php';
 require_once SFLS_DIR . 'includes/class-sfls-upgrades.php';
 require_once SFLS_DIR . 'includes/class-sfls-checkout.php';
 require_once SFLS_DIR . 'includes/class-sfls-delivery.php';
@@ -73,6 +74,7 @@ register_deactivation_hook(
 	__FILE__,
 	static function () {
 		SFLS_Reminders::unschedule();
+		wp_clear_scheduled_hook( SFLS_Signing_Check::EVENT );
 		delete_option( 'sfls_flush_rewrite' );
 		flush_rewrite_rules();
 	}
@@ -104,6 +106,7 @@ add_action(
 		( new SFLS_Guest() )->register();
 		( new SFLS_Shortcodes() )->register();
 		( new SFLS_Reminders() )->register();
+		SFLS_Signing_Check::register();
 		( new SFLS_Upgrades() )->register();
 		( new SFLS_Checkout() )->register();
 		( new SFLS_Delivery() )->register();
