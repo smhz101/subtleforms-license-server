@@ -392,4 +392,99 @@ class SFLS_Pinned_Download_Test extends SFLS_Test_Case {
 		$link = $this->package( $beta['package'] )->get_headers()['Location'];
 		$this->assertSame( '9.9.0-beta.1', $this->served_version( $link ) );
 	}
+
+	/**
+	 * Press the My Account download button for a version and return where the
+	 * browser is sent.
+	 *
+	 * @param string $version Version of the button.
+	 */
+	private function press_account_button( string $version ): string {
+		$_GET['sfls_download'] = $version;
+		$_GET['_wpnonce']      = wp_create_nonce( 'sfls_download' );
+		$_REQUEST['_wpnonce']  = $_GET['_wpnonce'];
+		$this->filter(
+			'wp_redirect',
+			static function ( $location ) {
+				throw new SFLS_Test_Stop( $location );
+			}
+		);
+		try {
+			( new SFLS_Account() )->handle_download();
+			$this->fail( 'Expected a redirect.' );
+		} catch ( SFLS_Test_Stop $stop ) {
+			return (string) $stop->data;
+		} finally {
+			unset( $_GET['sfls_download'], $_GET['_wpnonce'], $_REQUEST['_wpnonce'] );
+		}
+		return '';
+	}
+
+	/**
+	 * My Account follows the pin: the list hides the versions above it, a
+	 * button that still names one (an old page, a copied address) goes back to
+	 * the downloads page with a notice and signs nothing, and the pinned
+	 * version and the ones below it still download.
+	 */
+	public function test_my_account_downloads_follow_the_pin(): void {
+		$this->add_release( '9.8.0' );
+		$this->add_release( '9.8.1' );
+		$this->add_release( '9.8.2' );
+		$this->add_release( '9.9.0-beta.1', array( 'channel' => 'beta' ) );
+		$user = $this->make_user();
+		$lic  = $this->make_license(
+			array(
+				'customer_email' => $user->user_email,
+				'user_id'        => $user->ID,
+			)
+		);
+		wp_set_current_user( $user->ID );
+
+		// Without a pin 9.8.2 is the latest and every version has a button.
+		$html = SFLS_Account::downloads_html( $user );
+		$this->assertStringContainsString( 'SubtleForms Pro 9.8.2', $html );
+		$this->assertSame( 4, substr_count( $html, 'sfls_download=' ) );
+
+		$this->assertTrue( SFLS_Releases::pin( '9.8.1' ) );
+
+		$html = SFLS_Account::downloads_html( $user );
+		$this->assertStringContainsString( 'SubtleForms Pro 9.8.1', $html, 'The pinned version is the latest release.' );
+		$this->assertStringNotContainsString( '9.8.2', $html, 'The version above the pin is not listed.' );
+		$this->assertStringContainsString( 'version-9-8-0', $html );
+		$this->assertStringContainsString( 'version-9-9-0-beta-1', $html, 'Betas stay in the list.' );
+		$this->assertSame( 3, substr_count( $html, 'sfls_download=' ), 'Latest, 9.8.0 and the beta.' );
+
+		// The shortcode shows the same list.
+		$this->assertStringNotContainsString( '9.8.2', do_shortcode( '[sfls_downloads]' ) );
+
+		// A button for the withdrawn version: back to the downloads page, a notice, no signed link.
+		$back     = wc_get_account_endpoint_url( SFLS_Account::EP_DOWNLOADS );
+		$location = $this->press_account_button( '9.8.2' );
+		$this->assertSame( $back, $location );
+		$this->assertStringNotContainsString( 'update/download', $location );
+		$this->assertStringNotContainsString( 'sig=', $location );
+		$notices = wc_get_notices( 'error' );
+		$this->assertCount( 1, $notices );
+		$this->assertSame( 'That version was withdrawn. The latest available version is 9.8.1.', wp_strip_all_tags( $notices[0]['notice'] ) );
+		wc_clear_notices();
+
+		// The pinned version downloads, and so does the one below it.
+		foreach ( array( '9.8.1', '9.8.0' ) as $version ) {
+			$location = $this->press_account_button( $version );
+			$this->assertStringContainsString( '/sfls/v1/update/download', $location, $version );
+			$args = $this->args( $location );
+			$this->assertSame( $version, $args['version'] );
+			$this->assertTrue( SFLS_Releases::verify( $lic['license_key'], 'account', (int) $args['expires'], $args['sig'], $args['token'], $version ), $version );
+			$this->assertSame( $version, $this->served_version( $location ), $version );
+			$this->assertSame( array(), wc_get_notices( 'error' ), $version );
+		}
+
+		// "latest" is the pinned version.
+		$this->assertSame( '9.8.1', $this->args( $this->press_account_button( 'latest' ) )['version'] );
+
+		// Without the pin the withdrawn version is offered and downloads again.
+		SFLS_Releases::unpin();
+		$this->assertStringContainsString( 'version-9-8-1', SFLS_Account::downloads_html( $user ) );
+		$this->assertSame( '9.8.2', $this->args( $this->press_account_button( '9.8.2' ) )['version'] );
+	}
 }
