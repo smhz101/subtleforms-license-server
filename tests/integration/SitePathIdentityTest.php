@@ -32,6 +32,26 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	}
 
 	/**
+	 * Add a host-only row the way the schema 11 migration leaves one: a legacy row.
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $domain     Host.
+	 * @param string $version    Reported version.
+	 */
+	private function add_legacy( int $license_id, string $domain, string $version = '' ): void {
+		global $wpdb;
+		SFLS_Licenses::add_activation( $license_id, $domain, $version );
+		$wpdb->update(
+			SFLS_DB::activations(),
+			array( 'legacy' => 1 ),
+			array(
+				'license_id' => $license_id,
+				'domain'     => $domain,
+			)
+		);
+	}
+
+	/**
 	 * Call a license route for a site.
 	 *
 	 * @param string $route Route under license/.
@@ -173,7 +193,7 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	 */
 	public function test_a_quiet_host_only_row_is_upgraded_in_place(): void {
 		$lic = $this->make_license( array( 'plan' => 'starter' ) );
-		SFLS_Licenses::add_activation( (int) $lic['id'], 'legacy-sub.example.com', '2.8.1' );
+		$this->add_legacy( (int) $lic['id'], 'legacy-sub.example.com', '2.8.1' );
 		$this->seen_ago( (int) $lic['id'], 'legacy-sub.example.com', 3 * DAY_IN_SECONDS );
 
 		$data = $this->call( 'validate', $lic, 'https://legacy-sub.example.com/shop/' )->get_data();
@@ -198,7 +218,7 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	public function test_the_upgrade_runs_on_activate_and_update_check(): void {
 		$this->add_release( '9.9.1' );
 		$lic = $this->make_license( array( 'plan' => 'starter' ) );
-		SFLS_Licenses::add_activation( (int) $lic['id'], 'legacy-act.example.com' );
+		$this->add_legacy( (int) $lic['id'], 'legacy-act.example.com' );
 		$this->seen_ago( (int) $lic['id'], 'legacy-act.example.com', 5 * DAY_IN_SECONDS );
 
 		$activated = $this->call( 'activate', $lic, 'https://legacy-act.example.com/blog' );
@@ -208,7 +228,7 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 
 		// The update check does not rename anything: only activate and validate do.
 		$lic2 = $this->make_license( array( 'plan' => 'starter' ) );
-		SFLS_Licenses::add_activation( (int) $lic2['id'], 'legacy-upd.example.com' );
+		$this->add_legacy( (int) $lic2['id'], 'legacy-upd.example.com' );
 		$this->seen_ago( (int) $lic2['id'], 'legacy-upd.example.com', 5 * DAY_IN_SECONDS );
 		$check = $this->rest(
 			'GET',
@@ -228,7 +248,7 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	 */
 	public function test_a_live_host_only_row_is_never_taken_by_a_copy(): void {
 		$lic = $this->make_license( array( 'plan' => 'starter' ) );
-		SFLS_Licenses::add_activation( (int) $lic['id'], 'live-root.example.com', '2.8.1' );
+		$this->add_legacy( (int) $lic['id'], 'live-root.example.com', '2.8.1' );
 		$this->seen_ago( (int) $lic['id'], 'live-root.example.com', 6 * HOUR_IN_SECONDS ); // Validates every twelve hours.
 
 		$validate = $this->call( 'validate', $lic, 'https://live-root.example.com/staging' )->get_data();
@@ -245,17 +265,128 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * With a free seat the copy simply activates, next to the live site, and
-	 * the two rows are one seat while the host-only row is a legacy one.
+	 * The first path beside a live legacy row is the one site that moved from
+	 * host-only to host/path: it joins the row's seat. A second path needs a
+	 * seat of its own, whatever the legacy row's version says.
 	 */
-	public function test_a_copy_beside_a_live_host_only_row_activates_with_a_free_seat(): void {
+	public function test_a_copy_beside_a_live_legacy_row_joins_once_and_a_second_path_needs_a_seat(): void {
 		$lic = $this->make_license( array( 'plan' => 'pro' ) );
-		SFLS_Licenses::add_activation( (int) $lic['id'], 'live-free.example.com' );
+		$id  = (int) $lic['id'];
+		$this->add_legacy( $id, 'live-free.example.com' );
 
 		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://live-free.example.com/staging' )->get_status() );
-		$this->assertSame( array( 'live-free.example.com', 'live-free.example.com/staging' ), $this->domains( $lic ) );
-		$this->assertSame( 1, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
+		$this->assertSame( 1, SFLS_Licenses::used_slots( $id ), 'The first path joins the legacy seat.' );
+		$this->assertSame( 'live-free.example.com/staging', SFLS_Licenses::activation( $id, 'live-free.example.com' )['legacy_joined_by'] );
+
+		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://live-free.example.com/second' )->get_status() );
+		$this->assertSame( 2, SFLS_Licenses::used_slots( $id ), 'The second path takes a seat of its own.' );
+		$this->assertSame( array( 'live-free.example.com', 'live-free.example.com/second', 'live-free.example.com/staging' ), $this->domains( $lic ) );
 		$this->assertTrue( $this->call( 'validate', $lic, 'https://live-free.example.com' )->get_data()['valid'] );
+	}
+
+	/**
+	 * On a full license a second path beside a legacy row is refused.
+	 */
+	public function test_a_second_path_beside_a_legacy_row_is_refused_on_a_full_license(): void {
+		$lic = $this->make_license( array( 'plan' => 'starter' ) );
+		$this->add_legacy( (int) $lic['id'], 'full-legacy.example.com', '2.8.1' );
+		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://full-legacy.example.com/one' )->get_status() );
+		$second = $this->call( 'activate', $lic, 'https://full-legacy.example.com/two' );
+		$this->assertSame( 'activation_limit', $second->get_data()['reason'] );
+		$this->assertSame( 1, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
+	}
+
+	/**
+	 * A client cannot bring legacy status back by reporting an old version: the
+	 * flag is set by the migration only, and a stored version never goes down.
+	 */
+	public function test_a_lower_version_does_not_bring_back_legacy_status(): void {
+		$lic = $this->make_license( array( 'plan' => 'starter' ) );
+		$id  = (int) $lic['id'];
+		SFLS_Licenses::add_activation( $id, 'current-root.example.com', '2.8.2' );
+		$this->assertSame( 0, (int) SFLS_Licenses::activation( $id, 'current-root.example.com' )['legacy'], 'A row added after the deploy is not legacy.' );
+
+		SFLS_Licenses::touch_activation( $id, 'current-root.example.com', '2.7.0' );
+		$row = SFLS_Licenses::activation( $id, 'current-root.example.com' );
+		$this->assertSame( '2.8.2', $row['plugin_version'], 'A lower version is ignored.' );
+		$this->assertSame( 0, (int) $row['legacy'] );
+
+		// An update check that reports an old version, then a path beside the root: a seat is needed.
+		$this->rest(
+			'GET',
+			'/sfls/v1/update/check',
+			array(
+				'license_key' => $lic['license_key'],
+				'site_url'    => 'https://current-root.example.com',
+				'version'     => '2.0.0',
+			)
+		);
+		$this->assertSame( '2.8.2', SFLS_Licenses::activation( $id, 'current-root.example.com' )['plugin_version'] );
+		$this->assertSame( 'activation_limit', $this->call( 'activate', $lic, 'https://current-root.example.com/shop' )->get_data()['reason'] );
+
+		// A higher version is stored.
+		SFLS_Licenses::touch_activation( $id, 'current-root.example.com', '2.9.0' );
+		$this->assertSame( '2.9.0', SFLS_Licenses::activation( $id, 'current-root.example.com' )['plugin_version'] );
+	}
+
+	/**
+	 * The schema 11 migration marks the host-only rows that exist, and only those.
+	 */
+	public function test_the_migration_marks_existing_host_only_rows_as_legacy(): void {
+		$lic = $this->make_license( array( 'plan' => 'pro' ) );
+		$id  = (int) $lic['id'];
+		SFLS_Licenses::add_activation( $id, 'mig.example.com', '2.8.1' );
+		SFLS_Licenses::add_activation( $id, 'mig.example.com/shop', '2.8.2' );
+		$this->assertSame( 0, (int) SFLS_Licenses::activation( $id, 'mig.example.com' )['legacy'] );
+
+		update_option( 'sfls_schema_version', '10' );
+		SFLS_DB::install();
+
+		$this->assertSame( 1, (int) SFLS_Licenses::activation( $id, 'mig.example.com' )['legacy'] );
+		$this->assertSame( 0, (int) SFLS_Licenses::activation( $id, 'mig.example.com/shop' )['legacy'] );
+
+		// Running it again, at the current schema, marks nothing new.
+		SFLS_Licenses::add_activation( $id, 'later.example.com', '2.8.2' );
+		SFLS_DB::install();
+		$this->assertSame( 0, (int) SFLS_Licenses::activation( $id, 'later.example.com' )['legacy'] );
+	}
+
+	/**
+	 * Reading the seat count never deletes a quiet legacy row; the daily job does.
+	 */
+	public function test_quiet_legacy_rows_are_pruned_by_the_daily_job_not_on_read(): void {
+		$lic = $this->make_license( array( 'plan' => 'pro' ) );
+		$id  = (int) $lic['id'];
+		$this->add_legacy( $id, 'prune.example.com', '2.8.1' );
+		$this->call( 'activate', $lic, 'https://prune.example.com/shop' );
+		$this->seen_ago( $id, 'prune.example.com', 40 * HOUR_IN_SECONDS );
+
+		$this->assertSame( 1, SFLS_Licenses::used_slots( $id ) );
+		$this->call( 'validate', $lic, 'https://prune.example.com/shop' );
+		$this->assertSame( array( 'prune.example.com', 'prune.example.com/shop' ), $this->domains( $lic ), 'Reads leave the row.' );
+
+		$this->assertSame( 1, SFLS_Licenses::prune_legacy_rows() );
+		$this->assertSame( array( 'prune.example.com/shop' ), $this->domains( $lic ) );
+		$this->assertSame( 1, SFLS_Licenses::used_slots( $id ), 'The joined row holds the seat.' );
+
+		// A live legacy row is never pruned.
+		$this->add_legacy( $id, 'alive.example.com' );
+		$this->call( 'activate', $lic, 'https://alive.example.com/shop' );
+		$this->seen_ago( $id, 'alive.example.com', 6 * HOUR_IN_SECONDS );
+		$this->assertSame( 0, SFLS_Licenses::prune_legacy_rows() );
+	}
+
+	/**
+	 * Removing the joined path frees the join again.
+	 */
+	public function test_removing_the_joined_path_reopens_the_join(): void {
+		$lic = $this->make_license( array( 'plan' => 'starter' ) );
+		$id  = (int) $lic['id'];
+		$this->add_legacy( $id, 'rejoin.example.com' );
+		$this->call( 'activate', $lic, 'https://rejoin.example.com/one' );
+		SFLS_Licenses::remove_activation( $id, 'rejoin.example.com/one', 'account' );
+		$this->assertSame( '', SFLS_Licenses::activation( $id, 'rejoin.example.com' )['legacy_joined_by'] );
+		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://rejoin.example.com/two' )->get_status() );
 	}
 
 	/**
@@ -264,7 +395,7 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	public function test_the_upgrade_stays_inside_one_license(): void {
 		$one = $this->make_license( array( 'plan' => 'pro' ) );
 		$two = $this->make_license( array( 'plan' => 'pro' ) );
-		SFLS_Licenses::add_activation( (int) $one['id'], 'shared-host.example.com' );
+		$this->add_legacy( (int) $one['id'], 'shared-host.example.com' );
 		$this->seen_ago( (int) $one['id'], 'shared-host.example.com', 4 * DAY_IN_SECONDS );
 
 		$this->call( 'activate', $two, 'https://shared-host.example.com/shop' );
@@ -348,7 +479,7 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	 */
 	public function test_deactivate_from_a_path_leaves_a_quiet_host_only_row(): void {
 		$lic = $this->make_license( array( 'plan' => 'starter' ) );
-		SFLS_Licenses::add_activation( (int) $lic['id'], 'quiet-prod.example.com', '2.8.1' );
+		$this->add_legacy( (int) $lic['id'], 'quiet-prod.example.com', '2.8.1' );
 		$this->seen_ago( (int) $lic['id'], 'quiet-prod.example.com', 4 * DAY_IN_SECONDS );
 
 		$res = $this->call( 'deactivate', $lic, 'https://quiet-prod.example.com/staging' );
@@ -364,7 +495,7 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	 */
 	public function test_subdirectory_upgrade_with_a_free_seat_ends_with_one_row(): void {
 		$lic = $this->make_license( array( 'plan' => 'pro' ) );
-		SFLS_Licenses::add_activation( (int) $lic['id'], 'free-seat.example.com', '2.8.1' );
+		$this->add_legacy( (int) $lic['id'], 'free-seat.example.com', '2.8.1' );
 		$this->seen_ago( (int) $lic['id'], 'free-seat.example.com', 40 * HOUR_IN_SECONDS );
 
 		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://free-seat.example.com/shop' )->get_status() );
@@ -378,7 +509,7 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	public function test_the_quiet_window_is_shorter_than_the_pro_grace(): void {
 		$this->assertSame( 36 * HOUR_IN_SECONDS, SFLS_Licenses::LEGACY_QUIET_SECONDS );
 		$lic = $this->make_license( array( 'plan' => 'starter' ) );
-		SFLS_Licenses::add_activation( (int) $lic['id'], 'window.example.com', '2.8.1' );
+		$this->add_legacy( (int) $lic['id'], 'window.example.com', '2.8.1' );
 		$this->seen_ago( (int) $lic['id'], 'window.example.com', 30 * HOUR_IN_SECONDS );
 		$this->call( 'validate', $lic, 'https://window.example.com/a' );
 		$this->assertSame( array( 'window.example.com' ), $this->domains( $lic ), 'Not quiet long enough.' );
@@ -388,29 +519,34 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * A path multisite: the root keeps the legacy row alive, its subsites
-	 * activate as host/path identities and count with it as one seat, even on a
-	 * full license. Once the row goes quiet it is dropped and each site is a seat.
+	 * A path multisite: the root keeps the legacy row alive, one subsite
+	 * activates as a host/path identity and counts with it as one seat, even on a
+	 * full license; the next subsite needs a seat. Once the row goes quiet the
+	 * daily job drops it and the joined subsite keeps the seat.
 	 */
-	public function test_path_multisite_root_and_subsites_share_one_seat_until_the_legacy_row_goes(): void {
+	public function test_path_multisite_root_and_one_subsite_share_one_seat_until_the_legacy_row_goes(): void {
 		$lic = $this->make_license( array( 'plan' => 'starter' ) );
-		SFLS_Licenses::add_activation( (int) $lic['id'], 'network.example.com', '2.8.1' );
+		$this->add_legacy( (int) $lic['id'], 'network.example.com', '2.8.1' );
 		$this->seen_ago( (int) $lic['id'], 'network.example.com', 6 * HOUR_IN_SECONDS );
 
 		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://network.example.com/one' )->get_status() );
-		$this->assertSame( 200, $this->call( 'activate', $lic, 'https://network.example.com/two' )->get_status() );
-		$this->assertSame( 3, count( $this->domains( $lic ) ) );
+		$this->assertSame( 'activation_limit', $this->call( 'activate', $lic, 'https://network.example.com/two' )->get_data()['reason'], 'Only one path joins the legacy seat.' );
+		$this->assertSame( 2, count( $this->domains( $lic ) ) );
 		$this->assertSame( 1, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
 		$data = $this->call( 'validate', $lic, 'https://network.example.com/one' )->get_data();
 		$this->assertSame( 1, (int) $data['sites_used'] );
 		$this->assertTrue( $this->call( 'validate', $lic, 'https://network.example.com' )->get_data()['valid'], 'The root is untouched.' );
 
-		// The root moves to the new identity (or is gone): its legacy row goes quiet and is dropped.
+		// The root moves to the new identity (or is gone): its legacy row goes quiet,
+		// reads leave it alone, and the daily job drops it. The joined path keeps the seat.
 		$this->seen_ago( (int) $lic['id'], 'network.example.com', 40 * HOUR_IN_SECONDS );
-		$this->assertSame( 2, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
-		$this->assertSame( array( 'network.example.com/one', 'network.example.com/two' ), $this->domains( $lic ) );
+		$this->assertSame( 1, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
+		$this->assertSame( array( 'network.example.com', 'network.example.com/one' ), $this->domains( $lic ) );
+		SFLS_DB::prune();
+		$this->assertSame( array( 'network.example.com/one' ), $this->domains( $lic ) );
+		$this->assertSame( 1, SFLS_Licenses::used_slots( (int) $lic['id'] ) );
 
-		// A one-site license now refuses a third site: one seat per site.
+		// A one-site license refuses another site: one seat per site.
 		$third = $this->call( 'activate', $lic, 'https://network.example.com/three' );
 		$this->assertSame( 'activation_limit', $third->get_data()['reason'] );
 	}

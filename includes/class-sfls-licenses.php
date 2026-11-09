@@ -266,10 +266,9 @@ final class SFLS_Licenses {
 	/**
 	 * Count the sites that use up a seat (local/dev sites are free).
 	 *
-	 * While a host-only row from an older Pro exists for a host, it and every
-	 * host/path row of the same host on the same license are one seat (see
-	 * legacy_hosts()). A legacy row that has been quiet for LEGACY_QUIET_SECONDS
-	 * and has a host/path sibling is deleted first.
+	 * A legacy host-only row (see legacy_hosts()) and the one host/path row that
+	 * joined it are one seat. Every other row is a seat of its own. Reading the
+	 * count never deletes a row.
 	 *
 	 * @param int $license_id License ID.
 	 */
@@ -280,8 +279,8 @@ final class SFLS_Licenses {
 		foreach ( $rows as $row ) {
 			$domain = (string) $row['domain'];
 			$host   = self::host_of( $domain );
-			// A host/path row beside a legacy row is the same seat.
-			$seats[ ( $host !== $domain && isset( $legacy[ $host ] ) ) ? $host : $domain ] = true;
+			// The one host/path row that joined a legacy row is the same seat.
+			$seats[ ( $host !== $domain && isset( $legacy[ $host ] ) && $legacy[ $host ] === $domain ) ? $host : $domain ] = true;
 		}
 		return count( $seats );
 	}
@@ -298,7 +297,8 @@ final class SFLS_Licenses {
 
 	/**
 	 * Whether a domain can be activated without taking a new seat: it has a
-	 * path and a legacy host-only row of its host is on the license already.
+	 * path, a legacy host-only row of its host is on the license, and no other
+	 * path has joined that row yet. One legacy row protects one migrated site.
 	 *
 	 * @param int    $license_id License ID.
 	 * @param string $domain     Normalised domain.
@@ -308,7 +308,8 @@ final class SFLS_Licenses {
 		if ( $host === $domain || self::is_local_domain( $domain ) ) {
 			return false;
 		}
-		return isset( self::legacy_hosts( self::seat_rows( $license_id, false ) )[ $host ] );
+		$legacy = self::legacy_hosts( self::seat_rows( $license_id ) );
+		return isset( $legacy[ $host ] ) && '' === $legacy[ $host ];
 	}
 
 	/**
@@ -323,77 +324,75 @@ final class SFLS_Licenses {
 	}
 
 	/**
-	 * Non-local rows of a license, after dropping legacy rows that are quiet
-	 * and have a host/path sibling.
+	 * Non-local rows of a license.
 	 *
-	 * @param int  $license_id License ID.
-	 * @param bool $prune      Whether to delete quiet legacy rows first.
+	 * @param int $license_id License ID.
 	 * @return array[]
 	 */
-	private static function seat_rows( int $license_id, bool $prune = true ): array {
+	private static function seat_rows( int $license_id ): array {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT domain, plugin_version, last_seen_at FROM {$wpdb->prefix}sfls_activations WHERE license_id = %d AND is_local = 0", $license_id ), ARRAY_A );
-		if ( ! $prune ) {
-			return $rows;
-		}
-		$legacy = self::legacy_hosts( $rows );
-		$quiet  = gmdate( 'Y-m-d H:i:s', time() - self::LEGACY_QUIET_SECONDS );
-		$kept   = array();
-		foreach ( $rows as $row ) {
-			$domain = (string) $row['domain'];
-			if ( isset( $legacy[ $domain ] ) && (string) $row['last_seen_at'] <= $quiet && self::has_path_sibling( $rows, $domain ) ) {
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$wpdb->delete(
-					SFLS_DB::activations(),
-					array(
-						'license_id' => $license_id,
-						'domain'     => $domain,
-					)
-				);
-				self::log( $license_id, $domain, 'upgrade', 'cleanup' );
-				continue;
-			}
-			$kept[] = $row;
-		}
-		return $kept;
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT domain, plugin_version, last_seen_at, legacy, legacy_joined_by FROM {$wpdb->prefix}sfls_activations WHERE license_id = %d AND is_local = 0", $license_id ), ARRAY_A );
 	}
 
 	/**
-	 * Whether a row of the list is a host/path row of the given host.
+	 * The legacy host-only rows in a list of rows, each with the host/path row
+	 * that joined it ('' while the join is still open).
 	 *
-	 * @param array[] $rows Rows.
-	 * @param string  $host Host.
-	 */
-	private static function has_path_sibling( array $rows, string $host ): bool {
-		foreach ( $rows as $row ) {
-			$domain = (string) $row['domain'];
-			if ( $domain !== $host && self::host_of( $domain ) === $host ) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * The hosts that have a legacy row in a list of rows: a host-only row kept
-	 * for a Pro older than 2.8.2, or for a client that never reported its
-	 * version. A host-only row of Pro 2.8.2 or later is a site at the root of
-	 * its host, and it keeps a seat of its own beside a site in a subdirectory.
+	 * "Legacy" is decided once, by the schema 11 migration (the legacy column).
+	 * It is never worked out from the version a site reports, because the site
+	 * chooses that. A legacy row stands for a site from before Pro sent its
+	 * path: if that site moves into a subdirectory it asks for host/path and
+	 * must not need a second seat. At most one path joins a legacy row; a join
+	 * whose row is gone counts as open again.
 	 *
-	 * @param array[] $rows Rows with domain and plugin_version.
-	 * @return array<string,true>
+	 * @param array[] $rows Rows with domain, legacy and legacy_joined_by.
+	 * @return array<string,string> Host => the domain that joined, or ''.
 	 */
 	private static function legacy_hosts( array $rows ): array {
+		$names = array();
+		foreach ( $rows as $row ) {
+			$names[ (string) $row['domain'] ] = true;
+		}
 		$hosts = array();
 		foreach ( $rows as $row ) {
-			$domain  = (string) $row['domain'];
-			$version = (string) $row['plugin_version'];
-			if ( self::host_of( $domain ) === $domain && ( '' === $version || version_compare( $version, self::SITE_PATH_PRO_VERSION, '<' ) ) ) {
-				$hosts[ $domain ] = true;
+			$domain = (string) $row['domain'];
+			if ( ! empty( $row['legacy'] ) && self::host_of( $domain ) === $domain ) {
+				$joined          = (string) ( $row['legacy_joined_by'] ?? '' );
+				$hosts[ $domain ] = isset( $names[ $joined ] ) ? $joined : '';
 			}
 		}
 		return $hosts;
+	}
+
+	/**
+	 * Delete the legacy host-only rows that went quiet for LEGACY_QUIET_SECONDS
+	 * and have a joined host/path row: the joined row holds the seat now. Runs
+	 * from the daily job only, never when the seat count is read. Returns how
+	 * many rows were deleted.
+	 */
+	public static function prune_legacy_rows(): int {
+		global $wpdb;
+		$table = SFLS_DB::activations();
+		$quiet = gmdate( 'Y-m-d H:i:s', time() - self::LEGACY_QUIET_SECONDS );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT l.license_id, l.domain FROM %i l INNER JOIN %i j ON j.license_id = l.license_id AND j.domain = l.legacy_joined_by WHERE l.legacy = 1 AND l.legacy_joined_by <> %s AND l.last_seen_at <= %s', $table, $table, '', $quiet ), ARRAY_A );
+		$count = 0;
+		foreach ( $rows as $row ) {
+			$deleted = (int) $wpdb->delete(
+				$table,
+				array(
+					'license_id' => (int) $row['license_id'],
+					'domain'     => (string) $row['domain'],
+				)
+			);
+			if ( $deleted ) {
+				self::log( (int) $row['license_id'], (string) $row['domain'], 'upgrade', 'cleanup' );
+				$count += $deleted;
+			}
+		}
+		// phpcs:enable
+		return $count;
 	}
 
 	/**
@@ -492,7 +491,21 @@ final class SFLS_Licenses {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
+		$joins = self::joins_existing_seat( $license_id, $domain );
 		self::add_activation( $license_id, $domain, $version );
+		if ( $joins ) {
+			// The one path that joins a legacy row: later paths need seats of their own.
+			$wpdb->update(
+				SFLS_DB::activations(),
+				array( 'legacy_joined_by' => $domain ),
+				array(
+					'license_id'       => $license_id,
+					'domain'           => self::host_of( $domain ),
+					'legacy'           => 1,
+					'legacy_joined_by' => '',
+				)
+			);
+		}
 		$wpdb->query( 'COMMIT' );
 		// phpcs:enable
 		return true;
@@ -533,8 +546,13 @@ final class SFLS_Licenses {
 	public static function touch_activation( int $license_id, string $domain, string $version = '' ): void {
 		global $wpdb;
 		$data = array( 'last_seen_at' => current_time( 'mysql', true ) );
-		if ( $version ) {
-			$data['plugin_version'] = substr( sanitize_text_field( $version ), 0, 20 );
+		$version = substr( sanitize_text_field( $version ), 0, 20 );
+		if ( '' !== $version ) {
+			// A stored version never moves down: the site reports it, so a lower one is ignored.
+			$current = self::activation( $license_id, $domain );
+			if ( $current && ( '' === (string) $current['plugin_version'] || version_compare( $version, (string) $current['plugin_version'], '>' ) ) ) {
+				$data['plugin_version'] = $version;
+			}
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->update(
@@ -565,6 +583,15 @@ final class SFLS_Licenses {
 			)
 		);
 		if ( $deleted ) {
+			// A removed joiner frees the join of its legacy row.
+			$wpdb->update(
+				SFLS_DB::activations(),
+				array( 'legacy_joined_by' => '' ),
+				array(
+					'license_id'       => $license_id,
+					'legacy_joined_by' => $domain,
+				)
+			);
 			self::log( $license_id, $domain, 'deactivate', $source );
 			if ( in_array( $source, array( 'account', 'admin' ), true ) ) {
 				self::mark_removed( $license_id, $domain );
@@ -788,10 +815,11 @@ final class SFLS_Licenses {
 	 * subdirectory site updates Pro it asks for "example.com/shop" and finds no
 	 * row. Taking over the host-only row keeps it from using a second seat.
 	 *
-	 * The server cannot tell that site from a root site, or from a staging
-	 * copy of a root site, that still sends the host only. A root site on an
-	 * older Pro validates at least every twelve hours and keeps its row alive,
-	 * so a row is taken over only when it has been quiet for 36 hours. A copy
+	 * Only a legacy row (marked once by the schema 11 migration) with no joined
+	 * path is taken over. The server cannot tell that site from a root site, or
+	 * from a staging copy of a root site, that still sends the host only. A root
+	 * site on an older Pro validates at least every twelve hours and keeps its
+	 * row alive, so a row is taken over only when it has been quiet for 36 hours. A copy
 	 * of a live site never takes the seat of the site it was copied from; it
 	 * activates like any other new site.
 	 *
@@ -808,7 +836,7 @@ final class SFLS_Licenses {
 		$table = SFLS_DB::activations();
 		$quiet = gmdate( 'Y-m-d H:i:s', time() - self::LEGACY_QUIET_SECONDS );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$changed = (int) $wpdb->query( $wpdb->prepare( "UPDATE %i SET domain = %s, last_seen_at = %s WHERE license_id = %d AND domain = %s AND last_seen_at <= %s", $table, $domain, current_time( 'mysql', true ), $license_id, $host, $quiet ) );
+		$changed = (int) $wpdb->query( $wpdb->prepare( "UPDATE %i SET domain = %s, last_seen_at = %s, legacy = 0, legacy_joined_by = %s WHERE license_id = %d AND domain = %s AND legacy = 1 AND legacy_joined_by = %s AND last_seen_at <= %s", $table, $domain, current_time( 'mysql', true ), '', $license_id, $host, '', $quiet ) );
 		if ( 1 === $changed ) {
 			self::log( $license_id, $domain, 'upgrade', 'api' );
 			return true;
