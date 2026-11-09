@@ -123,7 +123,7 @@ final class SFLS_REST {
 	 * @return WP_REST_Response
 	 */
 	public function validate_now( WP_REST_Request $req ) {
-		[ $lic, $domain, $error ] = $this->resolve( $req );
+		[ $lic, $domain, $error ] = $this->resolve( $req, true );
 		if ( $error ) {
 			return $error;
 		}
@@ -543,10 +543,12 @@ final class SFLS_REST {
 	/**
 	 * Look up the license and domain of a request.
 	 *
-	 * @param WP_REST_Request $req Request.
+	 * @param WP_REST_Request $req     Request.
+	 * @param bool            $upgrade Whether a quiet host-only row may be handed to this host/path
+	 *                                 (validate only; activate does it itself, and deactivate never does).
 	 * @return array{0:?array,1:string,2:?WP_REST_Response}
 	 */
-	private function resolve( WP_REST_Request $req ): array {
+	private function resolve( WP_REST_Request $req, bool $upgrade = false ): array {
 		$key    = strtoupper( sanitize_text_field( (string) $req->get_param( 'license_key' ) ) );
 		$domain = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site_url' ) );
 
@@ -570,8 +572,12 @@ final class SFLS_REST {
 		}
 
 		// A site in a subdirectory that was activated by host only (before 1.9.2)
-		// takes over its quiet host-only row the first time it sends its path.
-		SFLS_Licenses::upgrade_legacy_activation( (int) $lic['id'], $domain );
+		// takes over its quiet host-only row the first time it validates with its
+		// path. Deactivate never does this: a copy must not be able to rename the
+		// seat of the site it was copied from and then delete it.
+		if ( $upgrade ) {
+			SFLS_Licenses::upgrade_legacy_activation( (int) $lic['id'], $domain );
+		}
 
 		return array( $lic, $domain, null );
 	}
