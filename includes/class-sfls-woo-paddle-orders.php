@@ -569,13 +569,18 @@ final class SFLS_Woo_Paddle_Orders {
 		}
 		set_transient( $key, 1, 5 );
 		$txn = SFLS_Paddle::get_transaction( $txn_id );
-		if ( is_wp_error( $txn ) || ! in_array( (string) ( $txn['status'] ?? '' ), array( 'completed', 'paid' ), true ) ) {
+		if ( is_wp_error( $txn ) ) {
+			SFLS_Log::payment( 'poll', 'Could not fetch transaction ' . $txn_id . ': ' . SFLS_Log::text( $txn ), $order );
+			return;
+		}
+		if ( ! in_array( (string) ( $txn['status'] ?? '' ), array( 'completed', 'paid' ), true ) ) {
 			return;
 		}
 		try {
 			self::complete_checkout( $order, $txn );
 		} catch ( RuntimeException $e ) {
-			unset( $e ); // Another request is completing it.
+			// Another request is completing it, or it could not be completed: leave a trace either way.
+			SFLS_Log::payment( 'poll', 'Completing the order failed: ' . $e->getMessage(), $order );
 		}
 	}
 
