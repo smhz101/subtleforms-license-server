@@ -55,6 +55,7 @@ final class SFLS_Woo {
 		add_action( 'woocommerce_order_status_processing', array( $this, 'maybe_issue_paid' ) );
 		add_action( 'woocommerce_payment_complete', array( $this, 'maybe_issue_paid' ) );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'suspend_for_order' ) );
+		add_action( 'woocommerce_order_refunded', array( $this, 'on_refund' ) );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'suspend_for_order' ) );
 
 		// Cart: buy, renew and upgrade links; one plan at a time.
@@ -937,7 +938,7 @@ final class SFLS_Woo {
 	 *
 	 * @param int $order_id Order ID.
 	 */
-	public function suspend_for_order( $order_id ): void {
+	public function suspend_for_order( $order_id, bool $force = false ): void {
 		$order_id = (int) $order_id;
 		foreach ( self::order_licenses( $order_id ) as $lic ) {
 			if ( (int) $lic['order_id'] === $order_id ) {
@@ -947,7 +948,7 @@ final class SFLS_Woo {
 		$order = wc_get_order( $order_id );
 		if ( $order instanceof WC_Order ) {
 			self::revert_changes( $order );
-			if ( 'refunded' === $order->get_status() ) {
+			if ( $force || 'refunded' === $order->get_status() ) {
 				foreach ( self::renewal_refund_licenses( $order ) as $lic ) {
 					if ( 'suspended' === $lic['status'] ) {
 						continue;
@@ -958,6 +959,37 @@ final class SFLS_Woo {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Any refund (woocommerce_order_refunded): below the threshold only note
+	 * it; at or above it, suspend like a full refund, once. Full refunds are
+	 * left to the status hook.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public function on_refund( $order_id ): void {
+		$order = wc_get_order( (int) $order_id );
+		if ( ! $order instanceof WC_Order || 'refunded' === $order->get_status() || (float) $order->get_total() <= 0 ) {
+			return;
+		}
+		if ( ! self::order_licenses( $order->get_id() ) && ! self::renewal_refund_licenses( $order ) ) {
+			return;
+		}
+		$share     = (float) $order->get_total_refunded() / (float) $order->get_total() * 100;
+		$threshold = SFLS_Settings::refund_suspend_threshold();
+		if ( $share < $threshold ) {
+			/* translators: 1: refunded percent, 2: threshold percent */
+			$order->add_order_note( sprintf( __( 'Refund of %1$s%% recorded; license(s) unchanged (suspends at %2$d%%).', 'subtleforms-license-server' ), rtrim( rtrim( number_format( $share, 1, '.', '' ), '0' ), '.' ), $threshold ) );
+			return;
+		}
+		if ( 'yes' === $order->get_meta( '_sfls_refund_suspended' ) ) {
+			return;
+		}
+		$order->update_meta_data( '_sfls_refund_suspended', 'yes' );
+		$order->save_meta_data();
+		$this->suspend_for_order( $order->get_id(), true );
+		SFLS_Woo_Paddle_Orders::cancel_on_full_refund( $order->get_id() );
 	}
 
 	/**

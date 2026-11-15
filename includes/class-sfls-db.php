@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '12';
+	const SCHEMA_VERSION = '13';
 
 	/**
 	 * Licence IDs whose Agency seats were already more than the plan's 25
@@ -107,6 +107,14 @@ final class SFLS_DB {
 	}
 
 	/**
+	 * Admin audit log table name (schema 13).
+	 */
+	public static function audit_log(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_audit_log';
+	}
+
+	/**
 	 * Rate limit counters, one row per bucket (schema 8).
 	 */
 	public static function rate_limits(): string {
@@ -133,6 +141,7 @@ final class SFLS_DB {
 		$brev     = self::branding_revisions();
 		$bsites   = self::branding_sites();
 		$rates    = self::rate_limits();
+		$audit    = self::audit_log();
 
 		dbDelta(
 			"CREATE TABLE {$licenses} (
@@ -335,6 +344,23 @@ final class SFLS_DB {
   hits int(11) unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY  (bucket),
   KEY window_start (window_start)
+) {$charset};"
+		);
+
+		// Schema 13 (1.11.0): admin audit log. Additive only.
+		dbDelta(
+			"CREATE TABLE {$audit} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  created_at datetime NOT NULL,
+  user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  license_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  field varchar(40) NOT NULL DEFAULT '',
+  old_value text NULL,
+  new_value text NULL,
+  context varchar(40) NOT NULL DEFAULT 'admin',
+  PRIMARY KEY  (id),
+  KEY license_id (license_id),
+  KEY created_at (created_at)
 ) {$charset};"
 		);
 
@@ -542,8 +568,9 @@ final class SFLS_DB {
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$log    = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_activation_log WHERE created_at < %s", $cutoff ) );
 		$events = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_paddle_events WHERE received_at < %s", $cutoff ) );
+		$audit  = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_audit_log WHERE created_at < %s", $cutoff ) );
 		// phpcs:enable
-		return $log + $events + $counters;
+		return $log + $events + $audit + $counters;
 	}
 
 	/**

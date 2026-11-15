@@ -30,6 +30,7 @@ final class SFLS_Admin {
 		add_action( 'admin_post_sfls_run_reminders', array( $this, 'handle_run_reminders' ) );
 		add_action( 'admin_post_sfls_test_reminder', array( $this, 'handle_test_reminder' ) );
 		add_action( 'admin_post_sfls_export', array( $this, 'handle_export' ) );
+		add_action( 'admin_post_sfls_bulk', array( $this, 'handle_bulk' ) );
 		add_action( 'admin_post_sfls_paddle_settings', array( $this, 'handle_paddle_settings' ) );
 		add_action( 'admin_post_sfls_paddle_test', array( $this, 'handle_paddle_test' ) );
 		add_action( 'admin_post_sfls_paddle_sync', array( $this, 'handle_paddle_sync' ) );
@@ -60,6 +61,8 @@ final class SFLS_Admin {
 		add_submenu_page( 'sfls', __( 'Products', 'subtleforms-license-server' ), __( 'Products', 'subtleforms-license-server' ), self::CAP, 'sfls-products', array( $this, 'page_products' ) );
 		add_submenu_page( 'sfls', __( 'Pro releases', 'subtleforms-license-server' ), __( 'Pro releases', 'subtleforms-license-server' ), self::CAP, 'sfls-release', array( $this, 'page_release' ) );
 		add_submenu_page( 'sfls', __( 'Settings', 'subtleforms-license-server' ), __( 'Settings', 'subtleforms-license-server' ), self::CAP, 'sfls-settings', array( $this, 'page_settings' ) );
+		// Hidden: reached from the customer email in the list.
+		add_submenu_page( 'options.php', __( 'Customer', 'subtleforms-license-server' ), __( 'Customer', 'subtleforms-license-server' ), self::CAP, 'sfls-customer', array( $this, 'page_customer' ) );
 	}
 
 	/**
@@ -309,7 +312,14 @@ final class SFLS_Admin {
 			)
 		) . '</a></div><br class="clear"></div></form>';
 
-		echo '<table class="wp-list-table widefat fixed striped sfls-table"><thead><tr>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'sfls_bulk' );
+		echo '<input type="hidden" name="action" value="sfls_bulk"><div class="tablenav top"><div class="alignleft actions bulkactions"><label class="screen-reader-text" for="sfls-bulk-action">' . esc_html__( 'Bulk action', 'subtleforms-license-server' ) . '</label><select id="sfls-bulk-action" name="bulk_action"><option value="">' . esc_html__( 'Bulk actions', 'subtleforms-license-server' ) . '</option>';
+		foreach ( self::bulk_actions() as $slug => $label ) {
+			echo '<option value="' . esc_attr( $slug ) . '">' . esc_html( $label ) . '</option>';
+		}
+		echo '</select> <button class="button" type="submit">' . esc_html__( 'Apply', 'subtleforms-license-server' ) . '</button></div></div>';
+		echo '<table class="wp-list-table widefat fixed striped sfls-table"><thead><tr><td class="manage-column column-cb check-column"><input type="checkbox" onclick="jQuery(this).closest(\'table\').find(\'tbody .check-column input\').prop(\'checked\',this.checked)"></td>';
 		$heads = array(
 			'key'      => __( 'Key', 'subtleforms-license-server' ),
 			'customer' => __( 'Customer', 'subtleforms-license-server' ),
@@ -325,7 +335,7 @@ final class SFLS_Admin {
 		echo '</tr></thead><tbody>';
 
 		if ( ! $rows ) {
-			echo '<tr><td colspan="7">' . esc_html( $search || $filter || $plan ? __( 'No licenses match.', 'subtleforms-license-server' ) : __( 'No licenses yet. Issue one, or sell a product marked as a SubtleForms license.', 'subtleforms-license-server' ) ) . '</td></tr>';
+			echo '<tr><td colspan="8">' . esc_html( $search || $filter || $plan ? __( 'No licenses match.', 'subtleforms-license-server' ) : __( 'No licenses yet. Issue one, or sell a product marked as a SubtleForms license.', 'subtleforms-license-server' ) ) . '</td></tr>';
 		}
 
 		foreach ( $rows as $lic ) {
@@ -339,7 +349,7 @@ final class SFLS_Admin {
 				),
 				admin_url( 'admin.php' )
 			);
-			echo '<tr>';
+			echo '<tr><th scope="row" class="check-column"><input type="checkbox" name="ids[]" value="' . esc_attr( (string) $id ) . '"></th>';
 			echo '<td class="column-key column-primary" data-colname="' . esc_attr( $heads['key'] ) . '"><a class="row-title sfls-mono" href="' . esc_url( $edit ) . '">' . esc_html( $lic['license_key'] ) . '</a>';
 			$actions = array(
 				'<a href="' . esc_url( $edit ) . '">' . esc_html__( 'Edit', 'subtleforms-license-server' ) . '</a>',
@@ -350,10 +360,13 @@ final class SFLS_Admin {
 			$actions[] = 'active' === $lic['status']
 				? '<a href="' . esc_url( $this->action_url( 'suspend', $id ) ) . '">' . esc_html__( 'Suspend', 'subtleforms-license-server' ) . '</a>'
 				: '<a href="' . esc_url( $this->action_url( 'resume', $id ) ) . '">' . esc_html__( 'Resume', 'subtleforms-license-server' ) . '</a>';
+			if ( is_email( $lic['customer_email'] ) ) {
+				$actions[] = '<a href="' . esc_url( $this->action_url( 'resend', $id ) ) . '">' . esc_html__( 'Resend email', 'subtleforms-license-server' ) . '</a>';
+			}
 			$actions[] = '<span class="trash"><a href="' . esc_url( $this->action_url( 'delete', $id ) ) . '" onclick="return confirm(\'' . esc_js( __( 'Delete this license permanently?', 'subtleforms-license-server' ) ) . '\');">' . esc_html__( 'Delete', 'subtleforms-license-server' ) . '</a></span>';
 			echo '<div class="row-actions">' . implode( ' | ', $actions ) . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Built from escaped parts.
 			echo '<button type="button" class="toggle-row"><span class="screen-reader-text">' . esc_html__( 'Show more details', 'subtleforms-license-server' ) . '</span></button></td>';
-			echo '<td class="column-customer" data-colname="' . esc_attr( $heads['customer'] ) . '">' . esc_html( $lic['customer_email'] ? $lic['customer_email'] : '–' ) . '</td>';
+			echo '<td class="column-customer" data-colname="' . esc_attr( $heads['customer'] ) . '">' . ( $lic['customer_email'] ? '<a href="' . esc_url( $this->customer_url( (string) $lic['customer_email'] ) ) . '">' . esc_html( $lic['customer_email'] ) . '</a>' : '–' ) . '</td>';
 			echo '<td data-colname="' . esc_attr( $heads['plan'] ) . '">' . esc_html( SFLS_Plans::label( $lic['plan'] ) ) . '</td>';
 			echo '<td data-colname="' . esc_attr( $heads['status'] ) . '">' . wp_kses_post( $this->pill( $state['status'] ) . $this->billing_chip( $lic ) ) . '</td>';
 			echo '<td data-colname="' . esc_attr( $heads['sites'] ) . '">' . esc_html( SFLS_Licenses::used_slots( $id ) . ' / ' . ( $limit ? $limit : '∞' ) ) . '</td>';
@@ -361,7 +374,7 @@ final class SFLS_Admin {
 			echo '<td data-colname="' . esc_attr( $heads['order'] ) . '">' . ( $lic['order_id'] ? '<a href="' . esc_url( $this->order_url( (int) $lic['order_id'] ) ) . '">#' . esc_html( (string) $lic['order_id'] ) . '</a>' : '–' ) . '</td>';
 			echo '</tr>';
 		}
-		echo '</tbody></table>';
+		echo '</tbody></table></form>';
 
 		$pages = (int) ceil( $total / self::PER_PAGE );
 		echo '<div class="tablenav bottom"><div class="tablenav-pages"><span class="displaying-num">' . esc_html( sprintf( /* translators: %s: count */ _n( '%s item', '%s items', $total, 'subtleforms-license-server' ), number_format_i18n( $total ) ) ) . '</span>';
@@ -531,12 +544,17 @@ final class SFLS_Admin {
 		echo '</div>';
 		$this->branding_panel( $lic );
 		$this->activity_panel( $id );
+		$this->audit_panel( $id );
 		echo '</div>';
 
 		echo '<div class="sfls-edit-side">';
 		$this->billing_panel( $lic );
 		echo '<div class="sfls-panel"><h2>' . esc_html__( 'License key', 'subtleforms-license-server' ) . '</h2><p><code class="sfls-mono sfls-keybox">' . esc_html( $lic['license_key'] ) . '</code></p>';
-		echo '<p><a class="button" href="' . esc_url( $this->action_url( 'regenerate', $id ) ) . '" onclick="return confirm(\'' . esc_js( __( 'Replace this key with a new one? Sites using the old key stop validating until the new key is entered.', 'subtleforms-license-server' ) ) . '\');">' . esc_html__( 'Regenerate key', 'subtleforms-license-server' ) . '</a></p></div>';
+		echo '<p><a class="button" href="' . esc_url( $this->action_url( 'regenerate', $id ) ) . '" onclick="return confirm(\'' . esc_js( __( 'Replace this key with a new one? Sites using the old key stop validating until the new key is entered.', 'subtleforms-license-server' ) ) . '\');">' . esc_html__( 'Regenerate key', 'subtleforms-license-server' ) . '</a>';
+		if ( is_email( $lic['customer_email'] ) ) {
+			echo ' <a class="button" href="' . esc_url( $this->action_url( 'resend', $id ) ) . '">' . esc_html__( 'Resend license email', 'subtleforms-license-server' ) . '</a>';
+		}
+		echo '</p></div>';
 
 		echo '<div class="sfls-panel"><h2>' . esc_html__( 'History', 'subtleforms-license-server' ) . '</h2><ul class="sfls-meta-list">';
 		$fmt = get_option( 'date_format' );
@@ -696,6 +714,107 @@ final class SFLS_Admin {
 			echo '<td><strong>' . esc_html( $row['domain'] ) . '</strong></td>';
 			echo '<td class="sfls-mono">' . esc_html( '' !== $row['ip'] ? $row['ip'] : '–' ) . '</td>';
 			echo '<td>' . esc_html( $sources[ $row['source'] ] ?? ( '' !== $row['source'] ? $row['source'] : '–' ) ) . '</td></tr>';
+		}
+		echo '</tbody></table></div>';
+	}
+
+	/**
+	 * Audit log table (latest 50).
+	 *
+	 * @param int $id License ID.
+	 */
+	private function audit_panel( int $id ): void {
+		$entries = SFLS_Audit::entries( $id, 50 );
+		echo '<div class="sfls-panel"><h2>' . esc_html__( 'Audit log', 'subtleforms-license-server' ) . '</h2>';
+		if ( ! $entries ) {
+			echo '<p class="description">' . esc_html__( 'No admin changes recorded yet.', 'subtleforms-license-server' ) . '</p></div>';
+			return;
+		}
+		$fmt = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+		echo '<table class="widefat striped sfls-acts sfls-audit"><thead><tr><th>' . esc_html__( 'Time', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'User', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Field', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Old', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'New', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Context', 'subtleforms-license-server' ) . '</th></tr></thead><tbody>';
+		foreach ( $entries as $row ) {
+			$user = (int) $row['user_id'] ? get_userdata( (int) $row['user_id'] ) : false;
+			echo '<tr><td>' . esc_html( wp_date( $fmt, strtotime( $row['created_at'] . ' UTC' ) ) ) . '</td>';
+			echo '<td>' . esc_html( $user ? $user->display_name : '–' ) . '</td>';
+			echo '<td>' . esc_html( $row['field'] ) . '</td>';
+			echo '<td>' . esc_html( '' !== (string) $row['old_value'] ? $row['old_value'] : '–' ) . '</td>';
+			echo '<td>' . esc_html( '' !== (string) $row['new_value'] ? $row['new_value'] : '–' ) . '</td>';
+			echo '<td>' . esc_html( $row['context'] ) . '</td></tr>';
+		}
+		echo '</tbody></table></div>';
+	}
+
+	/**
+	 * Bulk actions of the list.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function bulk_actions(): array {
+		return array(
+			'suspend'  => __( 'Suspend', 'subtleforms-license-server' ),
+			'resume'   => __( 'Resume', 'subtleforms-license-server' ),
+			'extend'   => __( 'Extend 12 months', 'subtleforms-license-server' ),
+			'export'   => __( 'Export selected', 'subtleforms-license-server' ),
+		);
+	}
+
+	/**
+	 * Nonce protected link to the customer view.
+	 *
+	 * @param string $email Customer email.
+	 */
+	private function customer_url( string $email ): string {
+		return wp_nonce_url(
+			add_query_arg(
+				array(
+					'page'  => 'sfls-customer',
+					'email' => rawurlencode( $email ),
+				),
+				admin_url( 'admin.php' )
+			),
+			'sfls_customer'
+		);
+	}
+
+	/**
+	 * Customer view: every license of one email, its orders, Paddle
+	 * subscriptions and activated sites.
+	 */
+	public function page_customer(): void {
+		$this->guard();
+		check_admin_referer( 'sfls_customer' );
+		global $wpdb;
+		$email = isset( $_GET['email'] ) ? sanitize_email( rawurldecode( wp_unslash( $_GET['email'] ) ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = '' === $email ? array() : (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE customer_email = %s ORDER BY id DESC", $email ), ARRAY_A );
+		$this->header( __( 'Customer', 'subtleforms-license-server' ), '<a href="' . esc_url( admin_url( 'admin.php?page=sfls' ) ) . '" class="page-title-action">' . esc_html__( 'All licenses', 'subtleforms-license-server' ) . '</a>' );
+		echo '<h2>' . esc_html( $email ) . '</h2>';
+		if ( ! $rows ) {
+			echo '<p>' . esc_html__( 'No licenses for this email.', 'subtleforms-license-server' ) . '</p></div>';
+			return;
+		}
+		echo '<table class="widefat striped sfls-table"><thead><tr>';
+		foreach ( array( __( 'Key', 'subtleforms-license-server' ), __( 'Plan', 'subtleforms-license-server' ), __( 'Status', 'subtleforms-license-server' ), __( 'Order', 'subtleforms-license-server' ), __( 'Paddle subscription', 'subtleforms-license-server' ), __( 'Billing status', 'subtleforms-license-server' ), __( 'Sites', 'subtleforms-license-server' ) ) as $head ) {
+			echo '<th scope="col">' . esc_html( $head ) . '</th>';
+		}
+		echo '</tr></thead><tbody>';
+		foreach ( $rows as $lic ) {
+			$id    = (int) $lic['id'];
+			$edit  = add_query_arg(
+				array(
+					'page' => 'sfls',
+					'edit' => $id,
+				),
+				admin_url( 'admin.php' )
+			);
+			$sites = wp_list_pluck( SFLS_Licenses::activations( $id ), 'domain' );
+			echo '<tr><td><a class="sfls-mono" href="' . esc_url( $edit ) . '">' . esc_html( $lic['license_key'] ) . '</a></td>';
+			echo '<td>' . esc_html( SFLS_Plans::label( $lic['plan'] ) ) . '</td>';
+			echo '<td>' . esc_html( SFLS_Licenses::status_label( SFLS_Licenses::state( $lic )['status'] ) ) . '</td>';
+			echo '<td>' . ( $lic['order_id'] ? '<a href="' . esc_url( $this->order_url( (int) $lic['order_id'] ) ) . '">#' . esc_html( (string) $lic['order_id'] ) . '</a>' : '–' ) . '</td>';
+			echo '<td class="sfls-mono">' . esc_html( '' !== $lic['paddle_subscription_id'] ? $lic['paddle_subscription_id'] : '–' ) . '</td>';
+			echo '<td>' . esc_html( '' !== $lic['billing_status'] ? $lic['billing_status'] : '–' ) . '</td>';
+			echo '<td>' . esc_html( $sites ? implode( ', ', $sites ) : '–' ) . '</td></tr>';
 		}
 		echo '</tbody></table></div>';
 	}
@@ -925,6 +1044,7 @@ final class SFLS_Admin {
 		echo '<tr><th scope="row"><label for="sfls-days">' . esc_html__( 'Renewal reminders', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-days" type="text" name="reminder_days" value="' . esc_attr( $s['reminder_days'] ) . '" class="regular-text" placeholder="30,7"><p class="description">' . esc_html__( 'Days before expiry to email the customer, separated by commas. Leave empty to turn reminders off.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
 		echo '<tr><th scope="row"><label for="sfls-dunning">' . esc_html__( 'Failed payment grace', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-dunning" type="number" min="0" max="60" name="dunning_grace_days" value="' . esc_attr( (string) SFLS_Settings::dunning_grace_days() ) . '" class="small-text"> ' . esc_html__( 'days', 'subtleforms-license-server' ) . '<p class="description">' . esc_html__( 'How long Pro keeps working while Paddle retries a failed renewal payment.', 'subtleforms-license-server' ) . '</p></td></tr>';
+		echo '<tr><th scope="row"><label for="sfls-refund-threshold">' . esc_html__( 'Suspend at refund', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-refund-threshold" type="number" min="1" max="100" name="refund_suspend_threshold" value="' . esc_attr( (string) SFLS_Settings::refund_suspend_threshold() ) . '" class="small-text"> % <p class="description">' . esc_html__( 'Licenses are suspended once this share of an order is refunded. 100 means only a full refund.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
 		echo '<tr><th scope="row">' . esc_html__( 'After expiry', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="lapsed_reminder" value="1"' . checked( (int) $s['lapsed_reminder'], 1, false ) . '> ' . esc_html__( 'Send one more reminder the day after a license expires', 'subtleforms-license-server' ) . '</label></td></tr>';
 
@@ -1465,7 +1585,19 @@ final class SFLS_Admin {
 			exit;
 		}
 
+		$before = SFLS_Licenses::find( $id );
 		switch ( $do ) {
+			case 'resend':
+				$to = (string) $before['customer_email'];
+				if ( ! is_email( $to ) || ! SFLS_Delivery::email_issued( array( $before ), $to ) ) {
+					$this->flash( __( 'The email could not be sent. Check the customer email on the license.', 'subtleforms-license-server' ), 'error' );
+					wp_safe_redirect( $back );
+					exit;
+				}
+				SFLS_Audit::record( $id, 'email_resent', '', $to, 'row_action' );
+				/* translators: %s: email address */
+				$msg = sprintf( __( 'License email sent to %s.', 'subtleforms-license-server' ), $to );
+				break;
 			case 'extend':
 				SFLS_Licenses::extend( $id, 12 );
 				$msg = __( 'License extended by one year.', 'subtleforms-license-server' );
@@ -1499,13 +1631,62 @@ final class SFLS_Admin {
 				$msg = sprintf( __( 'New key: %s', 'subtleforms-license-server' ), $key );
 				break;
 			case 'delete':
+				SFLS_Audit::record( $id, 'deleted', (string) $before['status'] . ' ' . (string) $before['customer_email'], '', 'row_action' );
 				SFLS_Licenses::delete( $id );
 				$msg  = __( 'License deleted.', 'subtleforms-license-server' );
 				$back = admin_url( 'admin.php?page=sfls' );
 				break;
 		}
+		if ( 'delete' !== $do ) {
+			$after = SFLS_Licenses::find( $id );
+			if ( $after ) {
+				SFLS_Audit::diff( $before, $after, 'row_action' );
+			}
+		}
 		$this->flash( $msg );
 		wp_safe_redirect( $back );
+		exit;
+	}
+
+	/**
+	 * Bulk actions of the list: suspend, resume, extend 12 months, export.
+	 */
+	public function handle_bulk(): void {
+		$this->guard();
+		check_admin_referer( 'sfls_bulk' );
+		$do  = sanitize_key( wp_unslash( $_POST['bulk_action'] ?? '' ) );
+		$ids = array_filter( array_map( 'absint', (array) wp_unslash( $_POST['ids'] ?? array() ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast by absint().
+		$to  = admin_url( 'admin.php?page=sfls' );
+		if ( ! $ids || ! array_key_exists( $do, self::bulk_actions() ) ) {
+			$this->flash( __( 'Choose licenses and an action.', 'subtleforms-license-server' ), 'warning' );
+			wp_safe_redirect( $to );
+			exit;
+		}
+		$licenses = array_filter( array_map( array( 'SFLS_Licenses', 'find' ), $ids ) );
+		if ( 'export' === $do ) {
+			$this->send_csv( array_values( $licenses ) );
+		}
+		$changed = 0;
+		foreach ( $licenses as $lic ) {
+			$data = array();
+			if ( 'suspend' === $do && 'suspended' !== $lic['status'] ) {
+				$data['status'] = 'suspended';
+			} elseif ( 'resume' === $do && 'suspended' === $lic['status'] ) {
+				$data['status'] = 'active';
+			} elseif ( 'extend' === $do && ! empty( $lic['expires_at'] ) ) {
+				// Lifetime licenses (no expiry) are skipped: giving them a date would shorten them.
+				$current            = strtotime( $lic['expires_at'] . ' UTC' );
+				$data['expires_at'] = gmdate( 'Y-m-d H:i:s', strtotime( '+1 year', max( $current, time() ) ) );
+			}
+			if ( $data ) {
+				SFLS_Licenses::update( (int) $lic['id'], $data );
+				SFLS_Audit::diff( $lic, $data, 'bulk' );
+				++$changed;
+			}
+		}
+		/* translators: %d: number of licenses */
+		$this->flash( sprintf( _n( '%d license updated.', '%d licenses updated.', $changed, 'subtleforms-license-server' ), $changed ) );
+		wp_safe_redirect( $to );
 		exit;
 	}
 
@@ -1565,6 +1746,7 @@ final class SFLS_Admin {
 		}
 
 		SFLS_Licenses::update( $id, $data );
+		SFLS_Audit::diff( $lic, $data );
 		if ( ! get_transient( 'sfls_notice_' . get_current_user_id() ) ) {
 			$this->flash( __( 'License saved.', 'subtleforms-license-server' ) );
 		}
@@ -1620,6 +1802,9 @@ final class SFLS_Admin {
 		$extra = array();
 		if ( isset( $_POST['staging_hosts'] ) ) {
 			$extra['staging_hosts'] = sanitize_textarea_field( wp_unslash( $_POST['staging_hosts'] ) );
+		}
+		if ( isset( $_POST['refund_suspend_threshold'] ) ) {
+			$extra['refund_suspend_threshold'] = absint( $_POST['refund_suspend_threshold'] );
 		}
 		if ( isset( $_POST['dunning_grace_days'] ) ) {
 			$extra['dunning_grace_days'] = absint( $_POST['dunning_grace_days'] );
@@ -1701,6 +1886,15 @@ final class SFLS_Admin {
 				'per'    => 0,
 			)
 		);
+		$this->send_csv( $rows );
+	}
+
+	/**
+	 * Send licenses as a CSV download and stop.
+	 *
+	 * @param array[] $rows Licenses.
+	 */
+	private function send_csv( array $rows ): void {
 		nocache_headers();
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename="licenses-' . gmdate( 'Y-m-d' ) . '.csv"' );

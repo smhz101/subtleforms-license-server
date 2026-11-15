@@ -22,7 +22,11 @@ class SFLS_Release_Cli_Test extends SFLS_Test_Case {
 	 */
 	private function wp( string $args ): array {
 		$phar = getenv( 'SFLS_WP_CLI' ) ? getenv( 'SFLS_WP_CLI' ) : '/tmp/claude-0/wp-cli.phar';
-		$cmd  = 'php ' . escapeshellarg( $phar ) . ' --allow-root --path=' . escapeshellarg( ABSPATH ) . ' ' . $args . ' < /dev/null 2>&1';
+		// Publishing needs a signing key (1.11.0): give the CLI process a throwaway one.
+		static $key = null;
+		$key  = $key ?? base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Key encoding.
+		$exec = "if ( ! defined( 'SFLS_SIGNING_SECRET_KEY' ) ) { define( 'SFLS_SIGNING_SECRET_KEY', '" . $key . "' ); }";
+		$cmd  = 'php ' . escapeshellarg( $phar ) . ' --allow-root --path=' . escapeshellarg( ABSPATH ) . ' --exec=' . escapeshellarg( $exec ) . ' ' . $args . ' < /dev/null 2>&1';
 		$out  = array();
 		$code = 0;
 		exec( $cmd, $out, $code );

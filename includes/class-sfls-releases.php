@@ -481,6 +481,18 @@ final class SFLS_Releases {
 		if ( ! self::has_package( $release ) ) {
 			return new WP_Error( 'no_package', __( 'This release has no package, so it cannot be published. Upload its zip first.', 'subtleforms-license-server' ), array( 'status' => 409 ) );
 		}
+		if ( SFLS_Signing::required() ) {
+			if ( ! SFLS_Signing::enabled() ) {
+				return new WP_Error( 'signing_unavailable', __( 'This release cannot be published: the signing key is missing or invalid, so Pro would reject the package. Check SFLS_SIGNING_SECRET_KEY in wp-config.php.', 'subtleforms-license-server' ), array( 'status' => 503 ) );
+			}
+			if ( '' === SFLS_Signing::release_signature( $release ) ) {
+				SFLS_Signing::sign_release( $release );
+				$release = (array) self::get_by_id( $id );
+			}
+			if ( '' === SFLS_Signing::release_signature( $release ) ) {
+				return new WP_Error( 'unsigned_release', __( 'This release has no package signature, so it cannot be published.', 'subtleforms-license-server' ), array( 'status' => 409 ) );
+			}
+		}
 		self::update(
 			$id,
 			array(

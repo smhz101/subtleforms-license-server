@@ -397,7 +397,8 @@ class SFLS_Signing_Check_Test extends SFLS_Test_Case {
 
 		SFLS_Signing::use_test_key( '' );
 		$other = $this->rest( 'GET', '/sfls/v1/update/download', array() );
-		$this->assertNotSame( 503, $other->get_status(), 'The download route is not a signed route.' );
+		// Since 1.11.0 the download route is guarded too, so a missing key answers 503 instead of serving an unsigned package.
+		$this->assertSame( 503, $other->get_status(), 'The download route is guarded when the key is missing.' );
 	}
 
 	/**

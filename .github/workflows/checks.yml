@@ -44,9 +44,15 @@ jobs:
           exit $status
 
   phpunit:
-    name: PHPUnit
+    # The 10.2.1 run keeps the plain name "PHPUnit" because branch protection requires it.
+    name: ${{ matrix.wc == '10.2.1' && 'PHPUnit' || format('PHPUnit (WooCommerce {0})', matrix.wc) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # 10.2.1 is the verified pin; 11.3.0 is what production runs.
+        wc: ['10.2.1', '11.3.0']
     services:
       mysql:
         image: mysql:8.0
@@ -62,7 +68,7 @@ jobs:
           --health-retries=20
     env:
       WP_DIR: /tmp/wordpress
-      WC_VERSION: '10.2.1'
+      WC_VERSION: ${{ matrix.wc }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -152,7 +158,15 @@ jobs:
           $zip->addFromString( 'subtleforms-pro/subtleforms-pro.php', "<?php\n/**\n * Plugin Name: SubtleForms Pro\n * Version: 2.4.2\n * Requires at least: 6.5\n * Requires PHP: 8.1\n */\n" );
           $zip->addFromString( 'subtleforms-pro/readme.txt', "=== SubtleForms Pro ===\nTested up to: 7.1\nStable tag: 2.4.2\n" );
           $zip->close();
+          // The CI site has no signing key; since 1.11.0 publishing needs one
+          // unless signing is not required, so allow an unsigned seed release.
+          add_filter( 'sfls_require_signing', '__return_false' );
           $stored = SFLS_Releases::ingest( $zip_path, array( 'publish' => true ) );
+          if ( ! is_wp_error( $stored ) && 'published' !== ( SFLS_Releases::get_by_id( (int) $stored['release']['id'] )['status'] ?? '' ) ) {
+              echo "release seed was not published\n";
+              exit( 1 );
+          }
+          remove_filter( 'sfls_require_signing', '__return_false' );
           if ( is_wp_error( $stored ) ) {
               echo 'release seed failed: ' . $stored->get_error_message() . "\n";
               exit( 1 );

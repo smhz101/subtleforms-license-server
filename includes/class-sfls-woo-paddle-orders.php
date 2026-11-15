@@ -1020,7 +1020,7 @@ final class SFLS_Woo_Paddle_Orders {
 	 * @param array $adj Adjustment.
 	 * @return array{action:string,note:string,license:?array}
 	 */
-	public static function adjustment( array $adj ): array {
+	public static function adjustment( array $adj, string $occurred = '' ): array {
 		$id     = (string) ( $adj['id'] ?? '' );
 		$action = (string) ( $adj['action'] ?? '' );
 		$status = (string) ( $adj['status'] ?? '' );
@@ -1035,7 +1035,16 @@ final class SFLS_Woo_Paddle_Orders {
 			throw new RuntimeException( esc_html( 'Order #' . $order->get_id() . ' is busy.' ) );
 		}
 		try {
-			$order    = wc_get_order( $order->get_id() );
+			$order = wc_get_order( $order->get_id() );
+			if ( '' !== $occurred ) {
+				$seen = (string) $order->get_meta( '_sfls_adj_occurred_' . $id );
+				if ( '' !== $seen && strcmp( $occurred, $seen ) < 0 ) {
+					SFLS_Log::payment( 'adjustment', 'Ignored stale adjustment event for ' . $id . ' (' . $occurred . ' is older than ' . $seen . ').' );
+					return self::result( 'ignored', 'Stale adjustment event.' );
+				}
+				$order->update_meta_data( '_sfls_adj_occurred_' . $id, $occurred );
+				$order->save_meta_data();
+			}
 			$map      = self::adjustments_of( $order );
 			$entry    = (array) ( $map[ $id ] ?? array() );
 			$currency = strtoupper( (string) ( $adj['totals']['currency_code'] ?? $adj['currency_code'] ?? $order->get_currency() ) );

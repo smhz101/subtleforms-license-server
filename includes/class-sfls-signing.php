@@ -55,6 +55,12 @@ final class SFLS_Signing {
 	const SIGNED_ROUTES = '#^/sfls/v1/(license/(activate|validate|deactivate|status)|update/(check|versions)|connect/exchange|branding)$#';
 
 	/**
+	 * Routes that answer 503 while signing is unavailable: the signed ones,
+	 * plus the package and download links (Pro rejects unsigned packages).
+	 */
+	const GUARDED_ROUTES = '#^/sfls/v1/(license/(activate|validate|deactivate|status)|update/(check|versions|package|download)|connect/exchange|branding)$#';
+
+	/**
 	 * Secret key used by the test suite instead of the constant (base64).
 	 *
 	 * @var string|null
@@ -471,7 +477,7 @@ final class SFLS_Signing {
 	 */
 	public static function guard_unsigned( $result, $server, $request ) {
 		unset( $server );
-		if ( null !== $result || ! $request instanceof WP_REST_Request || ! preg_match( self::SIGNED_ROUTES, (string) $request->get_route() ) ) {
+		if ( null !== $result || ! $request instanceof WP_REST_Request || ! preg_match( self::GUARDED_ROUTES, (string) $request->get_route() ) ) {
 			return $result;
 		}
 		if ( self::enabled() || ! self::required() ) {
