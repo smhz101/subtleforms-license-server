@@ -274,7 +274,7 @@ final class SFLS_Paddle_REST {
 			return $woo ? SFLS_Woo_Paddle_Orders::payment_failed( $data ) : SFLS_Billing::payment_failed( $data );
 		}
 		if ( $woo && in_array( $type, array( 'adjustment.created', 'adjustment.updated' ), true ) ) {
-			return SFLS_Woo_Paddle_Orders::adjustment( $data );
+			return SFLS_Woo_Paddle_Orders::adjustment( $data, (string) SFLS_Billing::gmt( $event['occurred_at'] ?? null ) );
 		}
 		return array(
 			'action'  => 'ignored',
