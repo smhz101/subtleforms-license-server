@@ -29,6 +29,7 @@ $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding_revisions" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding_sites" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_rate_limits" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_audit_log" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_trial_codes" );
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfls\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfls\\_%'" );
 // phpcs:enable
