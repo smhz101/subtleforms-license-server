@@ -9,12 +9,12 @@
  *       $order->payment_complete() runs. The existing order completion issues
  *       the license once (the `_sfls_issued` guard), then the license is
  *       linked to the Paddle subscription (billing = paddle).
- *   subscription.created / trialing / activated for a subscription with no
+ *   subscription.created / activated for a subscription with no
  *       license yet: the order is found through custom_data, the creating
  *       transaction or the subscription's transactions, then completed (when
  *       the transaction already is) and linked.
  *   transaction.completed (origin subscription_recurring)
- *       A renewal (or the first payment after a trial): the license is
+ *       A renewal: the license is
  *       extended as before, and a Completed renewal order is recorded so the
  *       payment shows in WooCommerce reports and the customer's Orders.
  *   transaction.completed (origin subscription_update)
@@ -460,7 +460,7 @@ final class SFLS_Woo_Paddle_Orders {
 
 	/**
 	 * Tie the licenses of a paid order to its Paddle subscription, so they
-	 * follow it (trial, renewals, past due, cancel). Safe to run again.
+	 * follow it (renewals, past due, cancel). Safe to run again.
 	 *
 	 * The license is stamped as synced at the time the subscription state is
 	 * from: the event's occurred_at, else the subscription's updated_at, else
@@ -485,8 +485,7 @@ final class SFLS_Woo_Paddle_Orders {
 			$fetched = SFLS_Paddle::get_subscription( $sub_id );
 			$sub     = is_wp_error( $fetched ) ? null : $fetched;
 		}
-		$trial_order = '' !== self::trial_days( $order );
-		$out         = null;
+		$out = null;
 		foreach ( $licenses as $lic ) {
 			$owner = SFLS_Licenses::find_by_subscription( $sub_id );
 			if ( $owner && (int) $owner['id'] !== (int) $lic['id'] ) {
@@ -504,7 +503,7 @@ final class SFLS_Woo_Paddle_Orders {
 			if ( $sub ) {
 				$from_sub = SFLS_Billing::fields_for( $sub, $lic );
 				// A renewal bought early keeps the later expiry.
-				if ( ! empty( $lic['expires_at'] ) && ! empty( $from_sub['expires_at'] ) && strtotime( $lic['expires_at'] . ' UTC' ) > strtotime( $from_sub['expires_at'] . ' UTC' ) && 'trialing' !== ( $sub['status'] ?? '' ) && ! $first ) {
+				if ( ! empty( $lic['expires_at'] ) && ! empty( $from_sub['expires_at'] ) && strtotime( $lic['expires_at'] . ' UTC' ) > strtotime( $from_sub['expires_at'] . ' UTC' ) && ! $first ) {
 					unset( $from_sub['expires_at'] );
 				}
 				if ( ! $first ) {
@@ -513,29 +512,14 @@ final class SFLS_Woo_Paddle_Orders {
 				$fields                      = array_merge( $from_sub, $fields );
 				$fields['billing_synced_at'] = self::synced_at( $occurred, $sub, $lic );
 			} elseif ( $first ) {
-				if ( $trial_order ) {
-					$days                    = (int) self::trial_days( $order );
-					$fields['trial']         = 1;
-					$fields['sites_allowed'] = 1;
-					$fields['billing_status'] = 'trialing';
-					$fields['trial_ends_at'] = gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS );
-					$fields['expires_at']    = gmdate( 'Y-m-d H:i:s', time() + ( $days + SFLS_Paddle::BILLING_GRACE_DAYS ) * DAY_IN_SECONDS );
-				} else {
-					$fields['billing_status'] = 'active';
-				}
-			}
-			if ( $first && $trial_order ) {
-				$fields['trial_started_at'] = current_time( 'mysql', true );
+				$fields['billing_status'] = 'active';
 			}
 			SFLS_Licenses::update( (int) $lic['id'], $fields );
 			if ( $first ) {
-				if ( $trial_order ) {
-					SFLS_Trials::record_start( (int) $lic['id'], (string) $lic['customer_email'] );
-				}
 				$order->add_order_note(
 					sprintf(
 						/* translators: 1: masked key, 2: subscription ID */
-						__( 'License %1$s follows Paddle subscription %2$s: renewals, trial, cancel and resume run through Paddle.', 'subtleforms-license-server' ),
+						__( 'License %1$s follows Paddle subscription %2$s: renewals, cancel and resume run through Paddle.', 'subtleforms-license-server' ),
 						SFLS_Licenses::mask_key( (string) $lic['license_key'] ),
 						$sub_id
 					)
@@ -565,20 +549,6 @@ final class SFLS_Woo_Paddle_Orders {
 			return (string) $lic['billing_synced_at'];
 		}
 		return $at;
-	}
-
-	/**
-	 * Trial days of an order's license line ('' when it is not a trial).
-	 *
-	 * @param WC_Order $order Order.
-	 */
-	private static function trial_days( WC_Order $order ): string {
-		foreach ( $order->get_items() as $item ) {
-			if ( $item instanceof WC_Order_Item_Product && '' !== (string) $item->get_meta( '_sfls_trial' ) ) {
-				return (string) $item->get_meta( '_sfls_trial' );
-			}
-		}
-		return '';
 	}
 
 	/**
@@ -635,7 +605,6 @@ final class SFLS_Woo_Paddle_Orders {
 		$tax      = (int) ( $totals['tax'] ?? 0 );
 		$net      = $total - $tax;
 		$plan     = (string) $lic['plan'];
-		$was      = 'trialing' === (string) $lic['billing_status'] || (int) $lic['trial'];
 
 		$order = wc_create_order(
 			array(
@@ -692,11 +661,8 @@ final class SFLS_Woo_Paddle_Orders {
 		$order->update_meta_data( '_sfls_paddle_subscription_id', (string) ( $txn['subscription_id'] ?? '' ) );
 		$order->update_meta_data( '_sfls_issued', 'yes' ); // Never issues a new key.
 		$order->save();
-		$note = $was
-			/* translators: 1: masked key, 2: parent order number, 3: transaction ID */
-			? __( 'First yearly payment after the free trial of license %1$s (order #%2$s), charged by Paddle (transaction %3$s). The license was extended, no new key was issued.', 'subtleforms-license-server' )
-			/* translators: 1: masked key, 2: parent order number, 3: transaction ID */
-			: __( 'Automatic renewal of license %1$s (order #%2$s), charged by Paddle (transaction %3$s). The license was extended, no new key was issued.', 'subtleforms-license-server' );
+		/* translators: 1: masked key, 2: parent order number, 3: transaction ID */
+		$note = __( 'Automatic renewal of license %1$s (order #%2$s), charged by Paddle (transaction %3$s). The license was extended, no new key was issued.', 'subtleforms-license-server' );
 		$order->update_status( 'completed', sprintf( $note, SFLS_Licenses::mask_key( (string) $lic['license_key'] ), $parent->get_order_number(), $txn_id ) );
 		$parent->add_order_note(
 			sprintf(
@@ -788,8 +754,7 @@ final class SFLS_Woo_Paddle_Orders {
 	 * Pay an upgrade of a Paddle license at the WooCommerce checkout: the
 	 * subscription moves to the new plan's price with prorated_immediately,
 	 * Paddle charges the saved payment method at once, the key stays, and the
-	 * order records the prorated charge. During a trial nothing is charged
-	 * (the new plan is billed when the trial ends).
+	 * order records the prorated charge.
 	 *
 	 * @param WC_Order $order Order.
 	 * @param array    $line  SFLS_Woo_Paddle::order_line().
@@ -798,9 +763,7 @@ final class SFLS_Woo_Paddle_Orders {
 	public static function pay_upgrade( WC_Order $order, array $line ) {
 		$lic      = (array) $line['license'];
 		$plan     = (string) $line['plan'];
-		$map      = SFLS_Paddle::plan( $plan );
-		$trialing = 'trialing' === (string) $lic['billing_status'];
-		$price    = $trialing && '' !== $map['trial_price_id'] ? $map['trial_price_id'] : $map['price_id'];
+		$price    = SFLS_Paddle::plan( $plan )['price_id'];
 		$currency = $order->get_currency();
 		$body     = array(
 			'items'                  => array(
@@ -809,34 +772,28 @@ final class SFLS_Woo_Paddle_Orders {
 					'quantity' => 1,
 				),
 			),
-			'proration_billing_mode' => $trialing ? 'do_not_bill' : 'prorated_immediately',
+			'proration_billing_mode' => 'prorated_immediately',
+			'on_payment_failure'     => 'prevent_change',
 		);
-		if ( ! $trialing ) {
-			$body['on_payment_failure'] = 'prevent_change';
+		$preview = SFLS_Paddle::preview_subscription_update( (string) $lic['paddle_subscription_id'], $body );
+		if ( is_wp_error( $preview ) ) {
+			return $preview;
 		}
-		$net = 0;
-		$tax = 0;
-		if ( ! $trialing ) {
-			$preview = SFLS_Paddle::preview_subscription_update( (string) $lic['paddle_subscription_id'], $body );
-			if ( is_wp_error( $preview ) ) {
-				return $preview;
-			}
-			$totals   = (array) ( $preview['immediate_transaction']['details']['totals'] ?? array() );
-			$net      = SFLS_Paddle::net_of( $totals );
-			$tax      = (int) ( $totals['tax'] ?? 0 );
-			$currency = strtoupper( (string) ( $totals['currency_code'] ?? $currency ) );
-			$expected = (int) SFLS_Paddle::to_minor( (string) $order->get_total(), $order->get_currency() );
-			// Paddle prorates to the second; allow 1% (at least one cent) above the estimate.
-			if ( $net > $expected + max( 1, (int) ceil( $expected / 100 ) ) ) {
-				return new WP_Error(
-					'sfls_upgrade_price',
-					sprintf(
-						/* translators: %s: amount */
-						__( 'The upgrade costs %s today. Reload the checkout to see the current price.', 'subtleforms-license-server' ),
-						self::money( $net, $currency )
-					)
-				);
-			}
+		$totals   = (array) ( $preview['immediate_transaction']['details']['totals'] ?? array() );
+		$net      = SFLS_Paddle::net_of( $totals );
+		$tax      = (int) ( $totals['tax'] ?? 0 );
+		$currency = strtoupper( (string) ( $totals['currency_code'] ?? $currency ) );
+		$expected = (int) SFLS_Paddle::to_minor( (string) $order->get_total(), $order->get_currency() );
+		// Paddle prorates to the second; allow 1% (at least one cent) above the estimate.
+		if ( $net > $expected + max( 1, (int) ceil( $expected / 100 ) ) ) {
+			return new WP_Error(
+				'sfls_upgrade_price',
+				sprintf(
+					/* translators: %s: amount */
+					__( 'The upgrade costs %s today. Reload the checkout to see the current price.', 'subtleforms-license-server' ),
+					self::money( $net, $currency )
+				)
+			);
 		}
 		$sub = SFLS_Paddle::update_subscription( (string) $lic['paddle_subscription_id'], $body );
 		if ( is_wp_error( $sub ) ) {
@@ -873,20 +830,17 @@ final class SFLS_Woo_Paddle_Orders {
 		$order->update_meta_data( '_sfls_paddle_kind', 'upgrade' );
 		$order->update_meta_data( '_sfls_paddle_subscription_id', (string) $lic['paddle_subscription_id'] );
 		$order->update_meta_data( '_sfls_paddle_paid_txn', 'subscription_update' );
-		if ( ! $trialing && $net > 0 ) {
+		if ( $net > 0 ) {
 			$order->update_meta_data( '_sfls_paddle_upgrade_pending', 'yes' );
 		}
 		$order->save();
 		$order->add_order_note(
-			$trialing
-				/* translators: %s: subscription ID */
-				? sprintf( __( 'Paddle subscription %s moved to the new plan during its trial. Nothing is charged until the trial ends.', 'subtleforms-license-server' ), (string) $lic['paddle_subscription_id'] )
-				: sprintf(
-					/* translators: 1: subscription ID, 2: amount */
-					__( 'Paddle subscription %1$s updated with a prorated charge of %2$s on the saved payment method. The transaction ID is added when Paddle confirms it.', 'subtleforms-license-server' ),
-					(string) $lic['paddle_subscription_id'],
-					self::money( $net + $tax, $currency )
-				)
+			sprintf(
+				/* translators: 1: subscription ID, 2: amount */
+				__( 'Paddle subscription %1$s updated with a prorated charge of %2$s on the saved payment method. The transaction ID is added when Paddle confirms it.', 'subtleforms-license-server' ),
+				(string) $lic['paddle_subscription_id'],
+				self::money( $net + $tax, $currency )
+			)
 		);
 		$order->payment_complete();
 		return array(
@@ -1276,11 +1230,13 @@ final class SFLS_Woo_Paddle_Orders {
 	 */
 	public static function cancel_on_full_refund( $order_id ): void {
 		$order = wc_get_order( (int) $order_id );
-		if ( ! $order instanceof WC_Order || SFLS_Woo_Paddle::GATEWAY !== $order->get_payment_method() || 'yes' === $order->get_meta( '_sfls_paddle_renewal' ) || ! SFLS_Paddle::has_api_key() ) {
+		if ( ! $order instanceof WC_Order || SFLS_Woo_Paddle::GATEWAY !== $order->get_payment_method() || ! SFLS_Paddle::has_api_key() ) {
 			return;
 		}
-		foreach ( SFLS_Woo::order_licenses( $order->get_id() ) as $lic ) {
-			if ( (int) $lic['order_id'] !== $order->get_id() || ! SFLS_Licenses::is_paddle( $lic ) || 'canceled' === $lic['billing_status'] ) {
+		$renewal = 'yes' === $order->get_meta( '_sfls_paddle_renewal' );
+		$lics    = $renewal ? SFLS_Woo::renewal_refund_licenses( $order ) : SFLS_Woo::order_licenses( $order->get_id() );
+		foreach ( $lics as $lic ) {
+			if ( ( ! $renewal && (int) $lic['order_id'] !== $order->get_id() ) || ! SFLS_Licenses::is_paddle( $lic ) || 'canceled' === $lic['billing_status'] ) {
 				continue;
 			}
 			$sub = SFLS_Paddle::cancel_subscription( (string) $lic['paddle_subscription_id'], true );

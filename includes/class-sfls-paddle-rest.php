@@ -3,7 +3,6 @@
  * Paddle REST endpoints.
  *
  *   POST /wp-json/sfls/v1/paddle/webhook       Paddle notifications (signed).
- *   POST /wp-json/sfls/v1/paddle/eligibility   { email, plan, site? } before a trial checkout.
  *   GET  /wp-json/sfls/v1/paddle/checkout      ?txn&token: the license a checkout created.
  *
  * Webhooks: the Paddle-Signature header is `ts=<unix>;h1=<hex>` (more than one
@@ -59,15 +58,6 @@ final class SFLS_Paddle_REST {
 				'methods'             => 'POST',
 				'callback'            => array( $this, 'webhook' ),
 				'permission_callback' => '__return_true', // Authenticated by the Paddle-Signature header.
-			)
-		);
-		register_rest_route(
-			SFLS_REST::NS,
-			'/paddle/eligibility',
-			array(
-				'methods'             => 'POST',
-				'callback'            => array( $this, 'eligibility' ),
-				'permission_callback' => '__return_true', // Public, but only a signed-in caller (valid REST nonce) gets the real answer.
 			)
 		);
 		register_rest_route(
@@ -295,85 +285,7 @@ final class SFLS_Paddle_REST {
 		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_paddle_events ORDER BY received_at DESC LIMIT %d", $limit ), ARRAY_A );
 	}
 
-	// ── Eligibility and checkout status ─────────────────────────────────
-
-	/**
-	 * Per-IP limit shared with the license API.
-	 */
-	private static function limited(): ?WP_REST_Response {
-		return ( new SFLS_REST() )->rate_limit( 'ip', SFLS_Licenses::client_ip() );
-	}
-
-	/**
-	 * Can this email start a free trial of this plan?
-	 *
-	 * @param WP_REST_Request $req Request.
-	 * @return WP_REST_Response
-	 */
-	public function eligibility( WP_REST_Request $req ) {
-		$limited = self::limited();
-		if ( $limited ) {
-			return $limited;
-		}
-		$plan  = sanitize_key( (string) $req->get_param( 'plan' ) );
-		$user  = wp_get_current_user();
-		$email = $user->ID ? $user->user_email : sanitize_email( (string) $req->get_param( 'email' ) );
-		$site  = sanitize_text_field( (string) $req->get_param( 'site' ) );
-
-		if ( ! SFLS_Paddle::any_selling() || ! SFLS_Plans::get( $plan ) ) {
-			return new WP_REST_Response(
-				array(
-					'eligible' => false,
-					'reason'   => 'unavailable',
-					'message'  => __( 'Free trials are not available right now.', 'subtleforms-license-server' ),
-				),
-				400
-			);
-		}
-		if ( ! SFLS_Paddle::plan_has_trial( $plan ) ) {
-			return rest_ensure_response(
-				array(
-					'eligible'   => false,
-					'reason'     => 'no_trial',
-					'message'    => __( 'This plan has no free trial.', 'subtleforms-license-server' ),
-					'email'      => $email,
-					'trial_days' => 0,
-				)
-			);
-		}
-		if ( ! $user->ID ) {
-			// Anonymous callers get a uniform answer: only the shape of the address is checked, never
-			// whether it or its site already had a trial. Checkout enforces the real rules, so this
-			// endpoint cannot be used to probe other people's addresses or sites.
-			$normal = SFLS_Trials::normalize_email( $email );
-			if ( '' === $normal ) {
-				$check = array(
-					'eligible' => false,
-					'reason'   => 'invalid_email',
-					'message'  => __( 'Enter a valid email address.', 'subtleforms-license-server' ),
-				);
-			} else {
-				$check = array(
-					'eligible' => true,
-					'reason'   => '',
-					'message'  => '',
-				);
-			}
-			return rest_ensure_response(
-				$check + array(
-					'email'      => $email,
-					'trial_days' => SFLS_Paddle::plan( $plan )['trial_days'],
-				)
-			);
-		}
-		$check = SFLS_Trials::check( $email, $site );
-		return rest_ensure_response(
-			$check + array(
-				'email'      => $email,
-				'trial_days' => SFLS_Paddle::plan( $plan )['trial_days'],
-			)
-		);
-	}
+	// ── Checkout status ─────────────────────────────────
 
 	/**
 	 * The license a checkout created, once the webhook has issued it.
@@ -464,10 +376,8 @@ final class SFLS_Paddle_REST {
 			'license_key' => (string) $lic['license_key'],
 			'plan'        => SFLS_Plans::label( (string) $lic['plan'] ),
 			'sites'       => SFLS_Plans::sites_label( (int) $lic['sites_allowed'] ),
-			'trial'       => ! empty( $lic['trial'] ),
-			'trial_ends'  => ! empty( $lic['trial'] ) ? $date( $lic['trial_ends_at'] ) : '',
 			'renews'      => SFLS_Licenses::renewal_confirmed( $lic ) ? $date( $lic['renews_at'] ?? null ) : '',
-			'renews_pending' => ! SFLS_Licenses::renewal_confirmed( $lic ) && empty( $lic['trial'] ),
+			'renews_pending' => ! SFLS_Licenses::renewal_confirmed( $lic ),
 			'amount'      => (string) SFLS_Licenses::renewal_amount( $lic ),
 			'email'       => (string) $lic['customer_email'],
 			'download'    => function_exists( 'wc_get_account_endpoint_url' ) ? SFLS_Delivery::download_link() : '',

@@ -115,7 +115,6 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 				$order->delete( true );
 			}
 			delete_option( 'sfls_issue_lock_' . $id );
-			$wpdb->delete( $wpdb->prefix . 'sfls_trial_claims', array( 'order_id' => (int) $id ) );
 		}
 		foreach ( $this->posts as $id ) {
 			wp_delete_post( $id, true );
@@ -123,11 +122,9 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 		$like = '%' . $wpdb->esc_like( self::DOMAIN );
 		$ids  = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}sfls_licenses WHERE customer_email LIKE %s", $like ) );
 		foreach ( $ids as $id ) {
-			$wpdb->delete( $wpdb->prefix . 'sfls_trial_claims', array( 'license_id' => (int) $id ) );
 			SFLS_Licenses::delete( (int) $id );
 		}
-		// Trial claims, webhook events and accounts the Paddle tests created.
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_trial_claims WHERE value LIKE %s OR value LIKE %s OR value LIKE %s", $like, '%sflstest%', '%sfls-site-test%' ) );
+		// Webhook events and accounts the Paddle tests created.
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}sfls_paddle_events WHERE event_id LIKE 'evt\_test\_%'" );
 		require_once ABSPATH . 'wp-admin/includes/user.php';
 		$auto = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->users} WHERE user_email LIKE %s OR user_email LIKE %s", $like, '%sflstest%' ) );
@@ -150,8 +147,6 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 		$this->temp_files = array();
 		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfls\\_rl\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfls\\_rl\\_%'" );
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}sfls_rate_limits" );
-		$wpdb->query( "DELETE FROM {$wpdb->prefix}sfls_trial_codes" );
-		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'sfls\\_trial\\_lock\\_%'" );
 		SFLS_Products::flush();
 		wp_set_current_user( 0 );
 		unset( $_SERVER['HTTP_CF_CONNECTING_IP'], $_SERVER['HTTP_X_FORWARDED_FOR'] );

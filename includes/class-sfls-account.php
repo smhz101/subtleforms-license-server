@@ -340,9 +340,6 @@ final class SFLS_Account {
 
 		echo '<header class="sfls-license-head"><div class="sfls-license-title"><h3>' . esc_html( SFLS_Plans::label( $lic['plan'] ) ) . '</h3>';
 		echo wp_kses_post( SFLS_Connect::pill( $state['status'] ) );
-		if ( $paddle && ! empty( $lic['trial'] ) && $state['valid'] ) {
-			echo '<span class="sfls-tag sfls-tag--trial">' . esc_html__( 'Free trial', 'subtleforms-license-server' ) . '</span>';
-		}
 		echo '</div><div class="sfls-license-actions">';
 		if ( $state['valid'] && SFLS_Releases::has_package() ) {
 			echo '<a class="sfls-btn sfls-btn--primary sfls-btn--sm" href="' . esc_url( self::download_url() ) . '">';
@@ -378,10 +375,6 @@ final class SFLS_Account {
 				echo '<input type="hidden" name="plan" value="' . esc_attr( $plan ) . '">';
 				/* translators: 1: plan name, 2: sites */
 				$confirm = sprintf( __( 'Upgrade to %1$s (%2$s)? You pay the prorated difference for the rest of this billing year now, and the new limits apply right away. Same key.', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ), strtolower( SFLS_Plans::sites_label( (int) ( SFLS_Plans::get( $plan )['sites'] ?? 1 ) ) ) );
-				if ( ! empty( $lic['trial'] ) ) {
-					/* translators: %s: plan name */
-					$confirm = sprintf( __( 'Switch your trial to %s? Nothing is charged now. When the trial ends you are billed for the new plan.', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) );
-				}
 				echo '<button type="submit" class="sfls-btn sfls-btn--secondary sfls-btn--sm" data-sfls-confirm="' . esc_attr( $confirm ) . '">';
 				self::print_icon( 'up' );
 				/* translators: %s: plan name */
@@ -508,7 +501,7 @@ final class SFLS_Account {
 	}
 
 	/**
-	 * First stat of a Paddle license card: "Trial ends", "Renews", "Ends".
+	 * First stat of a Paddle license card: "Renews", "Ends".
 	 *
 	 * @param array $lic   License.
 	 * @param array $state State.
@@ -522,9 +515,6 @@ final class SFLS_Account {
 		}
 		if ( ! empty( $lic['cancels_at'] ) ) {
 			return array( __( 'Ends', 'subtleforms-license-server' ), $date( $lic['cancels_at'] ) );
-		}
-		if ( ! empty( $lic['trial'] ) && ! empty( $lic['trial_ends_at'] ) ) {
-			return array( __( 'Trial ends', 'subtleforms-license-server' ), $date( $lic['trial_ends_at'] ) );
 		}
 		if ( ! empty( $lic['renews_at'] ) ) {
 			return array( __( 'Renews', 'subtleforms-license-server' ), $date( $lic['renews_at'] ) );
@@ -584,16 +574,6 @@ final class SFLS_Account {
 
 		echo '<div class="sfls-billing sfls-billing--' . esc_attr( $line[0] ) . '" data-billing-status="' . esc_attr( $status ) . '">';
 		echo '<div class="sfls-billing-text"><strong>' . esc_html( $line[1] ) . '</strong>';
-		if ( ! empty( $lic['trial'] ) ) {
-			$full = (int) ( SFLS_Plans::get( (string) $lic['plan'] )['sites'] ?? 1 );
-			echo '<span>' . esc_html(
-				sprintf(
-					/* translators: %s: sites of the full plan, e.g. "5 sites" */
-					__( 'Trial covers 1 site. After the first payment it covers %s.', 'subtleforms-license-server' ),
-					strtolower( SFLS_Plans::sites_label( $full ) )
-				)
-			) . '</span>';
-		}
 		echo '</div><div class="sfls-billing-actions">';
 		if ( $live && SFLS_Paddle::has_api_key() ) {
 			echo '<form method="post" class="sfls-inline-form" action="' . esc_url( $action ) . '">';
@@ -609,9 +589,7 @@ final class SFLS_Account {
 				echo '<button type="submit" class="sfls-btn sfls-btn--primary sfls-btn--sm">' . esc_html__( 'Resume', 'subtleforms-license-server' ) . '</button>';
 			} else {
 				self::billing_fields( $lic, 'cancel' );
-				$confirm = ! empty( $lic['trial'] )
-					? __( 'Cancel auto-renew? Pro keeps working until the trial ends and you will not be charged.', 'subtleforms-license-server' )
-					: __( 'Cancel auto-renew? Pro keeps working until the end of the period you paid for. You can resume before then.', 'subtleforms-license-server' );
+				$confirm = __( 'Cancel auto-renew? Pro keeps working until the end of the period you paid for. You can resume before then.', 'subtleforms-license-server' );
 				// Paddle's cancellation flow asks its own questions; the confirm text is
 				// only used if the flow cannot load and the form posts directly.
 				$confirm_attr = ( '' === $retain ? ' data-sfls-confirm="' : ' data-sfls-retain-confirm="' ) . esc_attr( $confirm ) . '"';

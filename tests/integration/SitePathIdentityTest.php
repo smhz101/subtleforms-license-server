@@ -463,17 +463,6 @@ class SFLS_Site_Path_Identity_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * A trial belongs to the host: a path does not get a second trial.
-	 */
-	public function test_trials_are_per_host(): void {
-		$lic = $this->make_license( array( 'plan' => 'pro' ) );
-		SFLS_Trials::record_site( (int) $lic['id'], 'trial-host.example.com/staging' );
-		$this->assertTrue( SFLS_Trials::site_used_by_other( 'trial-host.example.com', 0 ) );
-		$this->assertTrue( SFLS_Trials::site_used_by_other( 'https://trial-host.example.com/other', 0 ) );
-		$this->assertFalse( SFLS_Trials::site_used_by_other( 'trial-host.example.com', (int) $lic['id'] ) );
-	}
-
-	/**
 	 * Deactivating never runs the legacy rename: a copy that deactivates first
 	 * leaves a quiet host-only row alone and still hears "deactivated".
 	 */

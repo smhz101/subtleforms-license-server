@@ -85,7 +85,6 @@
 							transactionId: d.sfls_paddle_txn,
 							successUrl: d.sfls_paddle_success,
 							payUrl: d.sfls_paddle_pay_url,
-							trial: d.sfls_paddle_trial,
 							cancelable: true,
 						} )
 						.then( function ( outcome ) {

@@ -1,6 +1,6 @@
 <?php
 /**
- * 1.9.1: CLI user lookup (L1), local trial code bypass (L5), renewal date
+ * 1.9.1: CLI user lookup (L1), renewal date
  * hidden until the subscription is active (L4).
  *
  * @package SFLS
@@ -25,18 +25,6 @@ class SFLS_Qa_Fixes_Test extends SFLS_Test_Case {
 		$this->assertSame( $user->ID, SFLS_CLI::find_user( $user->user_email )->ID );
 		$this->assertFalse( SFLS_CLI::find_user( 'no-such-user-' . wp_generate_password( 6, false ) ) );
 		$this->assertFalse( SFLS_CLI::find_user( '' ) );
-	}
-
-	/**
-	 * The code is skipped only on local and development by default, and the filter wins.
-	 */
-	public function test_trial_code_skip_follows_environment_and_filter(): void {
-		$expected = in_array( wp_get_environment_type(), array( 'local', 'development' ), true );
-		$this->assertSame( $expected, SFLS_Trials::skip_code() );
-
-		add_filter( 'sfls_trial_skip_email_code', '__return_false' );
-		$this->assertFalse( SFLS_Trials::skip_code() );
-		remove_filter( 'sfls_trial_skip_email_code', '__return_false' );
 	}
 
 	/**

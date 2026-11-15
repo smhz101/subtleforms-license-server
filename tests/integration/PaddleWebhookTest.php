@@ -31,11 +31,11 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * subscription.created while trialing: a 1-site trial license, the
-	 * account, the welcome email, the trial claims and the checkout link.
+	 * subscription.created for a new customer: the license, the account, the
+	 * welcome email and the checkout link.
 	 */
-	public function test_trialing_creates_one_site_trial_license(): void {
-		$email = $this->email( 'trial' );
+	public function test_created_makes_a_license_account_and_welcome_email(): void {
+		$email = $this->email( 'buyer' );
 		$sub   = $this->subscription();
 		$this->customer_emails[ $sub['customer_id'] ] = $email;
 
@@ -45,23 +45,20 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 
 		$lic = SFLS_Licenses::find_by_subscription( $sub['id'] );
 		$this->assertSame( 'paddle', $lic['billing'] );
-		$this->assertSame( 'trialing', $lic['billing_status'] );
+		$this->assertSame( 'active', $lic['billing_status'] );
 		$this->assertSame( 'pro', $lic['plan'] );
-		$this->assertSame( 1, (int) $lic['sites_allowed'], 'A trial covers 1 site whatever the plan.' );
-		$this->assertSame( 1, (int) $lic['trial'] );
+		$this->assertSame( 5, (int) $lic['sites_allowed'] );
 		$this->assertSame( 'active', $lic['status'] );
-		$trial_end = $sub['items'][0]['trial_dates']['ends_at'];
-		$this->assertSame( self::gmt_plus( $trial_end ), $lic['trial_ends_at'] );
-		$this->assertSame( self::gmt_plus( $trial_end, SFLS_Paddle::BILLING_GRACE_DAYS ), $lic['expires_at'], 'Valid until the trial end plus the billing grace.' );
+		$this->assertArrayNotHasKey( 'trial', $lic );
+		$this->assertSame( self::gmt_plus( $sub['current_billing_period']['ends_at'], SFLS_Paddle::BILLING_GRACE_DAYS ), $lic['expires_at'] );
 		$this->assertSame( self::gmt_plus( $sub['next_billed_at'] ), $lic['renews_at'] );
 		$this->assertNull( $lic['cancels_at'] );
 		$this->assertSame( '7900', $lic['billing_amount'] );
 		$this->assertSame( 'USD', $lic['billing_currency'] );
 		$this->assertSame( $sub['customer_id'], $lic['paddle_customer_id'] );
-		$this->assertSame( 'pri_pro_trial', $lic['paddle_price_id'] );
+		$this->assertSame( 'pri_pro', $lic['paddle_price_id'] );
 		$this->assertSame( 'txn_checkout1', $lic['paddle_transaction_id'] );
 		$this->assertSame( hash( 'sha256', $sub['custom_data']['sfls_token'] ), $lic['checkout_token_hash'] );
-		$this->assertNotEmpty( $lic['trial_started_at'] );
 
 		// Account created and linked, with a set-password email.
 		$user = get_user_by( 'email', $email );
@@ -70,22 +67,46 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 		$this->assertContains( 'customer', $user->roles );
 		$this->assertNotEmpty( array_filter( $this->mails, static fn( $m ) => str_contains( (string) $m['subject'], 'Login Details' ) || str_contains( (string) $m['message'], 'set your password' ) ) );
 
-		// Welcome email with the key and the trial end.
-		$welcome = $this->mails_with( 'free trial has started' );
+		// Welcome email with the key.
+		$welcome = $this->mails_with( 'license key' );
 		$this->assertCount( 1, $welcome );
 		$this->assertSame( $email, is_array( $welcome[0]['to'] ) ? $welcome[0]['to'][0] : $welcome[0]['to'] );
 		$this->assertStringContainsString( $lic['license_key'], $welcome[0]['message'] );
-		$this->assertStringContainsString( '$79.00', $welcome[0]['message'] );
-
-		// Trial claims.
-		$this->assertFalse( SFLS_Trials::check( $email )['eligible'] );
 
 		// Pro sees a valid license.
 		$payload = SFLS_Licenses::payload( $lic, 'shop.example.com' );
 		$this->assertTrue( $payload['valid'] );
 		$this->assertSame( 'valid', $payload['status'] );
-		$this->assertTrue( $payload['trial'] );
-		$this->assertSame( 1, $payload['sites_allowed'] );
+		$this->assertSame( 5, $payload['sites_allowed'] );
+	}
+
+	/**
+	 * Trials were removed, but a subscription.trialing event or a subscription
+	 * with the trialing status can still arrive (old data, an old Paddle
+	 * price). It must not fatal: it is treated like an active subscription.
+	 */
+	public function test_trialing_events_do_not_fatal(): void {
+		$sub = $this->subscription( array( 'status' => 'trialing' ) );
+		$this->customer_emails[ $sub['customer_id'] ] = $this->email();
+
+		$created = $this->webhook( 'subscription.trialing', $sub + array( 'transaction_id' => 'txn_trialing1' ) );
+		$this->assertSame( 200, $created->get_status(), wp_json_encode( $created->get_data() ) );
+		$this->assertSame( 'created', $created->get_data()['action'] );
+		$lic = SFLS_Licenses::find_by_subscription( $sub['id'] );
+		$this->assertNotNull( $lic );
+		$this->assertSame( 'trialing', $lic['billing_status'], 'The status is kept as Paddle sent it.' );
+		$this->assertSame( 5, (int) $lic['sites_allowed'], 'Handled like an active subscription: the plan\'s sites.' );
+		$this->assertSame( self::gmt_plus( $sub['current_billing_period']['ends_at'], SFLS_Paddle::BILLING_GRACE_DAYS ), $lic['expires_at'] );
+		$this->assertTrue( SFLS_Licenses::state( $lic )['valid'] );
+		$this->assertArrayNotHasKey( 'trial', SFLS_Licenses::payload( $lic ) );
+
+		// The same subscription again, and as subscription.created.
+		$again = $this->webhook( 'subscription.trialing', $sub, array( 'occurred_at' => self::when( 5 ) ) );
+		$this->assertSame( 200, $again->get_status(), wp_json_encode( $again->get_data() ) );
+		$other = $this->subscription( array( 'status' => 'trialing' ) );
+		$this->customer_emails[ $other['customer_id'] ] = $this->email();
+		$this->assertSame( 200, $this->webhook( 'subscription.created', $other )->get_status() );
+		$this->assertNotNull( SFLS_Licenses::find_by_subscription( $other['id'] ) );
 	}
 
 	/**
@@ -96,18 +117,18 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 	public function test_existing_account_is_not_linked_by_email(): void {
 		$user    = $this->make_user( 'existing' . wp_generate_password( 4, false, false ) );
 		$before  = count_users()['total_users'];
-		[ $lic ] = $this->start_trial( $user->user_email );
+		[ $lic ] = $this->start_subscription( $user->user_email );
 		$this->assertSame( 0, (int) $lic['user_id'] );
 		$this->assertSame( $before, count_users()['total_users'] );
 		$this->assertSame( array(), $this->mails_with( 'Login Details' ) );
 	}
 
 	/**
-	 * subscription.activated (first payment): full plan sites, trial over,
+	 * subscription.activated after a trialing subscription: full plan sites,
 	 * expiry at the end of the paid year plus grace, same key.
 	 */
 	public function test_activated_gives_full_plan(): void {
-		[ $lic, $sub ] = $this->start_trial();
+		[ $lic, $sub ] = $this->start_subscription( '', array( 'status' => 'trialing' ) );
 		$active        = $this->subscription(
 			array(
 				'id'          => $sub['id'],
@@ -118,12 +139,10 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 		$this->assertSame( 200, $this->webhook( 'subscription.activated', $active, array( 'occurred_at' => self::when( 5 ) ) )->get_status() );
 		$after = SFLS_Licenses::find( (int) $lic['id'] );
 		$this->assertSame( $lic['license_key'], $after['license_key'] );
-		$this->assertSame( 0, (int) $after['trial'] );
 		$this->assertSame( 'active', $after['billing_status'] );
 		$this->assertSame( 5, (int) $after['sites_allowed'] );
 		$this->assertSame( self::gmt_plus( $active['current_billing_period']['ends_at'], SFLS_Paddle::BILLING_GRACE_DAYS ), $after['expires_at'] );
 		$this->assertSame( self::gmt_plus( $active['next_billed_at'] ), $after['renews_at'] );
-		$this->assertFalse( SFLS_Licenses::payload( $after )['trial'] );
 		$this->assertSame( 5, SFLS_Licenses::payload( $after )['sites_allowed'] );
 	}
 
@@ -133,15 +152,13 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 	 * payment email per transaction.
 	 */
 	public function test_transaction_completed_extends_and_emails_once(): void {
-		[ $lic, $sub ] = $this->start_trial();
+		[ $lic, $sub ] = $this->start_subscription();
 		$first         = $this->transaction( $sub );
 		$this->assertSame( 200, $this->webhook( 'transaction.completed', $first )->get_status() );
 		$after = SFLS_Licenses::find( (int) $lic['id'] );
-		$this->assertSame( 0, (int) $after['trial'], 'The first payment ends the trial.' );
 		$this->assertSame( 5, (int) $after['sites_allowed'] );
 		$this->assertSame( self::gmt_plus( $first['billing_period']['ends_at'], SFLS_Paddle::BILLING_GRACE_DAYS ), $after['expires_at'] );
 		$this->assertCount( 1, $this->mails_with( 'Payment received' ) );
-		$this->assertStringContainsString( 'free trial is over', $this->mails_with( 'Payment received' )[0]['message'] );
 
 		// Renewal a year later.
 		$renewal = $this->transaction(
@@ -161,10 +178,10 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * A zero-total checkout transaction (the trial start) is not a payment.
+	 * A zero-total checkout transaction is not a payment.
 	 */
 	public function test_zero_total_transaction_is_not_a_payment(): void {
-		[ $lic, $sub ] = $this->start_trial();
+		[ $lic, $sub ] = $this->start_subscription();
 		$txn           = $this->transaction(
 			$sub,
 			array(
@@ -179,7 +196,6 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 		);
 		$this->webhook( 'transaction.completed', $txn );
 		$after = SFLS_Licenses::find( (int) $lic['id'] );
-		$this->assertSame( 1, (int) $after['trial'] );
 		$this->assertSame( $lic['expires_at'], $after['expires_at'] );
 		$this->assertSame( array(), $this->mails_with( 'Payment received' ) );
 	}
@@ -193,7 +209,7 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 		$this->customer_emails[ $sub['customer_id'] ] = $this->email();
 		$this->webhook( 'subscription.created', $sub );
 		$lic = SFLS_Licenses::find_by_subscription( $sub['id'] );
-		$this->assertSame( 5, (int) $lic['sites_allowed'], 'Bought without a trial: full plan at once.' );
+		$this->assertSame( 5, (int) $lic['sites_allowed'], 'Full plan at once.' );
 
 		$due = $sub;
 		$due['status']                              = 'past_due';
@@ -230,30 +246,11 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 	 * A failed attempt during checkout is not emailed (the customer is there).
 	 */
 	public function test_checkout_payment_failure_is_ignored(): void {
-		[ $lic, $sub ] = $this->start_trial();
+		[ $lic, $sub ] = $this->start_subscription();
 		$response      = $this->webhook( 'transaction.payment_failed', $this->transaction( $sub, array( 'origin' => 'web' ) ) );
 		$this->assertSame( 'ignored', $response->get_data()['action'] );
 		$this->assertSame( array(), $this->mails_with( 'Payment failed' ) );
-		$this->assertSame( 'trialing', SFLS_Licenses::find( (int) $lic['id'] )['billing_status'] );
-	}
-
-	/**
-	 * Canceled during the trial: it ends now, with no grace period.
-	 */
-	public function test_canceled_during_trial_ends_now(): void {
-		[ $lic, $sub ] = $this->start_trial();
-		$canceled      = $sub;
-		$canceled['status']      = 'canceled';
-		$canceled['canceled_at'] = self::when( 0 );
-		$this->webhook( 'subscription.canceled', $canceled, array( 'occurred_at' => self::when( 5 ) ) );
-		$after = SFLS_Licenses::find( (int) $lic['id'] );
-		$this->assertSame( 'canceled', $after['billing_status'] );
-		$this->assertLessThanOrEqual( time() + 2, strtotime( $after['expires_at'] . ' UTC' ) );
-		$state = SFLS_Licenses::state( $after );
-		$this->assertFalse( $state['valid'] );
-		$this->assertSame( 'expired', $state['status'] );
-		$this->assertNull( $after['renews_at'] );
-		$this->assertStringContainsString( 'will not be charged', $this->mails_with( 'Auto-renew is off' )[0]['message'] );
+		$this->assertSame( 'active', SFLS_Licenses::find( (int) $lic['id'] )['billing_status'] );
 	}
 
 	/**
@@ -336,12 +333,12 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 		global $wpdb;
 		$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}sfls_licenses WHERE paddle_subscription_id = %s", $sub['id'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$this->assertSame( 1, $count );
-		$this->assertCount( 1, $this->mails_with( 'free trial has started' ) );
+		$this->assertCount( 1, $this->mails_with( 'license key' ) );
 
 		// A different event for the same subscription (subscription.trialing) does not create a second license either.
 		$this->webhook( 'subscription.trialing', $sub, array( 'occurred_at' => self::when( 5 ) ) );
 		$this->assertSame( 1, (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}sfls_licenses WHERE paddle_subscription_id = %s", $sub['id'] ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$this->assertCount( 1, $this->mails_with( 'free trial has started' ) );
+		$this->assertCount( 1, $this->mails_with( 'license key' ) );
 
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_paddle_events WHERE event_id = %s", 'evt_test_dup_' . $sub['id'] ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$this->assertSame( 'created', $row['status'] );
@@ -351,10 +348,9 @@ class SFLS_Paddle_Webhook_Test extends SFLS_Test_Case {
 	 * An event older than the last applied one is skipped (out of order).
 	 */
 	public function test_out_of_order_event_is_skipped(): void {
-		[ $lic, $sub ] = $this->start_trial();
+		[ $lic, $sub ] = $this->start_subscription( '', array( 'status' => 'trialing' ) );
 		$active        = $sub;
 		$active['status'] = 'active';
-		$active['items'][0]['trial_dates'] = null;
 		$this->webhook( 'subscription.activated', $active, array( 'occurred_at' => self::when( 60 ) ) );
 		$response = $this->webhook( 'subscription.trialing', $sub, array( 'occurred_at' => self::when( 30 ) ) );
 		$this->assertSame( 'stale', $response->get_data()['action'] );

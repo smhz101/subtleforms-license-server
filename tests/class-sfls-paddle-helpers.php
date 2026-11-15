@@ -51,24 +51,18 @@ trait SFLS_Paddle_Helpers {
 						'starter' => array(
 							'product_id'     => 'pro_starter',
 							'price_id'       => 'pri_starter',
-							'trial_price_id' => 'pri_starter_trial',
-							'trial_days'     => 7,
 							'amount'         => '3900',
 							'currency'       => 'USD',
 						),
 						'pro'     => array(
 							'product_id'     => 'pro_pro',
 							'price_id'       => 'pri_pro',
-							'trial_price_id' => 'pri_pro_trial',
-							'trial_days'     => 14,
 							'amount'         => '7900',
 							'currency'       => 'USD',
 						),
 						'agency'  => array(
 							'product_id'     => 'pro_agency',
 							'price_id'       => 'pri_agency',
-							'trial_price_id' => '',
-							'trial_days'     => 0,
 							'amount'         => '19900',
 							'currency'       => 'USD',
 						),
@@ -77,7 +71,6 @@ trait SFLS_Paddle_Helpers {
 				),
 			)
 		);
-		$this->set_option( SFLS_Billing::REJECTED_OPTION, array() );
 		$this->settings( array( 'sell_with' => 'paddle' ) );
 		$this->filter( 'pre_http_request', array( $this, 'mock_paddle' ), 10, 3 );
 	}
@@ -191,10 +184,9 @@ trait SFLS_Paddle_Helpers {
 	protected function subscription( array $over = array() ): array {
 		$id       = 'sub_' . strtolower( wp_generate_password( 12, false, false ) );
 		$customer = 'ctm_' . strtolower( wp_generate_password( 10, false, false ) );
-		$status   = $over['status'] ?? 'trialing';
-		$price    = $over['_price'] ?? ( 'trialing' === $status ? 'pri_pro_trial' : 'pri_pro' );
+		$status   = $over['status'] ?? 'active';
+		$price    = $over['_price'] ?? 'pri_pro';
 		$amount   = $over['_amount'] ?? '7900';
-		$trial    = 'trialing' === $status;
 		unset( $over['_price'], $over['_amount'] );
 		$sub = array(
 			'id'                     => $id,
@@ -204,12 +196,12 @@ trait SFLS_Paddle_Helpers {
 			'currency_code'          => 'USD',
 			'created_at'             => self::when( -60 ),
 			'started_at'             => self::when( -60 ),
-			'first_billed_at'        => $trial ? null : self::when( -60 ),
-			'next_billed_at'         => $trial ? self::when( 14 * DAY_IN_SECONDS ) : self::when( 365 * DAY_IN_SECONDS ),
+			'first_billed_at'        => self::when( -60 ),
+			'next_billed_at'         => self::when( 365 * DAY_IN_SECONDS ),
 			'canceled_at'            => null,
 			'current_billing_period' => array(
 				'starts_at' => self::when( -60 ),
-				'ends_at'   => $trial ? self::when( 14 * DAY_IN_SECONDS ) : self::when( 365 * DAY_IN_SECONDS ),
+				'ends_at'   => self::when( 365 * DAY_IN_SECONDS ),
 			),
 			'billing_cycle'          => array(
 				'interval'  => 'year',
@@ -218,13 +210,9 @@ trait SFLS_Paddle_Helpers {
 			'scheduled_change'       => null,
 			'items'                  => array(
 				array(
-					'status'      => $trial ? 'trialing' : 'active',
+					'status'      => $status,
 					'quantity'    => 1,
 					'recurring'   => true,
-					'trial_dates' => $trial ? array(
-						'starts_at' => self::when( -60 ),
-						'ends_at'   => self::when( 14 * DAY_IN_SECONDS ),
-					) : null,
 					'price'       => array(
 						'id'           => $price,
 						'product_id'   => 'pro_pro',
@@ -232,11 +220,6 @@ trait SFLS_Paddle_Helpers {
 							'amount'        => $amount,
 							'currency_code' => 'USD',
 						),
-						'trial_period' => $trial ? array(
-							'interval'                => 'day',
-							'frequency'               => 14,
-							'requires_payment_method' => true,
-						) : null,
 					),
 				),
 			),
@@ -330,13 +313,13 @@ trait SFLS_Paddle_Helpers {
 	protected array $last_event = array();
 
 	/**
-	 * Start a trial for a new customer through the webhook and return the license.
+	 * Create a subscription for a new customer through the webhook and return the license.
 	 *
 	 * @param string $email Customer email.
 	 * @param array  $over  Subscription overrides.
 	 * @return array{0:array,1:array} License and subscription.
 	 */
-	protected function start_trial( string $email = '', array $over = array() ): array {
+	protected function start_subscription( string $email = '', array $over = array() ): array {
 		$email = '' !== $email ? $email : $this->email();
 		$sub   = $this->subscription( $over );
 		$this->customer_emails[ $sub['customer_id'] ] = $email;

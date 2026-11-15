@@ -170,7 +170,7 @@ final class SFLS_Admin {
 	}
 
 	/**
-	 * Small chip for Paddle billing: Trial, Past due, Cancels, Paddle.
+	 * Small chip for Paddle billing: Past due, Cancels, Paddle.
 	 *
 	 * @param array $lic License.
 	 */
@@ -178,9 +178,7 @@ final class SFLS_Admin {
 		if ( ! SFLS_Licenses::is_paddle( $lic ) ) {
 			return '';
 		}
-		if ( ! empty( $lic['trial'] ) && 'trialing' === $lic['billing_status'] ) {
-			$chip = array( 'info', __( 'Trial', 'subtleforms-license-server' ) );
-		} elseif ( 'past_due' === $lic['billing_status'] ) {
+		if ( 'past_due' === $lic['billing_status'] ) {
 			$chip = array( 'warn', __( 'Past due', 'subtleforms-license-server' ) );
 		} elseif ( ! empty( $lic['cancels_at'] ) ) {
 			$chip = array( 'warn', __( 'Cancels', 'subtleforms-license-server' ) );
@@ -568,7 +566,7 @@ final class SFLS_Admin {
 	 */
 	private static function billing_status_label( string $status ): string {
 		$labels = array(
-			'trialing' => __( 'Free trial', 'subtleforms-license-server' ),
+			'trialing' => __( 'Trialing', 'subtleforms-license-server' ),
 			'active'   => __( 'Active', 'subtleforms-license-server' ),
 			'past_due' => __( 'Past due', 'subtleforms-license-server' ),
 			'paused'   => __( 'Paused', 'subtleforms-license-server' ),
@@ -591,13 +589,11 @@ final class SFLS_Admin {
 		);
 		$fmt    = get_option( 'date_format' );
 		$date   = static fn( $gmt ) => $gmt ? wp_date( $fmt, strtotime( $gmt . ' UTC' ) ) : '';
-		$claims = SFLS_Trials::claims_of( (int) $lic['id'] );
 		echo '<div class="sfls-panel"><h2>' . esc_html__( 'Billing', 'subtleforms-license-server' ) . '</h2><ul class="sfls-meta-list">';
 		echo '<li><span>' . esc_html__( 'Source', 'subtleforms-license-server' ) . '</span><span>' . esc_html( $labels[ $source ] ) . '</span></li>';
 		if ( 'paddle' === $source ) {
 			$rows = array(
 				__( 'Status', 'subtleforms-license-server' )     => self::billing_status_label( (string) $lic['billing_status'] ),
-				__( 'Trial ends', 'subtleforms-license-server' ) => ! empty( $lic['trial'] ) ? $date( $lic['trial_ends_at'] ) : '',
 				__( 'Renews', 'subtleforms-license-server' )     => $date( $lic['renews_at'] ),
 				__( 'Cancels', 'subtleforms-license-server' )    => $date( $lic['cancels_at'] ),
 				__( 'Amount', 'subtleforms-license-server' )     => '' !== (string) $lic['billing_amount'] && '' !== (string) $lic['billing_currency'] ? SFLS_Paddle::format_amount( (string) $lic['billing_amount'], (string) $lic['billing_currency'] ) : '',
@@ -612,16 +608,6 @@ final class SFLS_Admin {
 			}
 		}
 		echo '</ul>';
-		if ( $claims ) {
-			echo '<p class="description">' . esc_html(
-				sprintf(
-					/* translators: %s: list of emails, domains and sites */
-					__( 'Used a free trial for: %s.', 'subtleforms-license-server' ),
-					implode( ', ', wp_list_pluck( $claims, 'value' ) )
-				)
-			) . '</p>';
-			echo '<p><a class="button-link" href="' . esc_url( $this->action_url( 'release_trial', (int) $lic['id'] ) ) . '" onclick="return confirm(\'' . esc_js( __( 'Let this customer, company and site start another free trial?', 'subtleforms-license-server' ) ) . '\');">' . esc_html__( 'Allow another trial', 'subtleforms-license-server' ) . '</a></p>';
-		}
 		echo '</div>';
 	}
 
@@ -840,33 +826,21 @@ final class SFLS_Admin {
 		$plans = SFLS_Paddle::plans();
 		echo '<div class="sfls-panel sfls-paddle-create"><h2>' . esc_html__( 'Paddle products and prices', 'subtleforms-license-server' ) . '</h2>';
 		if ( ! SFLS_Paddle::has_api_key() ) {
-			echo '<p class="description">' . esc_html__( 'To sell with Paddle, add your API key in Licenses › Settings › Paddle. This panel can then create a Paddle product per plan with a yearly price and an optional 7 or 14 day free trial.', 'subtleforms-license-server' ) . '</p></div>';
+			echo '<p class="description">' . esc_html__( 'To sell with Paddle, add your API key in Licenses › Settings › Paddle. This panel can then create a Paddle product per plan with a yearly price and a yearly price.', 'subtleforms-license-server' ) . '</p></div>';
 			return;
 		}
-		echo '<p class="description">' . esc_html__( 'Creates one Paddle product per plan with a yearly price at the yearly price above, plus a second yearly price with a free trial that requires a payment method. Plans that are already mapped are left alone. Saving the WooCommerce products never changes Paddle.', 'subtleforms-license-server' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Creates one Paddle product per plan with a yearly price at the yearly price above. Plans that are already mapped are left alone. Saving the WooCommerce products never changes Paddle.', 'subtleforms-license-server' ) . '</p>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( 'sfls_paddle_create' );
 		echo '<input type="hidden" name="action" value="sfls_paddle_create">';
-		echo '<table class="widefat sfls-wizard-table"><thead><tr><th scope="col">' . esc_html__( 'Plan', 'subtleforms-license-server' ) . '</th><th scope="col">' . esc_html__( 'Yearly price', 'subtleforms-license-server' ) . '</th><th scope="col">' . esc_html__( 'Free trial', 'subtleforms-license-server' ) . '</th><th scope="col">' . esc_html__( 'In Paddle', 'subtleforms-license-server' ) . '</th></tr></thead><tbody>';
+		echo '<table class="widefat sfls-wizard-table"><thead><tr><th scope="col">' . esc_html__( 'Plan', 'subtleforms-license-server' ) . '</th><th scope="col">' . esc_html__( 'Yearly price', 'subtleforms-license-server' ) . '</th><th scope="col">' . esc_html__( 'In Paddle', 'subtleforms-license-server' ) . '</th></tr></thead><tbody>';
 		foreach ( $plans as $plan => $row ) {
 			$price = (string) ( $values[ $plan ]['yearly'] ?? '' );
 			echo '<tr><th scope="row"><strong>' . esc_html( SFLS_Plans::label( $plan ) ) . '</strong></th>';
 			echo '<td>' . esc_html( '' !== $price ? html_entity_decode( wp_strip_all_tags( wc_price( (float) $price ) ), ENT_QUOTES, 'UTF-8' ) : __( 'No yearly price', 'subtleforms-license-server' ) ) . '</td>';
-			$id = 'sfls-paddle-trial-' . $plan;
-			echo '<td><label class="screen-reader-text" for="' . esc_attr( $id ) . '">' . esc_html( SFLS_Plans::label( $plan ) . ' ' . __( 'Free trial', 'subtleforms-license-server' ) ) . '</label><select id="' . esc_attr( $id ) . '" name="trial[' . esc_attr( $plan ) . ']"' . disabled( '' !== $row['trial_price_id'], true, false ) . '>';
-			foreach ( array(
-				0  => __( 'No trial', 'subtleforms-license-server' ),
-				7  => __( '7 days', 'subtleforms-license-server' ),
-				14 => __( '14 days', 'subtleforms-license-server' ),
-			) as $days => $label ) {
-				echo '<option value="' . esc_attr( (string) $days ) . '"' . selected( '' !== $row['trial_price_id'] ? $row['trial_days'] : 14, $days, false ) . '>' . esc_html( $label ) . '</option>';
-			}
-			echo '</select></td><td>';
+			echo '<td>';
 			if ( '' !== $row['price_id'] ) {
 				echo '<span class="sfls-admin-pill sfls-admin-pill--ok">' . esc_html__( 'Mapped', 'subtleforms-license-server' ) . '</span> <code>' . esc_html( $row['price_id'] ) . '</code>';
-				if ( '' !== $row['trial_price_id'] ) {
-					echo '<br><code>' . esc_html( $row['trial_price_id'] ) . '</code>';
-				}
 			} else {
 				echo '<span class="sfls-admin-pill sfls-admin-pill--neutral">' . esc_html__( 'Not created', 'subtleforms-license-server' ) . '</span>';
 			}
@@ -976,12 +950,7 @@ final class SFLS_Admin {
 
 		echo '<tr><th scope="row"><label for="sfls-staging">' . esc_html__( 'Staging hosts', 'subtleforms-license-server' ) . '</label></th><td><textarea id="sfls-staging" name="staging_hosts" rows="6" class="large-text code">' . esc_textarea( (string) $s['staging_hosts'] ) . '</textarea><p class="description">' . esc_html__( 'Sites on these hosts do not use a seat. One per line. *.example.com matches every subdomain of example.com, staging.* matches a staging subdomain of any site, and a * inside a name matches any letters, as in *stg.wpengine.com. Production hosts such as *.wpengine.com and *.kinsta.cloud should not be listed. localhost, *.local, *.test, *.example and *.invalid are always free.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
-		echo '<tr><th scope="row">' . esc_html__( 'Free trials', 'subtleforms-license-server' ) . '</th><td><input type="hidden" name="rules_present" value="1">';
-		echo '<label><input type="checkbox" name="trial_verify" value="1"' . checked( (int) $s['trial_verify'], 1, false ) . '> ' . esc_html__( 'Confirm the email address with a one-time code before the Paddle checkout', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'The code is emailed, works for 15 minutes and allows 5 tries.', 'subtleforms-license-server' ) . '</p>';
-		echo '<p><label><input type="checkbox" name="block_disposable" value="1"' . checked( (int) $s['block_disposable'], 1, false ) . '> ' . esc_html__( 'Refuse throw-away email addresses', 'subtleforms-license-server' ) . '</label></p>';
-		echo '<p><label for="sfls-disposable">' . esc_html__( 'More throw-away domains', 'subtleforms-license-server' ) . '</label><br><textarea id="sfls-disposable" name="disposable_extra" rows="3" class="large-text code">' . esc_textarea( (string) $s['disposable_extra'] ) . '</textarea><span class="description">' . esc_html__( 'One domain per line, added to the built-in list.', 'subtleforms-license-server' ) . '</span></p></td></tr>';
-
-		echo '<tr><th scope="row">' . esc_html__( 'Proxy or CDN', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="trusted_proxy" value="1"' . checked( (int) $s['trusted_proxy'], 1, false ) . '> ' . esc_html__( 'This site is behind Cloudflare or another proxy: read the visitor address from CF-Connecting-IP or X-Forwarded-For', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Rate limits and the activity log use this address. Turn it on only when all traffic comes through the proxy, because the headers can be forged otherwise.', 'subtleforms-license-server' ) . '</p></td></tr>';
+		echo '<tr><th scope="row">' . esc_html__( 'Proxy or CDN', 'subtleforms-license-server' ) . '</th><td><input type="hidden" name="rules_present" value="1"><label><input type="checkbox" name="trusted_proxy" value="1"' . checked( (int) $s['trusted_proxy'], 1, false ) . '> ' . esc_html__( 'This site is behind Cloudflare or another proxy: read the visitor address from CF-Connecting-IP or X-Forwarded-For', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Rate limits and the activity log use this address. Turn it on only when all traffic comes through the proxy, because the headers can be forged otherwise.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
 		echo '<tr><th scope="row">' . esc_html__( 'My Account', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="simplify_account" value="1"' . checked( (int) $s['simplify_account'], 1, false ) . '> ' . esc_html__( 'Simplify My Account for license-only stores', 'subtleforms-license-server' ) . '</label><p class="description">' . esc_html__( 'Hides the Addresses and Downloads tabs for customers whose orders only contain license products. Orders, Licenses, Pro downloads, Payment methods and Account details stay.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
@@ -1116,7 +1085,7 @@ final class SFLS_Admin {
 		$modes = array(
 			'woo_paddle'  => array(
 				__( 'WooCommerce checkout with Paddle payments (recommended)', 'subtleforms-license-server' ),
-				__( 'Customers use the WooCommerce cart and checkout, and pay with Pay with Paddle: card, PayPal, Apple Pay or Google Pay. Every purchase, renewal and refund is a WooCommerce order. Paddle is the merchant of record, adds sales tax or VAT, and renews yearly subscriptions automatically, with optional 7 or 14 day free trials.', 'subtleforms-license-server' ),
+				__( 'Customers use the WooCommerce cart and checkout, and pay with Pay with Paddle: card, PayPal, Apple Pay or Google Pay. Every purchase, renewal and refund is a WooCommerce order. Paddle is the merchant of record, adds sales tax or VAT, and renews yearly subscriptions automatically.', 'subtleforms-license-server' ),
 			),
 			'woocommerce' => array(
 				__( 'WooCommerce with other gateways', 'subtleforms-license-server' ),
@@ -1131,7 +1100,6 @@ final class SFLS_Admin {
 			echo '<label><input type="radio" name="sell_with" value="' . esc_attr( $value ) . '"' . checked( $mode, $value, false ) . '> <strong>' . esc_html( $label ) . '</strong></label><p class="description">' . esc_html( $help ) . '</p>';
 		}
 		echo '</fieldset></td></tr>';
-		echo '<tr><th scope="row"><label for="sfls-trial-notice">' . esc_html__( 'Trial ending email', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-trial-notice" type="number" min="0" max="30" class="small-text" name="trial_notice" value="' . esc_attr( (string) (int) $s['trial_notice'] ) . '"> ' . esc_html__( 'days before the trial ends', 'subtleforms-license-server' ) . '<p class="description">' . esc_html__( 'Tells the customer the amount, the date and how to cancel. 0 turns it off.', 'subtleforms-license-server' ) . '</p></td></tr>';
 		echo '<tr><th scope="row"><label for="sfls-renewal-notice">' . esc_html__( 'Renewal emails', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-renewal-notice" type="text" class="regular-text" name="renewal_notice" value="' . esc_attr( (string) $s['renewal_notice'] ) . '" placeholder="14,3"><p class="description">' . esc_html__( 'Days before each yearly renewal, separated by commas.', 'subtleforms-license-server' ) . '</p></td></tr>';
 		echo '</tbody></table>';
 
@@ -1140,7 +1108,7 @@ final class SFLS_Admin {
 		echo '<tr><th scope="row"><label for="sfls-paddle-key">' . esc_html__( 'API key', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-key" type="password" autocomplete="new-password" class="regular-text" name="api_key" value="" placeholder="' . esc_attr( '' !== $config['api_key'] ? '••••••••' . substr( $config['api_key'], -4 ) : 'pdl_sdbx_apikey_…' ) . '"><p class="description">' . esc_html( '' !== $config['api_key'] ? self::secret_hint( $config['api_key'] ) : __( 'Paddle › Developer tools › Authentication › API keys. Permissions: subscription read and write, customer read and write, address write, customer portal session write, transaction read and write, adjustment write, product and price read and write.', 'subtleforms-license-server' ) ) . '</p></td></tr>';
 		echo '<tr><th scope="row"><label for="sfls-paddle-token">' . esc_html__( 'Client-side token', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-token" type="text" class="regular-text sfls-mono" name="client_token" value="' . esc_attr( $config['client_token'] ) . '" placeholder="test_…"><p class="description">' . esc_html__( 'Paddle › Developer tools › Authentication › Client-side tokens. Used by the checkout in the browser.', 'subtleforms-license-server' ) . '</p></td></tr>';
 		echo '<tr><th scope="row"><label for="sfls-paddle-secret">' . esc_html__( 'Webhook secret', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-secret" type="password" autocomplete="new-password" class="regular-text" name="webhook_secret" value="" placeholder="' . esc_attr( '' !== $config['webhook_secret'] ? '••••••••' . substr( $config['webhook_secret'], -4 ) : 'pdl_ntfset_…' ) . '"><p class="description">' . esc_html( '' !== $config['webhook_secret'] ? self::secret_hint( $config['webhook_secret'] ) : __( 'The secret key of the notification destination below.', 'subtleforms-license-server' ) ) . '</p></td></tr>';
-		echo '<tr><th scope="row"><label for="sfls-paddle-url">' . esc_html__( 'Webhook URL', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-url" type="text" readonly class="large-text sfls-mono" value="' . esc_attr( SFLS_Paddle::webhook_url() ) . '" onfocus="this.select();"><p class="description">' . esc_html__( 'In Paddle › Developer tools › Notifications, add a destination with this URL, type Webhook, and subscribe to: subscription.created, subscription.trialing, subscription.activated, subscription.updated, subscription.past_due, subscription.paused, subscription.resumed, subscription.canceled, transaction.completed, transaction.payment_failed, adjustment.created, adjustment.updated.', 'subtleforms-license-server' ) . '</p></td></tr>';
+		echo '<tr><th scope="row"><label for="sfls-paddle-url">' . esc_html__( 'Webhook URL', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-paddle-url" type="text" readonly class="large-text sfls-mono" value="' . esc_attr( SFLS_Paddle::webhook_url() ) . '" onfocus="this.select();"><p class="description">' . esc_html__( 'In Paddle › Developer tools › Notifications, add a destination with this URL, type Webhook, and subscribe to: subscription.created, subscription.activated, subscription.updated, subscription.past_due, subscription.paused, subscription.resumed, subscription.canceled, transaction.completed, transaction.payment_failed, adjustment.created, adjustment.updated.', 'subtleforms-license-server' ) . '</p></td></tr>';
 		echo '</tbody></table>';
 		submit_button( __( 'Save Paddle settings', 'subtleforms-license-server' ) );
 		echo '</form>';
@@ -1162,64 +1130,41 @@ final class SFLS_Admin {
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-panel">';
 		wp_nonce_field( 'sfls_paddle_map' );
 		echo '<input type="hidden" name="action" value="sfls_paddle_map"><h2>' . esc_html__( 'Plans', 'subtleforms-license-server' ) . '</h2>';
-		echo '<p class="description">' . esc_html__( 'Each plan needs a yearly price without a trial (for Buy now and upgrades). Add a second yearly price with a 7 or 14 day trial that requires a payment method to offer a free trial. Prices without a product in the list can be pasted as pri_ IDs.', 'subtleforms-license-server' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Each plan needs a yearly price (for Buy now and upgrades). Prices without a product in the list can be pasted as pri_ IDs.', 'subtleforms-license-server' ) . '</p>';
 		if ( 'woo_paddle' === SFLS_Settings::sell_with() ) {
 			echo '<p class="description">' . esc_html__( 'With the WooCommerce checkout, keep each yearly license product in Licenses › Products at the same price as its Paddle price. Paddle charges the Paddle price, and Place order is refused when the two differ.', 'subtleforms-license-server' ) . '</p>';
 		}
 		if ( null === $prices && '' !== $config['api_key'] ) {
 			echo '<p class="description">' . esc_html__( 'Click Sync products to pick prices from a list.', 'subtleforms-license-server' ) . '</p>';
 		}
-		echo '<table class="widefat sfls-wizard-table sfls-paddle-plans"><thead><tr><th scope="col">' . esc_html__( 'Plan', 'subtleforms-license-server' ) . '</th><th scope="col">' . esc_html__( 'Yearly price', 'subtleforms-license-server' ) . '</th><th scope="col">' . esc_html__( 'Trial price', 'subtleforms-license-server' ) . ' <span class="sfls-optional">' . esc_html__( 'optional', 'subtleforms-license-server' ) . '</span></th><th scope="col">' . esc_html__( 'Trial days', 'subtleforms-license-server' ) . '</th></tr></thead><tbody>';
+		echo '<table class="widefat sfls-wizard-table sfls-paddle-plans"><thead><tr><th scope="col">' . esc_html__( 'Plan', 'subtleforms-license-server' ) . '</th><th scope="col">' . esc_html__( 'Yearly price', 'subtleforms-license-server' ) . '</th></tr></thead><tbody>';
 		foreach ( $plans as $plan => $row ) {
 			echo '<tr><th scope="row"><strong>' . esc_html( SFLS_Plans::label( $plan ) ) . '</strong><span class="sfls-plan-feats">' . esc_html( SFLS_Plans::sites_label( (int) ( SFLS_Plans::get( $plan )['sites'] ?? 1 ) ) );
 			if ( '' !== $row['amount'] && '' !== $row['currency'] ) {
 				echo ' · ' . esc_html( SFLS_Paddle::format_amount( $row['amount'], $row['currency'] ) ) . esc_html__( '/year', 'subtleforms-license-server' );
 			}
 			echo '</span></th>';
-			foreach ( array(
-				'price_id'       => false,
-				'trial_price_id' => true,
-			) as $field => $wants_trial ) {
-				$id = 'sfls-paddle-' . $plan . '-' . $field;
-				echo '<td data-colname="' . esc_attr( $wants_trial ? __( 'Trial price', 'subtleforms-license-server' ) : __( 'Yearly price', 'subtleforms-license-server' ) ) . '"><label class="screen-reader-text" for="' . esc_attr( $id ) . '">' . esc_html( SFLS_Plans::label( $plan ) . ' ' . ( $wants_trial ? __( 'Trial price', 'subtleforms-license-server' ) : __( 'Yearly price', 'subtleforms-license-server' ) ) ) . '</label>';
-				if ( $prices ) {
-					echo '<select id="' . esc_attr( $id ) . '" name="plans[' . esc_attr( $plan ) . '][' . esc_attr( $field ) . ']"><option value="">' . esc_html( $wants_trial ? __( 'No trial', 'subtleforms-license-server' ) : __( 'Not sold', 'subtleforms-license-server' ) ) . '</option>';
-					$found = false;
-					foreach ( $prices as $price ) {
-						$days = SFLS_Paddle::trial_days_of( $price );
-						if ( $wants_trial !== ( $days > 0 ) && $price['id'] !== $row[ $field ] ) {
-							continue;
-						}
-						$found = $found || $price['id'] === $row[ $field ];
-						echo '<option value="' . esc_attr( $price['id'] ) . '"' . selected( $row[ $field ], $price['id'], false ) . '>' . esc_html( self::price_label( $price ) ) . '</option>';
-					}
-					if ( '' !== $row[ $field ] && ! $found ) {
-						echo '<option value="' . esc_attr( $row[ $field ] ) . '" selected>' . esc_html( $row[ $field ] ) . '</option>';
-					}
-					echo '</select>';
-				} else {
-					echo '<input id="' . esc_attr( $id ) . '" type="text" class="regular-text sfls-mono" name="plans[' . esc_attr( $plan ) . '][' . esc_attr( $field ) . ']" value="' . esc_attr( $row[ $field ] ) . '" placeholder="pri_…">';
+			$field = 'price_id';
+			$id    = 'sfls-paddle-' . $plan . '-' . $field;
+			echo '<td data-colname="' . esc_attr__( 'Yearly price', 'subtleforms-license-server' ) . '"><label class="screen-reader-text" for="' . esc_attr( $id ) . '">' . esc_html( SFLS_Plans::label( $plan ) . ' ' . __( 'Yearly price', 'subtleforms-license-server' ) ) . '</label>';
+			if ( $prices ) {
+				echo '<select id="' . esc_attr( $id ) . '" name="plans[' . esc_attr( $plan ) . '][' . esc_attr( $field ) . ']"><option value="">' . esc_html__( 'Not sold', 'subtleforms-license-server' ) . '</option>';
+				$found = false;
+				foreach ( $prices as $price ) {
+					$found = $found || $price['id'] === $row[ $field ];
+					echo '<option value="' . esc_attr( $price['id'] ) . '"' . selected( $row[ $field ], $price['id'], false ) . '>' . esc_html( self::price_label( $price ) ) . '</option>';
 				}
-				echo '</td>';
+				if ( '' !== $row[ $field ] && ! $found ) {
+					echo '<option value="' . esc_attr( $row[ $field ] ) . '" selected>' . esc_html( $row[ $field ] ) . '</option>';
+				}
+				echo '</select>';
+			} else {
+				echo '<input id="' . esc_attr( $id ) . '" type="text" class="regular-text sfls-mono" name="plans[' . esc_attr( $plan ) . '][' . esc_attr( $field ) . ']" value="' . esc_attr( $row[ $field ] ) . '" placeholder="pri_…">';
 			}
-			$tid = 'sfls-paddle-' . $plan . '-trial-days';
-			echo '<td data-colname="' . esc_attr__( 'Trial days', 'subtleforms-license-server' ) . '"><label class="screen-reader-text" for="' . esc_attr( $tid ) . '">' . esc_html( SFLS_Plans::label( $plan ) . ' ' . __( 'Trial days', 'subtleforms-license-server' ) ) . '</label><select id="' . esc_attr( $tid ) . '" name="plans[' . esc_attr( $plan ) . '][trial_days]">';
-			$days = array(
-				0  => __( 'No trial', 'subtleforms-license-server' ),
-				7  => __( '7 days', 'subtleforms-license-server' ),
-				14 => __( '14 days', 'subtleforms-license-server' ),
-			);
-			if ( ! isset( $days[ $row['trial_days'] ] ) ) {
-				/* translators: %d: number of days */
-				$days[ $row['trial_days'] ] = sprintf( _n( '%d day', '%d days', $row['trial_days'], 'subtleforms-license-server' ), $row['trial_days'] );
-			}
-			foreach ( $days as $value => $label ) {
-				echo '<option value="' . esc_attr( (string) $value ) . '"' . selected( $row['trial_days'], $value, false ) . '>' . esc_html( $label ) . '</option>';
-			}
-			echo '</select></td></tr>';
+			echo '</td></tr>';
 		}
 		echo '</tbody></table>';
-		echo '<p class="description">' . esc_html__( 'Trial days are read from the trial price when you save and are shown on the pricing page. Paddle decides the real length, so keep them the same. Licenses › Products can also create these products and prices in Paddle for you.', 'subtleforms-license-server' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Licenses › Products can also create these products and prices in Paddle for you.', 'subtleforms-license-server' ) . '</p>';
 		submit_button( __( 'Save plans', 'subtleforms-license-server' ) );
 		echo '</form>';
 
@@ -1242,7 +1187,7 @@ final class SFLS_Admin {
 	}
 
 	/**
-	 * "SubtleForms Pro · $79.00/year · 14 day trial (pri_01…)".
+	 * "SubtleForms Pro · $79.00/year (pri_01…)".
 	 *
 	 * @param array $price Paddle price with its product.
 	 */
@@ -1251,11 +1196,6 @@ final class SFLS_Admin {
 		if ( isset( $price['unit_price']['amount'], $price['unit_price']['currency_code'] ) ) {
 			$cycle   = $price['billing_cycle'] ?? null;
 			$parts[] = SFLS_Paddle::format_amount( (string) $price['unit_price']['amount'], (string) $price['unit_price']['currency_code'] ) . ( is_array( $cycle ) ? '/' . ( 1 === (int) $cycle['frequency'] ? $cycle['interval'] : $cycle['frequency'] . ' ' . $cycle['interval'] ) : ' ' . __( 'one-time', 'subtleforms-license-server' ) );
-		}
-		$days = SFLS_Paddle::trial_days_of( $price );
-		if ( $days ) {
-			/* translators: %d: number of days */
-			$parts[] = sprintf( __( '%d day trial', 'subtleforms-license-server' ), $days );
 		}
 		return implode( ' · ', array_filter( $parts, 'strlen' ) ) . ' (' . $price['id'] . ')';
 	}
@@ -1270,7 +1210,6 @@ final class SFLS_Admin {
 			array(
 				'sell_with'      => isset( $_POST['sell_with'] ) ? sanitize_key( wp_unslash( $_POST['sell_with'] ) ) : 'woocommerce',
 				'renewal_notice' => isset( $_POST['renewal_notice'] ) ? sanitize_text_field( wp_unslash( $_POST['renewal_notice'] ) ) : '',
-				'trial_notice'   => absint( $_POST['trial_notice'] ?? 3 ),
 			)
 		);
 		$values = array(
@@ -1336,8 +1275,8 @@ final class SFLS_Admin {
 	}
 
 	/**
-	 * Save the plan to price mapping. Amounts, currency, product and trial
-	 * days are read from Paddle when the prices are known.
+	 * Save the plan to price mapping. Amounts, currency and product
+	 * are read from Paddle when the prices are known.
 	 */
 	public function handle_paddle_map(): void {
 		$this->guard();
@@ -1360,8 +1299,6 @@ final class SFLS_Admin {
 			$clean = static fn( $v ) => preg_match( '/^pri_[a-z0-9]+$/', (string) $v ) ? (string) $v : '';
 			$row   = array(
 				'price_id'       => $clean( sanitize_text_field( (string) ( $in['price_id'] ?? '' ) ) ),
-				'trial_price_id' => $clean( sanitize_text_field( (string) ( $in['trial_price_id'] ?? '' ) ) ),
-				'trial_days'     => min( 365, absint( $in['trial_days'] ?? 0 ) ),
 				'product_id'     => $current[ $plan ]['product_id'],
 				'amount'         => $current[ $plan ]['price_id'] === $clean( $in['price_id'] ?? '' ) ? $current[ $plan ]['amount'] : '',
 				'currency'       => $current[ $plan ]['price_id'] === $clean( $in['price_id'] ?? '' ) ? $current[ $plan ]['currency'] : '',
@@ -1371,31 +1308,10 @@ final class SFLS_Admin {
 				$row['amount']     = (string) ( $buy['unit_price']['amount'] ?? '' );
 				$row['currency']   = (string) ( $buy['unit_price']['currency_code'] ?? '' );
 				$row['product_id'] = (string) ( $buy['product_id'] ?? $row['product_id'] );
-				if ( SFLS_Paddle::trial_days_of( $buy ) > 0 ) {
-					/* translators: %s: plan name */
-					$warnings[] = sprintf( __( 'The %s yearly price has a trial. Pick a price without a trial for Buy now and upgrades.', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) );
-				}
 				if ( 'year' !== ( $buy['billing_cycle']['interval'] ?? '' ) ) {
 					/* translators: %s: plan name */
 					$warnings[] = sprintf( __( 'The %s price does not renew yearly.', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) );
 				}
-			}
-			$trial = $by_id[ $row['trial_price_id'] ] ?? null;
-			if ( $trial ) {
-				$days = SFLS_Paddle::trial_days_of( $trial );
-				if ( $days > 0 ) {
-					$row['trial_days'] = $days;
-				} else {
-					/* translators: %s: plan name */
-					$warnings[] = sprintf( __( 'The %s trial price has no trial period in Paddle.', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) );
-				}
-				if ( isset( $trial['trial_period']['requires_payment_method'] ) && ! $trial['trial_period']['requires_payment_method'] ) {
-					/* translators: %s: plan name */
-					$warnings[] = sprintf( __( 'The %s trial price does not require a payment method, so Paddle cannot charge when the trial ends.', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) );
-				}
-			}
-			if ( '' === $row['trial_price_id'] ) {
-				$row['trial_days'] = 0;
 			}
 			$plans[ $plan ] = $row;
 		}
@@ -1406,15 +1322,13 @@ final class SFLS_Admin {
 	}
 
 	/**
-	 * Products wizard: create the Paddle products and yearly prices (with
-	 * and without a trial) from the WooCommerce yearly prices.
+	 * Products wizard: create the Paddle products and yearly prices from the WooCommerce yearly prices.
 	 */
 	public function handle_paddle_create(): void {
 		$this->guard();
 		check_admin_referer( 'sfls_paddle_create' );
 		$back     = admin_url( 'admin.php?page=sfls-products' );
 		$currency = isset( $_POST['currency'] ) ? strtoupper( preg_replace( '/[^A-Za-z]/', '', sanitize_text_field( wp_unslash( $_POST['currency'] ) ) ) ) : 'USD';
-		$trials   = isset( $_POST['trial'] ) && is_array( $_POST['trial'] ) ? array_map( 'absint', wp_unslash( $_POST['trial'] ) ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- absint on every value.
 		$values   = SFLS_Products::wizard_values();
 		$plans    = SFLS_Paddle::plans();
 		$created  = 0;
@@ -1427,7 +1341,6 @@ final class SFLS_Admin {
 			}
 			$name  = 'pro' === $plan ? __( 'SubtleForms Pro', 'subtleforms-license-server' ) : sprintf( /* translators: %s: plan name */ __( 'SubtleForms Pro %s', 'subtleforms-license-server' ), SFLS_Plans::label( $plan ) );
 			$minor = SFLS_Paddle::to_minor( $amount, $currency );
-			$days  = in_array( (int) ( $trials[ $plan ] ?? 0 ), array( 7, 14 ), true ) ? (int) $trials[ $plan ] : 0;
 
 			if ( '' === $row['product_id'] ) {
 				$product = SFLS_Paddle::create_product( $name, SFLS_Plans::feature_line( $plan ) );
@@ -1438,23 +1351,13 @@ final class SFLS_Admin {
 				$row['product_id'] = (string) $product['id'];
 			}
 			if ( '' === $row['price_id'] ) {
-				$price = SFLS_Paddle::create_yearly_price( $row['product_id'], $name, $minor, $currency, 0 );
+				$price = SFLS_Paddle::create_yearly_price( $row['product_id'], $name, $minor, $currency );
 				if ( is_wp_error( $price ) ) {
 					$errors[] = $price->get_error_message();
 				} else {
 					$row['price_id'] = (string) $price['id'];
 					$row['amount']   = $minor;
 					$row['currency'] = $currency;
-					++$created;
-				}
-			}
-			if ( $days && '' === $row['trial_price_id'] ) {
-				$price = SFLS_Paddle::create_yearly_price( $row['product_id'], $name, $minor, $currency, $days );
-				if ( is_wp_error( $price ) ) {
-					$errors[] = $price->get_error_message();
-				} else {
-					$row['trial_price_id'] = (string) $price['id'];
-					$row['trial_days']     = $days;
 					++$created;
 				}
 			}
@@ -1593,10 +1496,6 @@ final class SFLS_Admin {
 				/* translators: %s: key */
 				$msg = sprintf( __( 'New key: %s', 'subtleforms-license-server' ), $key );
 				break;
-			case 'release_trial':
-				SFLS_Trials::release( $id );
-				$msg = __( 'This customer can start another free trial.', 'subtleforms-license-server' );
-				break;
 			case 'delete':
 				SFLS_Licenses::delete( $id );
 				$msg  = __( 'License deleted.', 'subtleforms-license-server' );
@@ -1724,11 +1623,8 @@ final class SFLS_Admin {
 			$extra['retention_days'] = absint( $_POST['retention_days'] );
 		}
 		if ( ! empty( $_POST['rules_present'] ) ) {
-			$extra['rules_present']    = 1;
-			$extra['trusted_proxy']    = ! empty( $_POST['trusted_proxy'] );
-			$extra['trial_verify']     = ! empty( $_POST['trial_verify'] );
-			$extra['block_disposable'] = ! empty( $_POST['block_disposable'] );
-			$extra['disposable_extra'] = isset( $_POST['disposable_extra'] ) ? sanitize_textarea_field( wp_unslash( $_POST['disposable_extra'] ) ) : '';
+			$extra['rules_present'] = 1;
+			$extra['trusted_proxy'] = ! empty( $_POST['trusted_proxy'] );
 		}
 		SFLS_Settings::save(
 			$extra + array(

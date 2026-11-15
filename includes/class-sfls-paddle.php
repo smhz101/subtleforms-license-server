@@ -7,11 +7,9 @@
  *   api_key         server-side API key (Bearer)
  *   client_token    client-side token for Paddle.js
  *   webhook_secret  secret key of the notification destination
- *   plans           plan => { product_id, price_id, trial_price_id, trial_days, amount, currency }
+ *   plans           plan => { product_id, price_id, amount, currency }
  *
- * `price_id` is the yearly price without a trial (Buy now, upgrades). The
- * optional `trial_price_id` is the same yearly price with a 7 or 14 day trial
- * that requires a payment method.
+ * `price_id` is the yearly price (Buy now, upgrades).
  *
  * Every API call goes through wp_remote_request(), so tests intercept it with
  * the pre_http_request filter.
@@ -34,8 +32,7 @@ final class SFLS_Paddle {
 	/**
 	 * Extra days added to a Paddle billing date. 0: the one grace period is
 	 * SFLS_Licenses::GRACE_DAYS, applied by SFLS_Licenses::state(), so a lapsed
-	 * subscription is valid for 14 days after its date and not for 17. Trials
-	 * get no grace at all. The `sfls_paddle_grace_days` filter can still add
+	 * subscription is valid for 14 days after its date and not for 17. The `sfls_paddle_grace_days` filter can still add
 	 * days here.
 	 */
 	const BILLING_GRACE_DAYS = 0;
@@ -71,9 +68,9 @@ final class SFLS_Paddle {
 	}
 
 	/**
-	 * Plan mapping: plan => { product_id, price_id, trial_price_id, trial_days, amount, currency }.
+	 * Plan mapping: plan => { product_id, price_id, amount, currency }.
 	 *
-	 * @return array<string,array{product_id:string,price_id:string,trial_price_id:string,trial_days:int,amount:string,currency:string}>
+	 * @return array<string,array{product_id:string,price_id:string,amount:string,currency:string}>
 	 */
 	public static function plans(): array {
 		$stored = self::config()['plans'];
@@ -83,8 +80,6 @@ final class SFLS_Paddle {
 			$out[ $plan ] = array(
 				'product_id'     => (string) ( $row['product_id'] ?? '' ),
 				'price_id'       => (string) ( $row['price_id'] ?? '' ),
-				'trial_price_id' => (string) ( $row['trial_price_id'] ?? '' ),
-				'trial_days'     => (int) ( $row['trial_days'] ?? 0 ),
 				'amount'         => (string) ( $row['amount'] ?? '' ),
 				'currency'       => (string) ( $row['currency'] ?? '' ),
 			);
@@ -101,21 +96,9 @@ final class SFLS_Paddle {
 		return self::plans()[ $plan ] ?? array(
 			'product_id'     => '',
 			'price_id'       => '',
-			'trial_price_id' => '',
-			'trial_days'     => 0,
 			'amount'         => '',
 			'currency'       => '',
 		);
-	}
-
-	/**
-	 * Whether a plan offers a free trial at checkout.
-	 *
-	 * @param string $plan Plan slug.
-	 */
-	public static function plan_has_trial( string $plan ): bool {
-		$row = self::plan( $plan );
-		return '' !== $row['trial_price_id'] && $row['trial_days'] > 0;
 	}
 
 	/**
@@ -128,7 +111,7 @@ final class SFLS_Paddle {
 			return '';
 		}
 		foreach ( self::plans() as $plan => $row ) {
-			if ( $price_id === $row['price_id'] || $price_id === $row['trial_price_id'] ) {
+			if ( $price_id === $row['price_id'] ) {
 				return $plan;
 			}
 		}
@@ -175,7 +158,7 @@ final class SFLS_Paddle {
 	}
 
 	/**
-	 * Whether the pricing cards show Paddle plans (with trials), in either
+	 * Whether the pricing cards show Paddle plans, in either
 	 * Paddle mode.
 	 */
 	public static function any_selling(): bool {
@@ -453,24 +436,19 @@ final class SFLS_Paddle {
 	}
 
 	/**
-	 * Create a yearly price, optionally with a free trial that requires a
-	 * payment method.
+	 * Create a yearly price.
 	 *
 	 * @param string $product_id  Product ID.
 	 * @param string $name        Name shown at checkout.
 	 * @param string $minor       Amount in the lowest denomination.
 	 * @param string $currency    ISO 4217 code.
-	 * @param int    $trial_days  Trial length (0 = no trial).
 	 * @return array|WP_Error
 	 */
-	public static function create_yearly_price( string $product_id, string $name, string $minor, string $currency, int $trial_days = 0 ) {
+	public static function create_yearly_price( string $product_id, string $name, string $minor, string $currency ) {
 		$body = array(
 			'product_id'    => $product_id,
-			'description'   => $trial_days > 0
-				/* translators: 1: plan product name, 2: trial days */
-				? sprintf( __( '%1$s, yearly with a %2$d day free trial', 'subtleforms-license-server' ), $name, $trial_days )
-				/* translators: %s: plan product name */
-				: sprintf( __( '%s, yearly', 'subtleforms-license-server' ), $name ),
+			/* translators: %s: plan product name */
+			'description'   => sprintf( __( '%s, yearly', 'subtleforms-license-server' ), $name ),
 			'name'          => $name,
 			'unit_price'    => array(
 				'amount'        => $minor,
@@ -486,33 +464,7 @@ final class SFLS_Paddle {
 			),
 			'custom_data'   => array( 'source' => 'subtleforms-license-server' ),
 		);
-		if ( $trial_days > 0 ) {
-			$body['trial_period'] = array(
-				'interval'                => 'day',
-				'frequency'               => $trial_days,
-				'requires_payment_method' => true,
-			);
-		}
 		return self::request( 'POST', '/prices', $body );
-	}
-
-	/**
-	 * Trial length in days of a Paddle price (0 without a trial).
-	 *
-	 * @param array $price Price entity.
-	 */
-	public static function trial_days_of( array $price ): int {
-		$trial = $price['trial_period'] ?? null;
-		if ( ! is_array( $trial ) || empty( $trial['frequency'] ) ) {
-			return 0;
-		}
-		$per = array(
-			'day'   => 1,
-			'week'  => 7,
-			'month' => 30,
-			'year'  => 365,
-		);
-		return (int) $trial['frequency'] * ( $per[ $trial['interval'] ?? 'day' ] ?? 1 );
 	}
 
 	// ── Checkout API (WooCommerce gateway) ──────────────────────────────

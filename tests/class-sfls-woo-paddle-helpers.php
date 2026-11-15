@@ -120,17 +120,11 @@ trait SFLS_Woo_Paddle_Helpers {
 	protected function mock_create_txn( array $body ): array {
 		$amounts  = array(
 			'pri_starter'       => 3900,
-			'pri_starter_trial' => 3900,
 			'pri_pro'           => 7900,
-			'pri_pro_trial'     => 7900,
 			'pri_agency'        => 19900,
 		);
 		$item     = (array) $body['items'][0];
-		$trial    = str_ends_with( (string) ( $item['price_id'] ?? '' ), '_trial' );
 		$subtotal = isset( $item['price_id'] ) ? ( $amounts[ $item['price_id'] ] ?? 0 ) : (int) $item['price']['unit_price']['amount'];
-		if ( $trial ) {
-			$subtotal = 0; // Nothing is charged on a trial checkout.
-		}
 		$discount = isset( $body['discount'] ) ? min( $subtotal, (int) $body['discount']['amount'] ) : 0;
 		$net      = $subtotal - $discount;
 		$tax      = (int) round( $net * $this->paddle_tax );
@@ -180,15 +174,14 @@ trait SFLS_Woo_Paddle_Helpers {
 	 * Put a license product in the cart the way the Buy links do.
 	 *
 	 * @param string $plan  Plan.
-	 * @param bool   $trial With the free trial.
 	 * @param array  $data  Other cart item data.
 	 */
-	protected function cart_plan( string $plan = 'pro', bool $trial = false, array $data = array() ): void {
+	protected function cart_plan( string $plan = 'pro', array $data = array() ): void {
 		$woo = new SFLS_Woo();
 		if ( $data ) {
 			$woo->put_in_cart( $this->plan_products[ $plan ]->get_id(), $data );
 		} else {
-			$woo->buy( $this->plan_products[ $plan ]->get_id(), $trial );
+			$woo->buy( $this->plan_products[ $plan ]->get_id() );
 		}
 		WC()->cart->calculate_totals();
 	}
@@ -232,33 +225,7 @@ trait SFLS_Woo_Paddle_Helpers {
 	protected function pay( WC_Order $order ): array {
 		$gateway = SFLS_Woo_Paddle::gateway();
 		$this->assertNotNull( $gateway );
-		foreach ( $order->get_items() as $item ) {
-			if ( '' !== (string) $item->get_meta( '_sfls_trial' ) ) {
-				$this->mark_email_verified( (string) $order->get_billing_email() ); // A trial first needs the emailed code; those tests have their own file.
-			}
-		}
 		return $gateway->process_payment( $order->get_id() );
-	}
-
-	/**
-	 * Mark an email address as confirmed, as a correct code would.
-	 *
-	 * @param string $email Email address.
-	 */
-	protected function mark_email_verified( string $email ): void {
-		global $wpdb;
-		$hash = hash_hmac( 'sha256', SFLS_Trials::normalize_email( $email ), wp_salt( 'auth' ) );
-		$wpdb->replace( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			SFLS_DB::trial_codes(),
-			array(
-				'email_hash'     => $hash,
-				'code_hash'      => '',
-				'attempts'       => 0,
-				'expires_at'     => gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ),
-				'verified_until' => gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ),
-				'created_at'     => gmdate( 'Y-m-d H:i:s' ),
-			)
-		);
 	}
 
 	/**
@@ -274,10 +241,9 @@ trait SFLS_Woo_Paddle_Helpers {
 		$this->assertArrayHasKey( $id, $this->txns );
 		$txn = $this->txns[ $id ];
 		if ( $sub ) {
-			$kind     = (string) ( $txn['custom_data']['sfls_kind'] ?? 'subscription' );
 			$entity   = $this->subscription(
 				array(
-					'status'      => 'trial' === $kind ? 'trialing' : 'active',
+					'status'      => 'active',
 					'customer_id' => (string) $txn['customer_id'],
 					'_price'      => (string) ( $txn['items'][0]['price_id'] ?? 'pri_pro' ),
 				)
@@ -315,14 +281,13 @@ trait SFLS_Woo_Paddle_Helpers {
 	 *
 	 * @param string       $email Email.
 	 * @param string       $plan  Plan.
-	 * @param bool         $trial Trial.
 	 * @param WP_User|null $user  Signed-in customer.
 	 */
-	protected function buy_with_paddle( string $email, string $plan = 'pro', bool $trial = false, ?WP_User $user = null ): WC_Order {
+	protected function buy_with_paddle( string $email, string $plan = 'pro', ?WP_User $user = null ): WC_Order {
 		if ( $user ) {
 			wp_set_current_user( $user->ID );
 		}
-		$this->cart_plan( $plan, $trial );
+		$this->cart_plan( $plan );
 		$order  = $this->checkout_order( $email, $user ? array( 'customer_id' => $user->ID ) : array() );
 		if ( $user ) {
 			$order->set_customer_id( $user->ID );

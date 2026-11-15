@@ -10,15 +10,12 @@
  * checkout page, right under the payment method (the order's payment page
  * shows the same form for orders paid later). The signed Paddle webhook completes the
  * order (SFLS_Woo_Paddle_Orders), which issues the license once and links it
- * to the Paddle subscription, so renewals, trials, cancel, resume, the
+ * to the Paddle subscription, so renewals, cancel, resume, the
  * customer portal and upgrades all run through Paddle Billing.
  *
  * This class covers the shop side:
  *   - gateway registration (classic and Checkout block), and Pay with Paddle
  *     as the only method for license-only carts;
- *   - free trials as $0 lines ("Free for 14 days, then $79/year") that still
- *     go through payment, so Paddle collects the card;
- *   - trial eligibility at checkout (classic and Store API);
  *   - no WooCommerce tax on license products, because Paddle is the merchant
  *     of record and adds sales tax or VAT;
  *   - building the Paddle transaction from an order;
@@ -60,21 +57,13 @@ final class SFLS_Woo_Paddle {
 		add_filter( 'woocommerce_product_variation_get_tax_status', array( $this, 'tax_status' ), 20, 2 );
 		add_action( 'woocommerce_review_order_before_order_total', array( $this, 'classic_tax_row' ) );
 
-		// Free trials.
-		add_action( 'woocommerce_before_calculate_totals', array( $this, 'trial_prices' ), 30 );
-		add_filter( 'woocommerce_get_item_data', array( $this, 'trial_item_data' ), 15, 2 );
-		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'trial_line_item' ), 15, 3 );
+		// Paddle upgrade carts that total $0 still need payment.
 		add_filter( 'woocommerce_cart_needs_payment', array( $this, 'cart_needs_payment' ), 20 );
 		add_filter( 'woocommerce_order_needs_payment', array( $this, 'order_needs_payment' ), 20, 3 );
-		add_action( 'woocommerce_after_checkout_validation', array( $this, 'classic_validate' ), 20, 2 );
-		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'store_api_validate' ), 5 );
 
 		// Payment page and abandoned orders.
 		add_action( 'woocommerce_receipt_' . self::GATEWAY, array( $this, 'receipt_page' ) );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'cancel_open_transaction' ) );
-		add_action( 'woocommerce_order_status_cancelled', array( $this, 'release_trial_claims' ) );
-		add_action( 'woocommerce_order_status_failed', array( $this, 'release_trial_claims' ) );
-		add_action( 'template_redirect', array( $this, 'handle_trial_code' ) );
 		add_action( 'wp_enqueue_scripts', array( self::class, 'register_assets' ), 6 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_checkout' ), 20 );
 	}
@@ -133,7 +122,7 @@ final class SFLS_Woo_Paddle {
 	 * Settings for assets/js/sfls-paddle-inline.js.
 	 *
 	 * @param array $pay Order to pay right away on the order-pay page
-	 *                   ({ transactionId, successUrl, trial }), or empty.
+	 *                   ({ transactionId, successUrl }), or empty.
 	 */
 	public static function inline_config( array $pay = array() ): array {
 		$config = SFLS_Paddle::config();
@@ -144,7 +133,6 @@ final class SFLS_Woo_Paddle {
 			'pay'         => $pay,
 			'i18n'        => array(
 				'lead'      => __( 'Pay securely with Paddle by card, PayPal, Apple Pay or Google Pay.', 'subtleforms-license-server' ),
-				'leadTrial' => __( 'Add a card for your free trial. Nothing is charged today.', 'subtleforms-license-server' ),
 				'loading'   => __( 'Loading the secure payment form…', 'subtleforms-license-server' ),
 				'change'    => __( 'Change details', 'subtleforms-license-server' ),
 				'cancelled' => __( 'Payment not finished, so nothing was charged. Check your details and place the order again.', 'subtleforms-license-server' ),
@@ -186,7 +174,6 @@ final class SFLS_Woo_Paddle {
 	 * How a license line is paid in Paddle.
 	 *
 	 *   subscription  new yearly license: the plan's catalog price
-	 *   trial         new yearly license with a free trial: the trial price
 	 *   renewal       renewal of a license not billed by Paddle: a yearly price
 	 *                 at the line price, so it renews automatically from now on
 	 *   upgrade       upgrade of a Paddle license: the subscription is updated
@@ -196,10 +183,9 @@ final class SFLS_Woo_Paddle {
 	 * @param int  $product_id Product.
 	 * @param int  $upgrade    License being upgraded (0 = none).
 	 * @param int  $renew      License being renewed (0 = none).
-	 * @param bool $trial      Free trial line.
 	 * @return array{kind:string,plan:string,license:?array}|WP_Error
 	 */
-	public static function line_kind( int $product_id, int $upgrade = 0, int $renew = 0, bool $trial = false ) {
+	public static function line_kind( int $product_id, int $upgrade = 0, int $renew = 0 ) {
 		$plan = (string) get_post_meta( $product_id, '_sfls_plan', true );
 		$plan = '' !== $plan ? $plan : 'pro';
 		$type = SFLS_Products::type_of( $product_id );
@@ -251,13 +237,6 @@ final class SFLS_Woo_Paddle {
 				'license' => null,
 			) : $fail;
 		}
-		if ( $trial ) {
-			return SFLS_Paddle::plan_has_trial( $plan ) ? array(
-				'kind'    => 'trial',
-				'plan'    => $plan,
-				'license' => null,
-			) : $fail;
-		}
 		return '' !== $map['price_id'] ? array(
 			'kind'    => 'subscription',
 			'plan'    => $plan,
@@ -287,7 +266,7 @@ final class SFLS_Woo_Paddle {
 		if ( ! $item || 1 !== (int) ( $item['quantity'] ?? 1 ) ) {
 			return false;
 		}
-		return ! is_wp_error( self::line_kind( (int) $item['product_id'], (int) ( $item['sfls_upgrade_license'] ?? 0 ), (int) ( $item['sfls_renew_license'] ?? 0 ), ! empty( $item['sfls_trial'] ) ) );
+		return ! is_wp_error( self::line_kind( (int) $item['product_id'], (int) ( $item['sfls_upgrade_license'] ?? 0 ), (int) ( $item['sfls_renew_license'] ?? 0 ) ) );
 	}
 
 	/**
@@ -305,7 +284,7 @@ final class SFLS_Woo_Paddle {
 		if ( ! $item instanceof WC_Order_Item_Product || 1 !== (int) $item->get_quantity() ) {
 			return new WP_Error( 'sfls_paddle_cart', __( 'Pay with Paddle is for one SubtleForms license at a time.', 'subtleforms-license-server' ) );
 		}
-		$kind = self::line_kind( (int) $item->get_product_id(), (int) $item->get_meta( '_sfls_upgrade_license' ), (int) $item->get_meta( '_sfls_renew_license' ), '' !== (string) $item->get_meta( '_sfls_trial' ) );
+		$kind = self::line_kind( (int) $item->get_product_id(), (int) $item->get_meta( '_sfls_upgrade_license' ), (int) $item->get_meta( '_sfls_renew_license' ) );
 		return is_wp_error( $kind ) ? $kind : array( 'item' => $item ) + $kind;
 	}
 
@@ -380,116 +359,19 @@ final class SFLS_Woo_Paddle {
 		echo '<tr class="sfls-paddle-tax-row"><th>' . esc_html__( 'Tax', 'subtleforms-license-server' ) . '</th><td>' . esc_html( self::tax_note() ) . '</td></tr>';
 	}
 
-	// ── Free trials ─────────────────────────────────────────────────────
-
 	/**
-	 * Whether a product can be bought with a free trial right now.
-	 *
-	 * @param int $product_id Product.
-	 */
-	public static function trial_allowed( int $product_id ): bool {
-		if ( ! SFLS_Paddle::woo_selling() || ! SFLS_Woo::is_license_product( $product_id ) || 'yearly' !== SFLS_Products::type_of( $product_id ) ) {
-			return false;
-		}
-		$plan = (string) get_post_meta( $product_id, '_sfls_plan', true );
-		return SFLS_Paddle::plan_has_trial( '' !== $plan ? $plan : 'pro' );
-	}
-
-	/**
-	 * "Free for 14 days, then $79.00/year".
-	 *
-	 * @param int $product_id Product.
-	 */
-	public static function trial_label( int $product_id ): string {
-		$plan    = (string) get_post_meta( $product_id, '_sfls_plan', true );
-		$plan    = '' !== $plan ? $plan : 'pro';
-		$map     = SFLS_Paddle::plan( $plan );
-		$price   = '' !== $map['amount'] && '' !== $map['currency'] ? SFLS_Paddle::format_amount( $map['amount'], $map['currency'] ) : '';
-		$product = wc_get_product( $product_id );
-		if ( '' === $price && $product ) {
-			$price = SFLS_Upgrades::plain_price( (float) $product->get_regular_price() );
-		}
-		/* translators: 1: number of days, 2: yearly price */
-		return sprintf( __( 'Free for %1$d days, then %2$s/year', 'subtleforms-license-server' ), (int) $map['trial_days'], $price );
-	}
-
-	/**
-	 * Link that swaps a trial in the cart for a normal purchase.
-	 *
-	 * @param int $product_id Product.
-	 */
-	public static function buy_without_trial_url( int $product_id ): string {
-		return add_query_arg( 'sfls_trial', '0', SFLS_Products::buy_url( $product_id ) );
-	}
-
-	/**
-	 * Trial lines cost nothing today.
-	 *
-	 * @param WC_Cart $cart Cart.
-	 */
-	public function trial_prices( $cart ): void {
-		if ( ! $cart instanceof WC_Cart ) {
-			return;
-		}
-		foreach ( $cart->get_cart() as $item ) {
-			if ( ! empty( $item['sfls_trial'] ) && isset( $item['data'] ) && $item['data'] instanceof WC_Product ) {
-				if ( self::trial_allowed( (int) $item['product_id'] ) ) {
-					$item['data']->set_price( 0 );
-				}
-			}
-		}
-	}
-
-	/**
-	 * "Free trial: Free for 14 days, then $79.00/year" in cart and checkout.
-	 *
-	 * @param array $item_data Display rows.
-	 * @param array $cart_item Cart item.
-	 * @return array
-	 */
-	public function trial_item_data( $item_data, $cart_item ) {
-		if ( ! empty( $cart_item['sfls_trial'] ) && self::trial_allowed( (int) ( $cart_item['product_id'] ?? 0 ) ) ) {
-			$item_data   = (array) $item_data;
-			$item_data[] = array(
-				'key'   => __( 'Free trial', 'subtleforms-license-server' ),
-				'value' => self::trial_label( (int) $cart_item['product_id'] ),
-			);
-		}
-		return $item_data;
-	}
-
-	/**
-	 * Keep the trial on the order line.
-	 *
-	 * @param WC_Order_Item_Product $item     Line item.
-	 * @param string                $cart_key Cart key.
-	 * @param array                 $values   Cart item.
-	 */
-	public function trial_line_item( $item, $cart_key, $values ): void {
-		if ( empty( $values['sfls_trial'] ) || ! self::trial_allowed( (int) ( $values['product_id'] ?? 0 ) ) ) {
-			return;
-		}
-		$plan = (string) get_post_meta( (int) $values['product_id'], '_sfls_plan', true );
-		$item->add_meta_data( '_sfls_trial', (string) SFLS_Paddle::plan( '' !== $plan ? $plan : 'pro' )['trial_days'], true );
-		$item->add_meta_data( __( 'Free trial', 'subtleforms-license-server' ), self::trial_label( (int) $values['product_id'] ), true );
-	}
-
-	/**
-	 * Whether a cart item must go through Paddle even at $0: a free trial
-	 * (Paddle collects the card) or an upgrade of a Paddle subscription.
+	 * Whether a cart item must go through Paddle even at $0: an upgrade of a
+	 * Paddle subscription.
 	 *
 	 * @param array $item Cart item.
 	 */
 	private static function cart_item_needs_paddle( array $item ): bool {
-		if ( ! empty( $item['sfls_trial'] ) ) {
-			return true;
-		}
 		$lic = ! empty( $item['sfls_upgrade_license'] ) ? SFLS_Licenses::find( (int) $item['sfls_upgrade_license'] ) : null;
 		return $lic && SFLS_Licenses::is_paddle( $lic );
 	}
 
 	/**
-	 * Trial and Paddle upgrade carts need payment even when they total $0.
+	 * Paddle upgrade carts need payment even when they total $0.
 	 *
 	 * @param bool $needs Needs payment.
 	 * @return bool
@@ -516,9 +398,6 @@ final class SFLS_Woo_Paddle {
 			if ( ! $item instanceof WC_Order_Item_Product ) {
 				continue;
 			}
-			if ( '' !== (string) $item->get_meta( '_sfls_trial' ) ) {
-				return true;
-			}
 			$lic = (int) $item->get_meta( '_sfls_upgrade_license' ) ? SFLS_Licenses::find( (int) $item->get_meta( '_sfls_upgrade_license' ) ) : null;
 			if ( $lic && SFLS_Licenses::is_paddle( $lic ) ) {
 				return true;
@@ -543,73 +422,6 @@ final class SFLS_Woo_Paddle {
 			return $needs;
 		}
 		return self::order_needs_paddle( $order );
-	}
-
-	/**
-	 * Trial problem for a cart and email, as notice HTML ('' when fine).
-	 *
-	 * @param string $email          Billing email.
-	 * @param string $payment_method Chosen payment method.
-	 * @param int    $order_id       The order being placed (0 when not known): its own pending claims do not count.
-	 */
-	public static function trial_problem( string $email, string $payment_method, int $order_id = 0 ): string {
-		$item = null;
-		if ( function_exists( 'WC' ) && WC()->cart ) {
-			foreach ( WC()->cart->get_cart() as $row ) {
-				if ( ! empty( $row['sfls_trial'] ) ) {
-					$item = $row;
-					break;
-				}
-			}
-		}
-		if ( ! $item ) {
-			return '';
-		}
-		$product_id = (int) $item['product_id'];
-		$link       = '<a href="' . esc_url( self::buy_without_trial_url( $product_id ) ) . '">' . esc_html__( 'Buy without the free trial', 'subtleforms-license-server' ) . '</a>';
-		if ( self::GATEWAY !== $payment_method ) {
-			return esc_html__( 'Free trials are paid with Paddle, which keeps your card on file for when the trial ends. Choose Pay with Paddle.', 'subtleforms-license-server' );
-		}
-		if ( $order_id <= 0 && function_exists( 'WC' ) && WC()->session ) {
-			$order_id = (int) WC()->session->get( 'order_awaiting_payment' ); // The unpaid order this checkout retries.
-		}
-		$check = SFLS_Trials::check( $email, '', 0, $order_id );
-		if ( $check['eligible'] ) {
-			return '';
-		}
-		return esc_html( trim( $check['message'] . ' ' . __( 'You can buy the plan right away instead.', 'subtleforms-license-server' ) ) ) . ' ' . $link;
-	}
-
-	/**
-	 * Classic checkout: one free trial per person, company and site.
-	 *
-	 * @param array    $data   Posted data.
-	 * @param WP_Error $errors Errors.
-	 */
-	public function classic_validate( $data, $errors ): void {
-		if ( ! SFLS_Paddle::woo_selling() || ! $errors instanceof WP_Error ) {
-			return;
-		}
-		$problem = self::trial_problem( (string) ( $data['billing_email'] ?? '' ), (string) ( $data['payment_method'] ?? '' ) );
-		if ( '' !== $problem ) {
-			$errors->add( 'sfls_trial', $problem );
-		}
-	}
-
-	/**
-	 * Checkout block (Store API): the same check, right before payment.
-	 *
-	 * @param WC_Order $order Order.
-	 * @throws \Automattic\WooCommerce\StoreApi\Exceptions\RouteException When the trial is not allowed.
-	 */
-	public function store_api_validate( $order ): void {
-		if ( ! SFLS_Paddle::woo_selling() || ! $order instanceof WC_Order || ! class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
-			return;
-		}
-		$problem = self::trial_problem( (string) $order->get_billing_email(), (string) $order->get_payment_method(), $order->get_id() );
-		if ( '' !== $problem ) {
-			throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'sfls_trial_not_eligible', wp_kses( $problem, array( 'a' => array( 'href' => true ) ) ), 400 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Escaped and filtered above.
-		}
 	}
 
 	// ── Paddle transaction ──────────────────────────────────────────────
@@ -702,9 +514,6 @@ final class SFLS_Woo_Paddle {
 		$license  = $line['license'] ? (string) $line['license']['id'] : '';
 
 		switch ( $line['kind'] ) {
-			case 'trial':
-				$item = array( 'price_id' => $map['trial_price_id'] );
-				break;
 			case 'renewal':
 				$item = array(
 					'price' => array(
@@ -772,9 +581,7 @@ final class SFLS_Woo_Paddle {
 		if ( '' !== $customer['address_id'] ) {
 			$body['address_id'] = $customer['address_id'];
 		}
-		if ( 'trial' !== $line['kind'] ) {
-			$body += self::discount_for_order( $order );
-		}
+		$body += self::discount_for_order( $order );
 		/**
 		 * Filter the Paddle transaction created for a WooCommerce order.
 		 *
@@ -842,33 +649,7 @@ final class SFLS_Woo_Paddle {
 		if ( 'upgrade' === $line['kind'] ) {
 			return SFLS_Woo_Paddle_Orders::pay_upgrade( $order, $line );
 		}
-		if ( 'trial' === $line['kind'] ) {
-			// Claim the trial now, before any payment, so parallel checkouts with the same email cannot both get one.
-			$check = SFLS_Trials::reserve( (string) $order->get_billing_email(), $order->get_id() );
-			if ( ! $check['eligible'] ) {
-				return new WP_Error( 'sfls_trial', $check['message'] );
-			}
-			if ( ! self::trial_email_confirmed( $order ) ) {
-				// Email a code and send the customer to the payment page, which asks for it before the Paddle form.
-				SFLS_Trials::issue_code( (string) $order->get_billing_email() );
-				$order->add_order_note( __( 'Free trial: a confirmation code was emailed to the customer. The Paddle checkout opens once it is entered.', 'subtleforms-license-server' ) );
-				return array(
-					'result'   => 'success',
-					'redirect' => $order->get_checkout_payment_url( true ),
-				);
-			}
-		}
 		return self::open_transaction( $order, $line );
-	}
-
-	/**
-	 * Whether the email of a trial order does not need a code (setting off)
-	 * or was confirmed with one.
-	 *
-	 * @param WC_Order $order Order.
-	 */
-	public static function trial_email_confirmed( WC_Order $order ): bool {
-		return ! SFLS_Settings::trial_verify() || SFLS_Trials::skip_code() || SFLS_Trials::is_verified( (string) $order->get_billing_email() );
 	}
 
 	/**
@@ -883,9 +664,6 @@ final class SFLS_Woo_Paddle {
 		$previous = (string) $order->get_meta( '_sfls_paddle_txn_id' );
 		$txn      = self::create_transaction( $order, $line );
 		if ( is_wp_error( $txn ) ) {
-			if ( 'trial' === $line['kind'] ) {
-				SFLS_Trials::release_order( $order->get_id() ); // The payment did not start: the trial is free again.
-			}
 			return $txn;
 		}
 		if ( '' !== $previous && $previous !== $txn['id'] ) {
@@ -914,7 +692,6 @@ final class SFLS_Woo_Paddle {
 			'sfls_paddle_txn'     => (string) $txn['id'],
 			'sfls_paddle_success' => $order->get_checkout_order_received_url(),
 			'sfls_paddle_pay_url' => $pay_url,
-			'sfls_paddle_trial'   => 'trial' === $line['kind'] ? 'yes' : 'no',
 		);
 	}
 
@@ -938,22 +715,6 @@ final class SFLS_Woo_Paddle {
 			echo '<div class="sfls sfls-paddle-pay"><p>' . esc_html__( 'This order is paid.', 'subtleforms-license-server' ) . ' <a href="' . esc_url( $order->get_checkout_order_received_url() ) . '">' . esc_html__( 'See your license', 'subtleforms-license-server' ) . '</a></p></div>';
 			return;
 		}
-		$line  = self::order_line( $order );
-		$trial = ! is_wp_error( $line ) && 'trial' === $line['kind'];
-		if ( $trial && ! self::trial_email_confirmed( $order ) ) {
-			self::trial_code_form( $order );
-			return;
-		}
-		if ( '' === $txn && $trial && $order->has_status( 'pending' ) ) {
-			// The code was entered here: now the Paddle transaction can be created.
-			$started = self::open_transaction( $order, $line );
-			if ( is_wp_error( $started ) ) {
-				echo '<div class="sfls sfls-paddle-pay"><p class="sfls-paddle-error" role="alert">' . esc_html( $started->get_error_message() ) . '</p></div>';
-				return;
-			}
-			$order = wc_get_order( $order->get_id() );
-			$txn   = (string) $order->get_meta( '_sfls_paddle_txn_id' );
-		}
 		if ( '' === $txn ) {
 			return;
 		}
@@ -967,7 +728,6 @@ final class SFLS_Woo_Paddle {
 				array(
 					'transactionId' => $txn,
 					'successUrl'    => $order->get_checkout_order_received_url(),
-					'trial'         => $trial ? 'yes' : 'no',
 				)
 			)
 		);
@@ -978,93 +738,6 @@ final class SFLS_Woo_Paddle {
 		echo '<p class="sfls-muted sfls-paddle-pay-tax">' . esc_html( self::tax_note() ) . '</p>';
 		echo '<p><a href="' . esc_url( wc_get_checkout_url() ) . '">' . esc_html__( 'Back to checkout', 'subtleforms-license-server' ) . '</a></p>';
 		echo '</div>';
-	}
-
-	/**
-	 * The form that asks for the emailed code before a trial's Paddle form.
-	 *
-	 * @param WC_Order $order Order.
-	 */
-	private static function trial_code_form( WC_Order $order ): void {
-		$notice    = (string) $order->get_meta( '_sfls_trial_code_notice' );
-		$notice_ok = '1' === (string) $order->get_meta( '_sfls_trial_code_notice_ok' );
-		if ( '' !== $notice ) {
-			$order->delete_meta_data( '_sfls_trial_code_notice' );
-			$order->delete_meta_data( '_sfls_trial_code_notice_ok' );
-			$order->save_meta_data();
-		}
-		$email = (string) $order->get_billing_email();
-		echo '<div class="sfls sfls-paddle-pay sfls-trial-code">';
-		echo '<h2 class="sfls-paddle-pay-title">' . esc_html__( 'Confirm your email', 'subtleforms-license-server' ) . '</h2>';
-		echo '<p class="sfls-trial-code-lead">' . esc_html__( 'Enter the 6-digit code we sent to', 'subtleforms-license-server' ) . '</p>';
-		echo '<p class="sfls-trial-code-email">' . esc_html( $email ) . '</p>';
-		echo '<p class="sfls-trial-code-help">' . esc_html__( 'This keeps free trials to one per person. Next you add a card, and nothing is charged until the trial ends.', 'subtleforms-license-server' ) . '</p>';
-		if ( '' !== $notice ) {
-			printf(
-				'<p class="%1$s" role="%2$s">%3$s</p>',
-				$notice_ok ? 'sfls-paddle-ok' : 'sfls-paddle-error',
-				$notice_ok ? 'status' : 'alert',
-				esc_html( $notice )
-			);
-		}
-		echo '<form method="post" action="' . esc_url( $order->get_checkout_payment_url( true ) ) . '">';
-		wp_nonce_field( 'sfls_trial_code_' . $order->get_id(), 'sfls_trial_nonce' );
-		echo '<input type="hidden" name="sfls_trial_order" value="' . esc_attr( (string) $order->get_id() ) . '">';
-		echo '<p><label for="sfls-trial-code">' . esc_html__( 'Confirmation code', 'subtleforms-license-server' ) . '</label><br><input id="sfls-trial-code" type="text" name="sfls_trial_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required class="input-text"></p>';
-		echo '<p><button type="submit" name="sfls_trial_action" value="verify" class="button alt">' . esc_html__( 'Confirm and continue', 'subtleforms-license-server' ) . '</button> ';
-		echo '<button type="submit" name="sfls_trial_action" value="resend" class="button" formnovalidate>' . esc_html__( 'Email me a new code', 'subtleforms-license-server' ) . '</button></p>';
-		echo '<div class="sfls-trial-code-tips">';
-		/* translators: %d: minutes */
-		echo '<p class="sfls-muted">' . esc_html( sprintf( __( 'The code can take a minute to arrive and works for %d minutes. Not in your inbox? Check spam or promotions, then send a new code.', 'subtleforms-license-server' ), SFLS_Trials::CODE_MINUTES ) ) . '</p>';
-		echo '<p class="sfls-muted">' . esc_html__( 'Wrong email?', 'subtleforms-license-server' ) . ' <a href="' . esc_url( wc_get_checkout_url() ) . '">' . esc_html__( 'Go back and change it', 'subtleforms-license-server' ) . '</a></p>';
-		echo '</div>';
-		echo '</form></div>';
-	}
-
-	/**
-	 * Handle the code form of the payment page: confirm the code, or send a
-	 * new one, then show the page again.
-	 */
-	public function handle_trial_code(): void {
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Verified below with the order's own nonce.
-		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) || empty( $_POST['sfls_trial_order'] ) || empty( $_POST['sfls_trial_action'] ) ) {
-			return;
-		}
-		$order_id = absint( $_POST['sfls_trial_order'] );
-		$nonce    = isset( $_POST['sfls_trial_nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['sfls_trial_nonce'] ) ) : '';
-		$order    = wc_get_order( $order_id );
-		$key      = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
-		if ( ! $order instanceof WC_Order || ! wp_verify_nonce( $nonce, 'sfls_trial_code_' . $order_id ) || ! hash_equals( $order->get_order_key(), $key ) || self::GATEWAY !== $order->get_payment_method() ) {
-			return;
-		}
-		$action = sanitize_key( wp_unslash( $_POST['sfls_trial_action'] ) );
-		$email  = (string) $order->get_billing_email();
-		$result = true;
-		if ( 'resend' === $action ) {
-			$result = SFLS_Trials::issue_code( $email );
-			if ( true === $result ) {
-				$result = new WP_Error( 'code_sent', __( 'A new code is on its way.', 'subtleforms-license-server' ) );
-			}
-		} elseif ( 'verify' === $action ) {
-			$result = SFLS_Trials::verify_code( $email, isset( $_POST['sfls_trial_code'] ) ? sanitize_text_field( wp_unslash( $_POST['sfls_trial_code'] ) ) : '' );
-		}
-		// phpcs:enable
-		if ( is_wp_error( $result ) ) {
-			$order->update_meta_data( '_sfls_trial_code_notice', $result->get_error_message() );
-			$order->update_meta_data( '_sfls_trial_code_notice_ok', 'code_sent' === $result->get_error_code() ? '1' : '0' );
-			$order->save_meta_data();
-		}
-		wp_safe_redirect( $order->get_checkout_payment_url( true ) );
-		exit;
-	}
-
-	/**
-	 * A trial order that failed or was canceled gives its claim back.
-	 *
-	 * @param int $order_id Order.
-	 */
-	public function release_trial_claims( $order_id ): void {
-		SFLS_Trials::release_order( (int) $order_id );
 	}
 
 	/**

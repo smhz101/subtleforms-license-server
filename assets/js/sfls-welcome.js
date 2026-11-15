@@ -1,6 +1,6 @@
 /**
  * Welcome page after a Paddle checkout: polls GET /sfls/v1/paddle/checkout
- * until the webhook has issued the license, then shows the key, the trial end
+ * until the webhook has issued the license, then shows the key, the renewal
  * date, Download Pro and the install steps.
  *
  * The checkout token comes from the URL fragment (#t=...), which never reaches
@@ -61,16 +61,13 @@
 			copy.setAttribute( 'data-sfls-copy', data.license_key );
 		}
 		field( 'summary' ).textContent = [ data.plan, data.sites ].filter( Boolean ).join( ' · ' );
-		var trial = field( 'trial' );
-		if ( data.trial && data.trial_ends ) {
-			trial.textContent = data.amount ? format( i18n.trialThen, data.trial_ends, data.amount ) : format( i18n.trialEnds, data.trial_ends );
-			trial.hidden = false;
-		} else if ( data.renews ) {
-			trial.textContent = format( i18n.renews, data.renews );
-			trial.hidden = false;
+		var renews = field( 'renews' );
+		if ( data.renews ) {
+			renews.textContent = format( i18n.renews, data.renews );
+			renews.hidden = false;
 		} else if ( data.renews_pending ) {
-			trial.textContent = i18n.renewsPending;
-			trial.hidden = false;
+			renews.textContent = i18n.renewsPending;
+			renews.hidden = false;
 		}
 		if ( data.email ) {
 			field( 'emailed' ).textContent = format( i18n.emailed, data.email );

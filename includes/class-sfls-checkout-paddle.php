@@ -3,19 +3,14 @@
  * Selling with Paddle on the marketing site.
  *
  * In the recommended mode (WooCommerce checkout with Paddle payments) the
- * pricing cards link to the WooCommerce cart instead ("Start 14-day free
- * trial" adds the plan with sfls_trial=1); the overlay checkout below is the
- * legacy "Paddle overlay" mode.
+ * pricing cards link to the WooCommerce cart instead; the overlay checkout
+ * below is the legacy "Paddle overlay" mode.
  *
  * - Pricing cards (the sfls/pricing block and [sfls_pricing]) open the Paddle
- *   overlay checkout. A plan with a trial shows "Start 14-day free trial" and
- *   "Then $79/year, cancel anytime"; the button first checks the trial rules
- *   (POST /sfls/v1/paddle/eligibility) with the signed-in account's email or
- *   an email the visitor types. Customers who already had a trial see
- *   "Buy now" with the reason.
+ *   overlay checkout.
  * - /license-welcome/ (or a page with [sfls_license_welcome]) is where the
  *   checkout lands. It waits for the webhook to issue the license, then shows
- *   the key, Download Pro, the install steps and the trial end date.
+ *   the key, Download Pro, the install steps and the renewal date.
  *
  * The checkout passes custom data (plan, a random token, email) that Paddle
  * copies to the subscription. The webhook stores a hash of the token, so only
@@ -111,16 +106,12 @@ final class SFLS_Checkout_Paddle {
 			array(
 				'token'          => $config['client_token'],
 				'environment'    => $config['env'],
-				'eligibilityUrl' => rest_url( SFLS_REST::NS . '/paddle/eligibility' ),
-				'nonce'          => $user->ID ? wp_create_nonce( 'wp_rest' ) : '',
 				'email'          => $user->ID ? $user->user_email : '',
 				'welcomeUrl'     => self::welcome_url(),
 				'locale'         => substr( determine_locale(), 0, 2 ),
 				'i18n'           => array(
 					'buyNow'     => __( 'Buy now', 'subtleforms-license-server' ),
-					'checking'   => __( 'Checking…', 'subtleforms-license-server' ),
 					'opening'    => __( 'Opening checkout…', 'subtleforms-license-server' ),
-					'buyInstead' => __( 'You can buy the plan right away instead.', 'subtleforms-license-server' ),
 					'error'      => __( 'Something went wrong. Try again in a moment.', 'subtleforms-license-server' ),
 					'noPaddle'   => __( 'The checkout could not load. Check your connection or turn off content blockers, then try again.', 'subtleforms-license-server' ),
 				),
@@ -195,14 +186,11 @@ final class SFLS_Checkout_Paddle {
 		SFLS_Assets::register_handles();
 		wp_enqueue_style( 'sfls-front' );
 
-		$user        = wp_get_current_user();
-		$eligibility = $user->ID ? SFLS_Trials::check( $user->user_email ) : null;
-
 		ob_start();
 		echo '<div class="sfls sfls-pricing sfls-pricing--paddle" data-sfls-paddle-pricing>';
 		echo '<div class="sfls-pricing-grid sfls-pricing-grid--yearly">';
 		foreach ( $plans as $plan => $row ) {
-			self::card( $plan, $row, $plan === ( $atts['popular'] ?? 'pro' ), $atts, $eligibility );
+			self::card( $plan, $row, $plan === ( $atts['popular'] ?? 'pro' ), $atts );
 		}
 		echo '</div></div>';
 		return (string) ob_get_clean();
@@ -211,23 +199,17 @@ final class SFLS_Checkout_Paddle {
 	/**
 	 * One Paddle pricing card.
 	 *
-	 * @param string     $plan        Plan slug.
-	 * @param array      $row         Paddle mapping.
-	 * @param bool       $popular     Highlight.
-	 * @param array      $atts        Attributes.
-	 * @param array|null $eligibility Signed-in customer's trial check.
+	 * @param string $plan    Plan slug.
+	 * @param array  $row     Paddle mapping.
+	 * @param bool   $popular Highlight.
+	 * @param array  $atts    Attributes.
 	 */
-	private static function card( string $plan, array $row, bool $popular, array $atts, ?array $eligibility ): void {
+	private static function card( string $plan, array $row, bool $popular, array $atts ): void {
 		$label    = SFLS_Plans::label( $plan );
 		$price    = self::display_price( $plan );
-		$trial    = SFLS_Paddle::plan_has_trial( $plan );
-		$eligible = ! $eligibility || $eligibility['eligible'];
-		$mode     = $trial && $eligible ? 'trial' : 'buy';
 		$features = array_values( array_unique( array_merge( SFLS_Plans::feature_label_list( $plan, true ), array_filter( SFLS_Plans::common_items(), 'strlen' ) ) ) );
 		$template = trim( (string) ( $atts['button'] ?? '' ) );
 		$buy      = '' !== $template ? str_replace( '{plan}', $label, $template ) : sprintf( /* translators: %s: plan name */ __( 'Buy %s', 'subtleforms-license-server' ), $label );
-		/* translators: %d: number of days */
-		$trial_label = sprintf( __( 'Start %d-day free trial', 'subtleforms-license-server' ), (int) $row['trial_days'] );
 
 		echo '<div class="sfls-plan' . ( $popular ? ' is-popular' : '' ) . '" data-sfls-plan="' . esc_attr( $plan ) . '">';
 		if ( $popular ) {
@@ -242,43 +224,17 @@ final class SFLS_Checkout_Paddle {
 		if ( ! empty( $row['wc_product_id'] ) ) {
 			// WooCommerce checkout with Paddle payments: links to the cart.
 			$buy_url = SFLS_Products::buy_url( (int) $row['wc_product_id'] );
-			echo '<a class="sfls-btn sfls-btn--' . ( $popular ? 'primary' : 'secondary' ) . ' sfls-btn--block" href="' . esc_url( 'trial' === $mode ? add_query_arg( 'sfls_trial', '1', $buy_url ) : $buy_url ) . '" rel="nofollow" data-mode="' . esc_attr( $mode ) . '">'
-				. esc_html( 'trial' === $mode ? $trial_label : ( $trial ? __( 'Buy now', 'subtleforms-license-server' ) : $buy ) ) . '</a>';
+			echo '<a class="sfls-btn sfls-btn--' . ( $popular ? 'primary' : 'secondary' ) . ' sfls-btn--block" href="' . esc_url( $buy_url ) . '" rel="nofollow">' . esc_html( $buy ) . '</a>';
 		} else {
 			echo '<button type="button" class="sfls-btn sfls-btn--' . ( $popular ? 'primary' : 'secondary' ) . ' sfls-btn--block sfls-paddle-buy"'
-				. ' data-mode="' . esc_attr( $mode ) . '"'
 				. ' data-plan="' . esc_attr( $plan ) . '"'
 				. ' data-price="' . esc_attr( $row['price_id'] ) . '"'
-				. ' data-trial-price="' . esc_attr( $trial ? $row['trial_price_id'] : '' ) . '"'
 				. ' data-buy-label="' . esc_attr( __( 'Buy now', 'subtleforms-license-server' ) ) . '">'
-				. esc_html( 'trial' === $mode ? $trial_label : ( $trial ? __( 'Buy now', 'subtleforms-license-server' ) : $buy ) ) . '</button>';
+				. esc_html( $buy ) . '</button>';
 		}
 
-		if ( $trial ) {
-			$then = '' !== $price['plain']
-				/* translators: %s: yearly price */
-				? sprintf( __( 'Then %s/year, cancel anytime', 'subtleforms-license-server' ), $price['plain'] )
-				: __( 'Then billed yearly, cancel anytime', 'subtleforms-license-server' );
-			echo '<p class="sfls-plan-trial-note"' . ( 'trial' === $mode ? '' : ' hidden' ) . '>' . esc_html( $then ) . '</p>';
-		} else {
-			echo '<p class="sfls-plan-trial-note">' . esc_html__( 'Billed yearly, cancel anytime', 'subtleforms-license-server' ) . '</p>';
-		}
-		if ( ! empty( $row['wc_product_id'] ) && 'trial' === $mode ) {
-			echo '<a class="sfls-plan-buy-now" href="' . esc_url( SFLS_Products::buy_url( (int) $row['wc_product_id'] ) ) . '" rel="nofollow">' . esc_html__( 'or buy now without a trial', 'subtleforms-license-server' ) . '</a>';
-		}
-		$reason = $trial && ! $eligible ? trim( $eligibility['message'] . ' ' . __( 'You can buy the plan right away instead.', 'subtleforms-license-server' ) ) : '';
-		echo '<p class="sfls-plan-reason" role="status"' . ( '' === $reason ? ' hidden' : '' ) . '>' . esc_html( $reason ) . '</p>';
-
-		if ( $trial && empty( $row['wc_product_id'] ) ) {
-			$field = wp_unique_id( 'sfls-trial-email-' );
-			echo '<form class="sfls-trial-email" hidden novalidate>';
-			echo '<label for="' . esc_attr( $field ) . '">' . esc_html__( 'Your email', 'subtleforms-license-server' ) . '</label>';
-			echo '<div class="sfls-trial-email-row"><input type="email" id="' . esc_attr( $field ) . '" name="email" autocomplete="email" required placeholder="' . esc_attr__( 'you@company.com', 'subtleforms-license-server' ) . '">';
-			echo '<button type="submit" class="sfls-btn sfls-btn--primary">' . esc_html__( 'Continue', 'subtleforms-license-server' ) . '</button></div>';
-			echo '<p class="sfls-trial-email-help">' . esc_html__( 'Your license is sent here. One free trial per person, company and site.', 'subtleforms-license-server' ) . '</p>';
-			echo '<p class="sfls-trial-email-error" role="alert" hidden></p>';
-			echo '</form>';
-		}
+		echo '<p class="sfls-plan-note">' . esc_html__( 'Billed yearly, cancel anytime', 'subtleforms-license-server' ) . '</p>';
+		echo '<p class="sfls-plan-reason" role="status" hidden></p>';
 
 		echo '<ul class="sfls-plan-features">';
 		foreach ( $features as $feature ) {
@@ -340,10 +296,6 @@ final class SFLS_Checkout_Paddle {
 				'attempts' => 45,
 				'i18n'     => array(
 					/* translators: %s: date */
-					'trialEnds' => __( 'Your free trial ends on %s. Cancel before then and you will not be charged.', 'subtleforms-license-server' ),
-					/* translators: 1: date, 2: amount */
-					'trialThen' => __( 'Your free trial ends on %1$s. Then %2$s a year, cancel anytime from your account.', 'subtleforms-license-server' ),
-					/* translators: %s: date */
 					'renews'    => __( 'Renews automatically on %s.', 'subtleforms-license-server' ),
 					'renewsPending' => __( 'Renewal date confirming.', 'subtleforms-license-server' ),
 					/* translators: %s: email */
@@ -372,7 +324,7 @@ final class SFLS_Checkout_Paddle {
 		$html .= '<h1>' . esc_html__( 'Welcome to SubtleForms Pro', 'subtleforms-license-server' ) . '</h1>';
 		$html .= '<p class="sfls-connect-lead" data-field="summary"></p>';
 		$html .= '<div class="sfls-keyrow"><code class="sfls-key" data-field="key"></code><button type="button" class="sfls-btn sfls-btn--ghost sfls-btn--sm sfls-copy" data-sfls-copy="" data-sfls-copied="' . esc_attr__( 'Copied', 'subtleforms-license-server' ) . '"><span class="sfls-copy-label">' . esc_html__( 'Copy', 'subtleforms-license-server' ) . '</span></button></div>';
-		$html .= '<p class="sfls-welcome-trial" data-field="trial" hidden></p>';
+		$html .= '<p class="sfls-welcome-renews" data-field="renews" hidden></p>';
 		$html .= '<p class="sfls-muted" data-field="emailed"></p>';
 		$html .= '<div class="sfls-actions sfls-delivery-actions">';
 		if ( $download ) {

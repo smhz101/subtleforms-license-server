@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.9.2
+Stable tag: 1.10.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -22,9 +22,13 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Rate-limited license API with an activation log and single-use download links.
 * Pro release management: every uploaded version is kept and stays downloadable, with stable and beta channels, drafts, yank and pin, download counts and per-version signed links.
 * Git and CI/CD: a token-authenticated release API for CI, a GitHub release webhook, and WP-CLI release commands.
-* Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, 7 or 14 day free trials with one trial per customer, renewal orders, refunds and billing emails.
+* Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.10.0 - 2026-11-15 =
+* Removed: Free trials of paid plans. The free WordPress.org plugin is the trial now. Checkout is always a paid purchase: old links with sfls_trial=1 or 0 still work and add the plan as a normal paid item. The eligibility route (POST /paddle/eligibility), the email code step, the trial reminder and trial emails, the plan trial fields and the trial email settings are gone. A subscription that still arrives from Paddle with the trialing status is handled like an active one. The update drops the wp_sfls_trial_claims and wp_sfls_trial_codes tables, the trial, trial_started_at and trial_ends_at columns of wp_sfls_licenses, and the trial settings (schema 12).
+* Fix: A fully refunded Paddle renewal order now suspends its license and cancels the Paddle subscription at once, so the subscription stops billing. Partial refunds are unchanged.
 
 = 1.9.2 - 2026-11-09 =
 * New: Cancel auto-renew opens Paddle's cancellation flow (survey and offer) on live accounts; falls back to the direct cancel if the flow cannot load.

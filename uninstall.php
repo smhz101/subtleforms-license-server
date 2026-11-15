@@ -20,6 +20,7 @@ $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_activations" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_licenses" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_activation_log" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_download_tokens" );
+// The two legacy tables of the removed free trials (schema 12 drops them; old installs may still have them).
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_trial_claims" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_paddle_events" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_releases" );

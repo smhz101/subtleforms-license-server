@@ -1,7 +1,7 @@
 <?php
 /**
  * License server business rules: plan seats, one grace period, status changes,
- * seat check, proxy address, free mail and disposable lists, rate limit
+ * seat check, proxy address, free mail list, rate limit
  * counters and their separate buckets.
  *
  * @package SFLS
@@ -87,8 +87,8 @@ class SFLS_License_Server_Logic_Test extends SFLS_Test_Case {
 	// ── One grace period ────────────────────────────────────────────────
 
 	/**
-	 * A lapsed license is valid for 14 days after its expiry, once; a lapsed
-	 * trial gets none. Paddle adds nothing on top.
+	 * A lapsed license is valid for 14 days after its expiry, once. Paddle
+	 * adds nothing on top.
 	 */
 	public function test_single_grace_period(): void {
 		$this->assertSame( 0, SFLS_Paddle::BILLING_GRACE_DAYS );
@@ -100,15 +100,6 @@ class SFLS_License_Server_Logic_Test extends SFLS_Test_Case {
 
 		SFLS_Licenses::update( (int) $lic['id'], array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 15 * DAY_IN_SECONDS ) ) );
 		$this->assertSame( 'expired', SFLS_Licenses::state( SFLS_Licenses::find( (int) $lic['id'] ) )['status'] );
-
-		SFLS_Licenses::update(
-			(int) $lic['id'],
-			array(
-				'trial'      => 1,
-				'expires_at' => gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ),
-			)
-		);
-		$this->assertSame( 'expired', SFLS_Licenses::state( SFLS_Licenses::find( (int) $lic['id'] ) )['status'], 'A trial has no grace.' );
 	}
 
 	// ── Status changes ──────────────────────────────────────────────────
@@ -255,21 +246,17 @@ class SFLS_License_Server_Logic_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * Settings save the proxy and trial switches only when the form has them.
+	 * Settings save the proxy switch only when the form has it.
 	 */
 	public function test_settings_save_rules(): void {
 		$this->settings( array() );
 		SFLS_Settings::save(
 			array(
-				'rules_present'    => 1,
-				'trusted_proxy'    => 1,
-				'disposable_extra' => "Throwaway.example\nnot a domain\n@other-temp.test",
+				'rules_present' => 1,
+				'trusted_proxy' => 1,
 			)
 		);
 		$this->assertTrue( SFLS_Settings::trusted_proxy() );
-		$this->assertFalse( SFLS_Settings::trial_verify(), 'An unchecked box is off.' );
-		$this->assertFalse( SFLS_Settings::block_disposable() );
-		$this->assertSame( array( 'throwaway.example', 'other-temp.test' ), SFLS_Settings::clean_domains( (string) SFLS_Settings::get( 'disposable_extra' ) ) );
 		SFLS_Settings::save( array( 'reminder_days' => '30' ) );
 		$this->assertTrue( SFLS_Settings::trusted_proxy(), 'Other forms keep the switches.' );
 	}
@@ -288,34 +275,6 @@ class SFLS_License_Server_Logic_Test extends SFLS_Test_Case {
 		}
 		$this->assertTrue( SFLS_Settings::is_free_mail( 'a@yandex.by' ) );
 		$this->assertFalse( SFLS_Settings::is_free_mail( 'a@acme-company.com' ) );
-		// A genuine Zoho user shares no company domain with a stranger on Zoho.
-		$this->assertSame( '', SFLS_Trials::company_domain( 'a@zoho.com' ) );
-	}
-
-	/**
-	 * Disposable addresses are refused for trials unless the option is off.
-	 */
-	public function test_disposable_domains_are_refused(): void {
-		$this->settings( array( 'block_disposable' => 1 ) );
-		$tag = 'sflstest' . strtolower( wp_generate_password( 6, false, false ) );
-		foreach ( array( 'mailinator.com', 'sub.yopmail.com', '10minutemail.com' ) as $domain ) {
-			$check = SFLS_Trials::check( $tag . '@' . $domain );
-			$this->assertFalse( $check['eligible'], $domain );
-			$this->assertSame( 'disposable_email', $check['reason'] );
-		}
-		$this->assertTrue( SFLS_Trials::check( $tag . '@gmail.com' )['eligible'] );
-
-		$this->filter(
-			'sfls_disposable_domains',
-			static function ( $list ) {
-				$list[] = 'burn.example';
-				return $list;
-			}
-		);
-		$this->assertSame( 'disposable_email', SFLS_Trials::check( $tag . '@burn.example' )['reason'] );
-
-		$this->settings( array( 'block_disposable' => 0 ) );
-		$this->assertTrue( SFLS_Trials::check( $tag . '@mailinator.com' )['eligible'] );
 	}
 
 	// ── Rate limits ─────────────────────────────────────────────────────
@@ -409,21 +368,99 @@ class SFLS_License_Server_Logic_Test extends SFLS_Test_Case {
 	// ── Database ────────────────────────────────────────────────────────
 
 	/**
-	 * Schema 8 adds the indexes, the columns and the tables through dbDelta.
+	 * Schema 8 adds the indexes and the rate limit table through dbDelta.
 	 */
 	public function test_schema_9(): void {
 		global $wpdb;
-		$this->assertSame( '11', SFLS_DB::SCHEMA_VERSION );
+		$this->assertSame( '12', SFLS_DB::SCHEMA_VERSION );
 		$this->assertSame( SFLS_DB::SCHEMA_VERSION, get_option( 'sfls_schema_version' ) );
 		$keys = wp_list_pluck( (array) $wpdb->get_results( "SHOW INDEX FROM {$wpdb->prefix}sfls_licenses", ARRAY_A ), 'Key_name' );
 		$this->assertContains( 'status', $keys );
 		$this->assertContains( 'expires_at', $keys );
-		$cols = wp_list_pluck( (array) $wpdb->get_results( "SHOW COLUMNS FROM {$wpdb->prefix}sfls_trial_claims", ARRAY_A ), 'Field' );
-		$this->assertContains( 'order_id', $cols );
-		$this->assertContains( 'status', $cols );
-		foreach ( array( SFLS_DB::rate_limits(), SFLS_DB::trial_codes() ) as $table ) {
-			$this->assertSame( $table, $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) );
+		$this->assertSame( SFLS_DB::rate_limits(), $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', SFLS_DB::rate_limits() ) ) );
+	}
+
+	/**
+	 * Schema 12 (free trials removed): the upgrade drops the claims and codes
+	 * tables, the three trial columns, the trial keys of the plans and of the
+	 * settings, and leaves everything else alone. It can run again.
+	 */
+	public function test_schema_12_removes_trials(): void {
+		global $wpdb;
+		$licenses = $wpdb->prefix . 'sfls_licenses';
+		$claims   = $wpdb->prefix . 'sfls_trial_claims';
+		$codes    = $wpdb->prefix . 'sfls_trial_codes';
+		$columns  = array( 'trial', 'trial_started_at', 'trial_ends_at' );
+		$has_col  = static fn( string $column ): bool => (bool) $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$licenses} LIKE %s", $column ) );
+		$has_tbl  = static fn( string $table ): bool => $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+
+		// The legacy shape of a 1.9 database.
+		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$claims} ( id bigint(20) unsigned NOT NULL AUTO_INCREMENT, kind varchar(10) NOT NULL, PRIMARY KEY (id) )" );
+		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$codes} ( email_hash char(64) NOT NULL, PRIMARY KEY (email_hash) )" );
+		$wpdb->query( "ALTER TABLE {$licenses} ADD COLUMN trial tinyint(1) NOT NULL DEFAULT 0, ADD COLUMN trial_started_at datetime NULL, ADD COLUMN trial_ends_at datetime NULL" );
+		foreach ( $columns as $column ) {
+			$this->assertTrue( $has_col( $column ), $column );
 		}
+		$this->set_option(
+			SFLS_Paddle::OPTION,
+			array(
+				'env'   => 'sandbox',
+				'plans' => array(
+					'pro'    => array(
+						'product_id'     => 'pro_pro',
+						'price_id'       => 'pri_pro',
+						'trial_price_id' => 'pri_pro_trial',
+						'trial_days'     => 14,
+						'amount'         => '7900',
+					),
+					'agency' => array(
+						'price_id'       => 'pri_agency',
+						'trial_price_id' => '',
+						'trial_days'     => 0,
+					),
+				),
+			)
+		);
+		$this->settings(
+			array(
+				'trial_notice'     => 3,
+				'trial_verify'     => 1,
+				'block_disposable' => 1,
+				'disposable_extra' => 'burn.example',
+				'reminder_days'    => '30,7',
+			)
+		);
+		$this->set_option( 'sfls_schema_version', '11' );
+
+		SFLS_DB::install();
+
+		$this->assertFalse( $has_tbl( $claims ) );
+		$this->assertFalse( $has_tbl( $codes ) );
+		foreach ( $columns as $column ) {
+			$this->assertFalse( $has_col( $column ), $column );
+		}
+		$this->assertSame( SFLS_DB::SCHEMA_VERSION, get_option( 'sfls_schema_version' ) );
+		$plans = (array) get_option( SFLS_Paddle::OPTION )['plans'];
+		$this->assertSame(
+			array(
+				'product_id' => 'pro_pro',
+				'price_id'   => 'pri_pro',
+				'amount'     => '7900',
+			),
+			$plans['pro']
+		);
+		$this->assertSame( array( 'price_id' => 'pri_agency' ), $plans['agency'] );
+		$settings = (array) get_option( SFLS_Settings::OPTION );
+		foreach ( array( 'trial_notice', 'trial_verify', 'block_disposable', 'disposable_extra' ) as $key ) {
+			$this->assertArrayNotHasKey( $key, $settings, $key );
+		}
+		$this->assertSame( '30,7', $settings['reminder_days'], 'Other settings stay.' );
+
+		// Safe to run again on an upgraded database.
+		SFLS_DB::remove_trials();
+		$this->assertFalse( $has_tbl( $claims ) );
+		$this->assertFalse( $has_col( 'trial' ) );
+		$this->assertSame( 'pri_pro', ( (array) get_option( SFLS_Paddle::OPTION )['plans'] )['pro']['price_id'] );
 	}
 
 	/**
