@@ -98,7 +98,9 @@ final class SFLS_Billing {
 		$name  = '';
 		if ( ! empty( $sub['customer_id'] ) && SFLS_Paddle::has_api_key() ) {
 			$customer = SFLS_Paddle::get_customer( (string) $sub['customer_id'] );
-			if ( ! is_wp_error( $customer ) ) {
+			if ( is_wp_error( $customer ) ) {
+				SFLS_Log::payment( 'get_customer', 'Could not fetch customer ' . (string) $sub['customer_id'] . ', using the checkout email: ' . SFLS_Log::text( $customer ), null, array( 'subscription' => (string) ( $sub['id'] ?? '' ) ) );
+			} else {
 				$email = sanitize_email( (string) ( $customer['email'] ?? '' ) );
 				$name  = sanitize_text_field( (string) ( $customer['name'] ?? '' ) );
 			}
@@ -119,6 +121,7 @@ final class SFLS_Billing {
 	 */
 	public static function customer_user( string $email, string $name = '' ): array {
 		if ( ! is_email( $email ) ) {
+			SFLS_Log::payment( 'customer_user', 'No valid customer email, so no account was created or linked.' );
 			return array( 0, false );
 		}
 		// An account with this email may have been given the address without
@@ -147,6 +150,7 @@ final class SFLS_Billing {
 			)
 		);
 		if ( is_wp_error( $id ) ) {
+			SFLS_Log::payment( 'customer_user', 'Could not create the customer account: ' . SFLS_Log::text( $id ) );
 			return array( 0, false );
 		}
 		wp_new_user_notification( (int) $id, null, 'user' );

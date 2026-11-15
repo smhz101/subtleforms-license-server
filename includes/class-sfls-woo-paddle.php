@@ -756,9 +756,11 @@ final class SFLS_Woo_Paddle {
 			return;
 		}
 		$result = SFLS_Paddle::cancel_transaction( $txn );
-		if ( ! is_wp_error( $result ) ) {
-			/* translators: %s: transaction ID */
-			$order->add_order_note( sprintf( __( 'Paddle transaction %s canceled with the order.', 'subtleforms-license-server' ), $txn ) );
+		if ( is_wp_error( $result ) ) {
+			SFLS_Log::payment( 'cancel_transaction', 'Could not cancel transaction ' . $txn . ': ' . SFLS_Log::text( $result ), $order );
+			return;
 		}
+		/* translators: %s: transaction ID */
+		$order->add_order_note( sprintf( __( 'Paddle transaction %s canceled with the order.', 'subtleforms-license-server' ), $txn ) );
 	}
 }

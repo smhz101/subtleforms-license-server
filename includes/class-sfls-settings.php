@@ -36,6 +36,8 @@ final class SFLS_Settings {
 			'retention_days'   => 365,
 			// Schema 8: behind a CDN or proxy, read the visitor address from its headers.
 			'trusted_proxy'    => 0,
+			// 1.10.1: days Pro keeps working while Paddle retries a failed renewal payment.
+			'dunning_grace_days' => 30,
 		);
 	}
 
@@ -73,6 +75,9 @@ final class SFLS_Settings {
 		// The checkbox of the proxy rule is saved only when the form says it has them.
 		if ( ! empty( $input['rules_present'] ) ) {
 			$values['trusted_proxy'] = empty( $input['trusted_proxy'] ) ? 0 : 1;
+		}
+		if ( array_key_exists( 'dunning_grace_days', $input ) ) {
+			$values['dunning_grace_days'] = min( 60, absint( $input['dunning_grace_days'] ) );
 		}
 		if ( array_key_exists( 'retention_days', $input ) ) {
 			$values['retention_days'] = min( 3650, absint( $input['retention_days'] ) );
@@ -209,6 +214,13 @@ final class SFLS_Settings {
 		$days = array_unique( array_filter( array_map( 'absint', explode( ',', (string) self::get( 'renewal_notice' ) ) ) ) );
 		rsort( $days );
 		return array_values( $days );
+	}
+
+	/**
+	 * Days a past-due Paddle license stays valid past its expiry (0 to 60).
+	 */
+	public static function dunning_grace_days(): int {
+		return min( 60, absint( self::get( 'dunning_grace_days' ) ) );
 	}
 
 	/**

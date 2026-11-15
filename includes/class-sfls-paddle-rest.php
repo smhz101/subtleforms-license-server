@@ -152,11 +152,16 @@ final class SFLS_Paddle_REST {
 		if ( $inserted ) {
 			return true;
 		}
+		if ( false === $inserted ) {
+			SFLS_Log::payment( 'webhook_claim', 'Could not record event ' . (string) $event['event_id'] . ': ' . $wpdb->last_error );
+		}
 		// A delivery that crashed half way (still "processing" after five minutes) may run again.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT status, received_at FROM {$wpdb->prefix}sfls_paddle_events WHERE event_id = %s", (string) $event['event_id'] ), ARRAY_A );
 		if ( $row && 'processing' === $row['status'] && strtotime( $row['received_at'] . ' UTC' ) < time() - 5 * MINUTE_IN_SECONDS ) {
-			$wpdb->update( $table, array( 'received_at' => current_time( 'mysql', true ) ), array( 'event_id' => (string) $event['event_id'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			if ( false === $wpdb->update( $table, array( 'received_at' => current_time( 'mysql', true ) ), array( 'event_id' => (string) $event['event_id'] ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				SFLS_Log::payment( 'webhook_claim', 'Could not reclaim event ' . (string) $event['event_id'] . ': ' . $wpdb->last_error );
+			}
 			return true;
 		}
 		return false;
@@ -203,7 +208,9 @@ final class SFLS_Paddle_REST {
 			$result = self::dispatch( $event );
 		} catch ( Throwable $e ) {
 			global $wpdb;
-			$wpdb->delete( SFLS_DB::paddle_events(), array( 'event_id' => (string) $event['event_id'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			if ( false === $wpdb->delete( SFLS_DB::paddle_events(), array( 'event_id' => (string) $event['event_id'] ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				SFLS_Log::payment( 'webhook', 'Could not release event ' . (string) $event['event_id'] . ' for a retry: ' . $wpdb->last_error );
+			}
 			do_action( 'sfls_paddle_webhook_error', $event, $e );
 			// Paddle retries on anything but 200.
 			return new WP_REST_Response(
@@ -217,7 +224,7 @@ final class SFLS_Paddle_REST {
 
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->update(
+		$updated = $wpdb->update(
 			SFLS_DB::paddle_events(),
 			array(
 				'status'     => substr( $result['action'], 0, 20 ),
@@ -226,6 +233,9 @@ final class SFLS_Paddle_REST {
 			),
 			array( 'event_id' => (string) $event['event_id'] )
 		);
+		if ( false === $updated ) {
+			SFLS_Log::payment( 'webhook', 'Could not store the result of event ' . (string) $event['event_id'] . ': ' . $wpdb->last_error );
+		}
 		do_action( 'sfls_paddle_event_handled', $event, $result );
 
 		return rest_ensure_response(

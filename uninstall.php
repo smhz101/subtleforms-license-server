@@ -45,6 +45,8 @@ foreach ( array(
 	'sfls_deploy_tokens',
 	'sfls_github',
 	'sfls_settings',
+	'sfls_email_retry_queue',
+	'sfls_email_failures',
 	'sfls_products',
 	'sfls_paddle',
 	'sfls_paddle_rejected',
