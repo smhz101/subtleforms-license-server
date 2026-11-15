@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.10.1
+Stable tag: 1.11.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,6 +25,13 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.11.0 - 2026-11-16 =
+* New: Partial refunds. New setting "Suspend the license when refunds reach N% of the order" (default 100%, unchanged behaviour). Every partial refund adds an order note with the refunded share; crossing the threshold suspends the license and, for a Paddle renewal, cancels the subscription.
+* Fix: Paddle adjustment webhooks that arrive out of order are ignored instead of overwriting a newer refund state.
+* Fix: The update package and download routes answer 503 signing_unavailable when the signing key is missing; releases can't be published unsigned.
+* New: Admin: resend license email, bulk suspend, resume, extend 12 months and export, a customer view (all licenses, orders, subscriptions and sites for an email), and an audit log of every admin change (administrators only). Schema 13 adds the sfls_audit_log table.
+* Tests: composer.json, bin/test-env and a CI run on WooCommerce 11.3.0.
 
 = 1.10.1 - 2026-11-15 =
 * Change: Failures in payment paths (Paddle lookups, order polling, webhook database writes, account creation) are now written to the WooCommerce log under the source sfls-paddle and, where an order exists, to a private order note.
