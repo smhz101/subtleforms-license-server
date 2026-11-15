@@ -12,6 +12,8 @@
  * The license-ended email is the lapsed stage of SFLS_Reminders.
  *
  * Each license email goes out once per marker (see SFLS_Reminders::add_marker()).
+ * The marker is written only after the mail was handed over; a failed send is
+ * queued in `sfls_email_retry_queue` and retried by the daily job, three tries in all.
  *
  * @package SFLS
  */
@@ -38,8 +40,23 @@ final class SFLS_Billing_Emails {
 		);
 	}
 
+	const QUEUE_OPTION  = 'sfls_email_retry_queue';
+	const FAILED_OPTION = 'sfls_email_failures';
+	const QUEUE_CAP     = 200;
+	const MAX_ATTEMPTS  = 3;
+
 	/**
-	 * Send a template to a license's customer once per marker.
+	 * Hook the retry job and the failure notice.
+	 */
+	public static function register(): void {
+		add_action( SFLS_Reminders::HOOK, array( self::class, 'retry_queue' ) );
+		add_action( 'admin_notices', array( self::class, 'notice' ) );
+		add_action( 'admin_init', array( self::class, 'dismiss_notice' ) );
+	}
+
+	/**
+	 * Send a template to a license's customer once per marker. The marker is
+	 * written only when the mail was sent; a failure is queued for a retry.
 	 *
 	 * @param array  $lic      License.
 	 * @param string $template Template slug.
@@ -50,16 +67,192 @@ final class SFLS_Billing_Emails {
 		if ( SFLS_Reminders::has_marker( $lic, $marker ) ) {
 			return false;
 		}
-		[ $to, $name ] = SFLS_Reminders::recipient( $lic );
+		[ $to ] = SFLS_Reminders::recipient( $lic );
 		if ( '' === $to ) {
 			return false;
 		}
-		// Mark first: a webhook retried while the mail server is slow must not send twice.
-		SFLS_Reminders::add_marker( $lic, $marker );
-		[ $subject, $heading, $body ] = self::build( $template, $lic, $extra, $name );
-		$ok                           = SFLS_Reminders::deliver( $to, $subject, $heading, $body );
+		foreach ( self::queue() as $entry ) {
+			if ( (int) ( $entry['license_id'] ?? 0 ) === (int) ( $lic['id'] ?? 0 ) && ( $entry['marker'] ?? '' ) === $marker ) {
+				return false; // The daily job is already retrying it.
+			}
+		}
+		[ $ok, $error ] = self::attempt( $lic, $template, $marker, $extra );
+		if ( ! $ok ) {
+			self::failed( (int) ( $lic['id'] ?? 0 ), $template, $error );
+			self::enqueue(
+				array(
+					'license_id' => (int) ( $lic['id'] ?? 0 ),
+					'template'   => $template,
+					'marker'     => $marker,
+					'extra'      => $extra,
+					'attempts'   => 1,
+					'last_error' => $error,
+					'queued_at'  => time(),
+				)
+			);
+		}
 		do_action( 'sfls_billing_email_sent', $lic, $template, $ok );
 		return $ok;
+	}
+
+	/**
+	 * Build and send once, and write the marker when it went out.
+	 *
+	 * @param array  $lic      License (current data).
+	 * @param string $template Template slug.
+	 * @param string $marker   Marker.
+	 * @param array  $extra    Template data.
+	 * @return array{0:bool,1:string} Sent, and the error when not.
+	 */
+	private static function attempt( array $lic, string $template, string $marker, array $extra ): array {
+		[ $to, $name ] = SFLS_Reminders::recipient( $lic );
+		$error         = '';
+		$capture       = static function ( $wp_error ) use ( &$error ) {
+			$error = $wp_error instanceof WP_Error ? $wp_error->get_error_message() : '';
+		};
+		add_action( 'wp_mail_failed', $capture );
+		[ $subject, $heading, $body ] = self::build( $template, $lic, $extra, $name );
+		$ok                           = '' !== $to && SFLS_Reminders::deliver( $to, $subject, $heading, $body );
+		remove_action( 'wp_mail_failed', $capture );
+		if ( $ok ) {
+			SFLS_Reminders::add_marker( $lic, $marker );
+			return array( true, '' );
+		}
+		return array( false, '' !== $error ? $error : __( 'wp_mail returned false', 'subtleforms-license-server' ) );
+	}
+
+	/**
+	 * Tell listeners a billing email failed.
+	 *
+	 * @param int    $license_id License ID.
+	 * @param string $template   Template slug.
+	 * @param string $error      Error message.
+	 */
+	private static function failed( int $license_id, string $template, string $error ): void {
+		do_action( 'sfls_billing_email_failed', $license_id, $template, $error );
+	}
+
+	/**
+	 * The retry queue.
+	 *
+	 * @return array[]
+	 */
+	public static function queue(): array {
+		return array_values( array_filter( (array) get_option( self::QUEUE_OPTION, array() ), 'is_array' ) );
+	}
+
+	/**
+	 * Store the queue (not autoloaded), newest 200 kept.
+	 *
+	 * @param array[] $queue Entries.
+	 */
+	private static function save_queue( array $queue ): void {
+		update_option( self::QUEUE_OPTION, array_slice( array_values( $queue ), -self::QUEUE_CAP ), false );
+	}
+
+	/**
+	 * Add an entry to the queue.
+	 *
+	 * @param array $entry Entry.
+	 */
+	private static function enqueue( array $entry ): void {
+		$queue   = self::queue();
+		$queue[] = $entry;
+		self::save_queue( $queue );
+	}
+
+	/**
+	 * Retry queued emails (daily job). The email is built again from the
+	 * license as it is now. A third failure drops it, leaves an admin notice
+	 * and a private note on the license's order.
+	 */
+	public static function retry_queue(): void {
+		$keep = array();
+		foreach ( self::queue() as $entry ) {
+			$lic = SFLS_Licenses::find( (int) ( $entry['license_id'] ?? 0 ) );
+			if ( ! $lic || SFLS_Reminders::has_marker( $lic, (string) $entry['marker'] ) ) {
+				continue; // Gone, or sent by another path meanwhile.
+			}
+			[ $ok, $error ] = self::attempt( $lic, (string) $entry['template'], (string) $entry['marker'], (array) ( $entry['extra'] ?? array() ) );
+			if ( $ok ) {
+				do_action( 'sfls_billing_email_sent', $lic, $entry['template'], true );
+				continue;
+			}
+			$entry['attempts']   = (int) ( $entry['attempts'] ?? 1 ) + 1;
+			$entry['last_error'] = $error;
+			self::failed( (int) $lic['id'], (string) $entry['template'], $error );
+			if ( $entry['attempts'] < self::MAX_ATTEMPTS ) {
+				$keep[] = $entry;
+				continue;
+			}
+			self::give_up( $lic, $entry );
+		}
+		self::save_queue( $keep );
+	}
+
+	/**
+	 * Record a dropped email: admin notice and order note.
+	 *
+	 * @param array $lic   License.
+	 * @param array $entry Queue entry.
+	 */
+	private static function give_up( array $lic, array $entry ): void {
+		$failures   = (array) get_option( self::FAILED_OPTION, array() );
+		$failures[] = array(
+			'license_id' => (int) $lic['id'],
+			'template'   => (string) $entry['template'],
+			'error'      => (string) $entry['last_error'],
+			'at'         => time(),
+		);
+		update_option( self::FAILED_OPTION, array_slice( $failures, -50 ), false );
+		$order = ! empty( $lic['order_id'] ) && function_exists( 'wc_get_order' ) ? wc_get_order( (int) $lic['order_id'] ) : null;
+		if ( $order instanceof WC_Order ) {
+			$order->add_order_note(
+				sprintf(
+					/* translators: 1: email template, 2: error */
+					__( 'The "%1$s" email to the customer could not be sent after 3 tries: %2$s', 'subtleforms-license-server' ),
+					$entry['template'],
+					$entry['last_error']
+				)
+			);
+		}
+	}
+
+	/**
+	 * Dismissible notice on the admin screens listing emails that were given up on.
+	 */
+	public static function notice(): void {
+		$failures = (array) get_option( self::FAILED_OPTION, array() );
+		if ( ! $failures || ! current_user_can( SFLS_Admin::CAP ) ) {
+			return;
+		}
+		$url = wp_nonce_url( add_query_arg( 'sfls_dismiss_email_failures', 1 ), 'sfls_dismiss_email_failures' );
+		echo '<div class="notice notice-error sfls-email-failures"><p><strong>' . esc_html__( 'SubtleForms license server: some customer emails could not be sent.', 'subtleforms-license-server' ) . '</strong></p><ul>';
+		foreach ( $failures as $f ) {
+			echo '<li>' . esc_html(
+				sprintf(
+					/* translators: 1: email template, 2: license ID, 3: error */
+					__( '"%1$s" for license #%2$d: %3$s', 'subtleforms-license-server' ),
+					(string) ( $f['template'] ?? '' ),
+					(int) ( $f['license_id'] ?? 0 ),
+					(string) ( $f['error'] ?? '' )
+				)
+			) . '</li>';
+		}
+		echo '</ul><p><a href="' . esc_url( $url ) . '">' . esc_html__( 'Dismiss', 'subtleforms-license-server' ) . '</a></p></div>';
+	}
+
+	/**
+	 * Clear the failure notice.
+	 */
+	public static function dismiss_notice(): void {
+		if ( empty( $_GET['sfls_dismiss_email_failures'] ) || ! current_user_can( SFLS_Admin::CAP ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Checked next.
+			return;
+		}
+		check_admin_referer( 'sfls_dismiss_email_failures' );
+		delete_option( self::FAILED_OPTION );
+		wp_safe_redirect( remove_query_arg( array( 'sfls_dismiss_email_failures', '_wpnonce' ) ) );
+		exit;
 	}
 
 	/**

@@ -106,6 +106,7 @@ add_action(
 		( new SFLS_Shortcodes() )->register();
 		( new SFLS_Reminders() )->register();
 		SFLS_Signing_Check::register();
+		SFLS_Billing_Emails::register();
 		( new SFLS_Upgrades() )->register();
 		( new SFLS_Checkout() )->register();
 		( new SFLS_Delivery() )->register();

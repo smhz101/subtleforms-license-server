@@ -136,9 +136,11 @@ final class SFLS_Reminders {
 					continue;
 				}
 				if ( ! $dry_run ) {
-					self::send( $lic, 'before', $left );
-					// Mark every applicable stage, so a skipped 30-day email is not sent after the 7-day one.
-					self::mark( $lic, array_map( static fn( $n ) => 'd' . $n, $applicable ) );
+					// Mark only after the mail went out; a failure is tried again on the next run.
+					if ( self::send( $lic, 'before', $left ) ) {
+						// Mark every applicable stage, so a skipped 30-day email is not sent after the 7-day one.
+						self::mark( $lic, array_map( static fn( $n ) => 'd' . $n, $applicable ) );
+					}
 				}
 				++$sent;
 			}
@@ -154,8 +156,9 @@ final class SFLS_Reminders {
 					continue;
 				}
 				if ( ! $dry_run ) {
-					self::send( $lic, 'lapsed', 0 );
-					self::mark( $lic, array( 'lapsed' ) );
+					if ( self::send( $lic, 'lapsed', 0 ) ) {
+						self::mark( $lic, array( 'lapsed' ) );
+					}
 				}
 				++$sent;
 			}
@@ -188,9 +191,11 @@ final class SFLS_Reminders {
 					continue;
 				}
 				if ( ! $dry_run ) {
-					SFLS_Billing_Emails::send_once( $lic, 'renewal_notice', $marker );
-					foreach ( $applicable as $n ) {
-						self::add_marker( $lic, 'r' . $n . '|' . $lic['renews_at'] );
+					// send_once() marks and queues retries itself; skip the other stages only when it went out.
+					if ( SFLS_Billing_Emails::send_once( $lic, 'renewal_notice', $marker ) ) {
+						foreach ( $applicable as $n ) {
+							self::add_marker( $lic, 'r' . $n . '|' . $lic['renews_at'] );
+						}
 					}
 				}
 				++$sent;
