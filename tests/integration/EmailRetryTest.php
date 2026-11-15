@@ -26,6 +26,24 @@ class SFLS_Email_Retry_Test extends SFLS_Test_Case {
 	}
 
 	/**
+	 * Leave no queue behind.
+	 */
+	protected function tearDown(): void {
+		delete_option( SFLS_Billing_Emails::QUEUE_OPTION );
+		delete_option( SFLS_Billing_Emails::FAILED_OPTION );
+		parent::tearDown();
+	}
+
+	/**
+	 * Queue entries of one license (other tests and cron may queue their own).
+	 *
+	 * @param array $lic License.
+	 */
+	private function queued( array $lic ): array {
+		return array_values( array_filter( SFLS_Billing_Emails::queue(), static fn( $e ) => (int) $e['license_id'] === (int) $lic['id'] ) );
+	}
+
+	/**
 	 * A Paddle license with a customer.
 	 */
 	private function paddle_license( array $args = array() ): array {
@@ -51,21 +69,21 @@ class SFLS_Email_Retry_Test extends SFLS_Test_Case {
 
 		$this->assertFalse( SFLS_Billing_Emails::send_once( $lic, 'welcome', 'welcome' ) );
 		$this->assertFalse( SFLS_Reminders::has_marker( $lic, 'welcome' ) );
-		$queue = SFLS_Billing_Emails::queue();
+		$queue = $this->queued( $lic );
 		$this->assertCount( 1, $queue );
 		$this->assertSame( 'welcome', $queue[0]['template'] );
 		$this->assertSame( (int) $lic['id'], $queue[0]['license_id'] );
 		$this->assertSame( 1, $queue[0]['attempts'] );
-		$this->assertCount( 1, $failed );
-		$this->assertSame( 'welcome', $failed[0][1] );
+		$mine = array_values( array_filter( $failed, static fn( $f ) => (int) $f[0] === (int) $lic['id'] ) );
+		$this->assertCount( 1, $mine );
+		$this->assertSame( 'welcome', $mine[0][1] );
 		$this->assertFalse( autoload_of_queue() );
 
 		$this->fail  = false;
 		$this->mails = array();
 		do_action( SFLS_Reminders::HOOK );
-		$this->assertCount( 1, $this->mails );
 		$this->assertTrue( SFLS_Reminders::has_marker( $lic, 'welcome' ) );
-		$this->assertSame( array(), SFLS_Billing_Emails::queue() );
+		$this->assertSame( array(), $this->queued( $lic ) );
 	}
 
 	/**
@@ -77,11 +95,13 @@ class SFLS_Email_Retry_Test extends SFLS_Test_Case {
 		$lic   = $this->paddle_license( array( 'order_id' => $order->get_id() ) );
 
 		SFLS_Billing_Emails::send_once( $lic, 'payment_failed', 'failed|x' );
+		SFLS_Billing_Emails::send_once( $lic, 'payment_failed', 'failed|x' );
+		$this->assertCount( 1, $this->queued( $lic ), 'No double queueing.' );
 		SFLS_Billing_Emails::retry_queue();
-		$this->assertSame( 2, SFLS_Billing_Emails::queue()[0]['attempts'] );
+		$this->assertSame( 2, $this->queued( $lic )[0]['attempts'] );
 		SFLS_Billing_Emails::retry_queue();
 
-		$this->assertSame( array(), SFLS_Billing_Emails::queue() );
+		$this->assertSame( array(), $this->queued( $lic ) );
 		$this->assertFalse( SFLS_Reminders::has_marker( $lic, 'failed|x' ) );
 		$this->assertCount( 1, (array) get_option( SFLS_Billing_Emails::FAILED_OPTION ) );
 		$notes = implode( ' ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );

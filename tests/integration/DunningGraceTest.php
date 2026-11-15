@@ -68,6 +68,7 @@ class SFLS_Dunning_Grace_Test extends SFLS_Test_Case {
 	 * The setting is clamped to 0..60.
 	 */
 	public function test_setting_is_sanitised(): void {
+		$this->settings( array() ); // Restores sfls_settings afterwards: save() resets every checkbox that is not posted.
 		SFLS_Settings::save( array( 'dunning_grace_days' => '500' ) );
 		$this->assertSame( 60, SFLS_Settings::dunning_grace_days() );
 		SFLS_Settings::save( array( 'dunning_grace_days' => '-4' ) );

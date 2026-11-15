@@ -156,7 +156,12 @@ final class SFLS_Billing_Emails {
 	 * @param array $entry Entry.
 	 */
 	private static function enqueue( array $entry ): void {
-		$queue   = self::queue();
+		$queue = array_values(
+			array_filter(
+				self::queue(),
+				static fn( $e ) => ( $e['license_id'] ?? 0 ) !== $entry['license_id'] || ( $e['marker'] ?? '' ) !== $entry['marker']
+			)
+		);
 		$queue[] = $entry;
 		self::save_queue( $queue );
 	}
