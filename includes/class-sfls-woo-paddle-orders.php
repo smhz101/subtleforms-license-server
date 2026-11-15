@@ -986,6 +986,20 @@ final class SFLS_Woo_Paddle_Orders {
 	}
 
 	/**
+	 * Whether a refund made from WooCommerce still waits for Paddle's decision.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	public static function refund_pending( WC_Order $order ): bool {
+		foreach ( self::adjustments_of( $order ) as $entry ) {
+			if ( 'woo' === ( $entry['source'] ?? '' ) && ! in_array( (string) ( $entry['status'] ?? '' ), array( 'approved', 'rejected' ), true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Remember which Paddle adjustment a WooCommerce refund created.
 	 *
 	 * @param int $order_id  Order.
@@ -1087,6 +1101,8 @@ final class SFLS_Woo_Paddle_Orders {
 				if ( 'approved' === $status ) {
 					/* translators: %s: adjustment ID */
 					$order->add_order_note( sprintf( __( 'Paddle approved refund %s.', 'subtleforms-license-server' ), $id ) );
+					// A threshold crossing waited for this approval.
+					( new SFLS_Woo() )->on_refund( $order->get_id() );
 				}
 				return self::result( 'updated', 'Refund ' . $status . '.' );
 			}
