@@ -1,7 +1,6 @@
 <?php
 /**
- * Domain normalisation before seat checks, the uniform anonymous trial
- * eligibility answer and the uninstall list.
+ * Domain normalisation before seat checks and the uninstall list.
  *
  * @package SFLS
  */
@@ -52,27 +51,6 @@ class SFLS_Integration_Leftovers_Test extends SFLS_Test_Case {
 		$this->assertCount( 1, SFLS_Licenses::activations( (int) $lic['id'] ) );
 		$other = SFLS_Licenses::activate_domain( SFLS_Licenses::find( (int) $lic['id'] ), 'other-shop.com' );
 		$this->assertInstanceOf( WP_Error::class, $other, 'The one seat is taken.' );
-	}
-
-	/**
-	 * An anonymous caller learns nothing about earlier trials; a signed-in
-	 * customer still gets the real answer.
-	 */
-	public function test_anonymous_eligibility_is_uniform(): void {
-		$this->paddle();
-		$used = 'used' . wp_generate_password( 6, false ) . '@' . self::DOMAIN;
-		$lic  = $this->make_license( array( 'billing' => 'paddle', 'trial' => 1, 'trial_started_at' => current_time( 'mysql', true ) ) );
-		SFLS_Trials::record_start( (int) $lic['id'], $used );
-		$fresh = 'fresh' . wp_generate_password( 6, false ) . '@' . self::DOMAIN;
-
-		$a = $this->rest( 'POST', '/sfls/v1/paddle/eligibility', array( 'email' => $used, 'plan' => 'pro' ) )->get_data();
-		$b = $this->rest( 'POST', '/sfls/v1/paddle/eligibility', array( 'email' => $fresh, 'plan' => 'pro' ) )->get_data();
-		$this->assertTrue( $a['eligible'] );
-		$this->assertTrue( $b['eligible'] );
-		$this->assertSame( $a['reason'], $b['reason'] );
-
-		$bad = $this->rest( 'POST', '/sfls/v1/paddle/eligibility', array( 'email' => 'nope', 'plan' => 'pro' ) )->get_data();
-		$this->assertSame( 'invalid_email', $bad['reason'] );
 	}
 
 	/**

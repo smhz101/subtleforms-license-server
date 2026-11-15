@@ -11,7 +11,7 @@
 // phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.NamingConventions.PrefixAllGlobals
 
 /**
- * Gateway availability, transactions, completion, trials, renewals, refunds,
+ * Gateway availability, transactions, completion, renewals, refunds,
  * upgrades and tax.
  */
 class SFLS_Paddle_Woo_Gateway_Test extends SFLS_Test_Case {
@@ -386,88 +386,53 @@ class SFLS_Paddle_Woo_Gateway_Test extends SFLS_Test_Case {
 		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
 	}
 
-	// ── Trials ──────────────────────────────────────────────────────────
+	// ── Old trial links ─────────────────────────────────────────────────
 
 	/**
-	 * A trial is a $0 order that still goes through Paddle with the trial
-	 * price, and the license starts as a 1 site trial.
+	 * Links from before trials were removed (?sfls_buy=ID&sfls_trial=1 or 0)
+	 * still work: the parameter is ignored and the plan is a normal paid line.
 	 */
-	public function test_trial_order_flow(): void {
-		$email = $this->email( 'trial' );
-		$this->cart_plan( 'pro', true );
-		$this->assertSame( 0.0, (float) WC()->cart->get_total( 'edit' ) );
-		$this->assertTrue( WC()->cart->needs_payment(), 'A $0 trial still needs Paddle to collect the card.' );
-		$contents = WC()->cart->get_cart_contents();
-		$item     = reset( $contents );
-		$rows = apply_filters( 'woocommerce_get_item_data', array(), $item );
-		$this->assertContains( 'Free for 14 days, then $79.00/year', wp_list_pluck( $rows, 'value' ) );
-		$this->assertSame( array( 'sfls_paddle' ), $this->offered() );
+	public function test_old_trial_link_adds_a_paid_line(): void {
+		$product_id = $this->plan_products['pro']->get_id();
+		foreach ( array( '1', '0' ) as $flag ) {
+			WC()->cart->empty_cart();
+			$_GET['sfls_buy']   = (string) $product_id;
+			$_GET['sfls_trial'] = $flag;
+			$redirect           = static function () {
+				throw new RuntimeException( 'redirected' );
+			};
+			add_filter( 'wp_redirect', $redirect );
+			try {
+				( new SFLS_Woo() )->handle_cart_links();
+				$this->fail( 'Expected a redirect to the checkout.' );
+			} catch ( RuntimeException $e ) {
+				$this->assertSame( 'redirected', $e->getMessage() );
+			} finally {
+				remove_filter( 'wp_redirect', $redirect );
+				unset( $_GET['sfls_buy'], $_GET['sfls_trial'] );
+			}
 
-		$order = $this->checkout_order( $email );
-		$this->assertSame( '0.00', $order->get_total() );
-		$this->assertTrue( $order->needs_payment() );
-		$items = $order->get_items();
-		$line  = reset( $items );
-		$this->assertSame( '14', (string) $line->get_meta( '_sfls_trial' ) );
-		$this->assertSame( 'Free for 14 days, then $79.00/year', $line->get_meta( 'Free trial' ) );
+			WC()->cart->calculate_totals();
+			$this->assertCount( 1, WC()->cart->get_cart() );
+			$contents = WC()->cart->get_cart_contents();
+			$item     = reset( $contents );
+			$this->assertArrayNotHasKey( 'sfls_trial', $item );
+			$this->assertSame( 79.0, (float) WC()->cart->get_total( 'edit' ), 'A paid line at the plan price.' );
+			$this->assertTrue( WC()->cart->needs_payment() );
+			$rows = apply_filters( 'woocommerce_get_item_data', array(), $item );
+			$this->assertNotContains( 'Free trial', wp_list_pluck( $rows, 'key' ) );
 
-		$this->pay( $order );
-		$body = $this->calls( 'POST', '/transactions' )[0]['body'];
-		$this->assertSame( 'pri_pro_trial', $body['items'][0]['price_id'] );
-		$this->assertSame( 'trial', $body['custom_data']['sfls_kind'] );
-		$this->assertArrayNotHasKey( 'discount', $body );
-
-		$txn = $this->completed_txn( $order );
-		$this->assertSame( '0', $txn['details']['totals']['total'] );
-		$this->webhook( 'transaction.completed', $txn );
-		$order = wc_get_order( $order->get_id() );
-		$this->assertSame( 'completed', $order->get_status() );
-		$lic = $this->licenses_of_order( $order->get_id() )[0];
-		$this->assertSame( '1', (string) $lic['trial'] );
-		$this->assertSame( '1', (string) $lic['sites_allowed'] );
-		$this->assertSame( 'trialing', $lic['billing_status'] );
-		$this->assertNotEmpty( $lic['trial_ends_at'] );
-		$this->assertFalse( SFLS_Trials::check( $email )['eligible'], 'The trial is claimed.' );
-
-		// The same person cannot start a second trial at checkout.
-		WC()->cart->empty_cart();
-		$this->cart_plan( 'pro', true );
-		$errors = new WP_Error();
-		( new SFLS_Woo_Paddle() )->classic_validate(
-			array(
-				'billing_email'  => $email,
-				'payment_method' => 'sfls_paddle',
-			),
-			$errors
-		);
-		$message = (string) $errors->get_error_message( 'sfls_trial' );
-		$this->assertStringContainsString( 'already had a free trial', $message );
-		$this->assertStringContainsString( 'sfls_trial=0', $message, 'Offers to buy without the trial.' );
-
-		// Store API (Checkout block) refuses it too.
-		$second = $this->checkout_order( $email );
-		try {
-			( new SFLS_Woo_Paddle() )->store_api_validate( $second );
-			$this->fail( 'Expected a RouteException.' );
-		} catch ( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException $e ) {
-			$this->assertSame( 'sfls_trial_not_eligible', $e->getErrorCode() );
-			$this->assertStringContainsString( 'Buy without the free trial', $e->getMessage() );
+			$order = $this->checkout_order( $this->email( 'old' ) );
+			$items = $order->get_items();
+			$line  = reset( $items );
+			$this->assertSame( '', (string) $line->get_meta( '_sfls_trial' ), 'No trial meta on the order line.' );
+			$this->assertSame( '', (string) $line->get_meta( 'Free trial' ) );
+			$this->assertSame( 79.0, (float) $order->get_total() );
+			$this->pay( $order );
+			$body = $this->calls( 'POST', '/transactions' )[ count( $this->calls( 'POST', '/transactions' ) ) - 1 ]['body'];
+			$this->assertSame( 'pri_pro', $body['items'][0]['price_id'] );
+			$this->assertSame( 'subscription', $body['custom_data']['sfls_kind'] );
 		}
-
-		// Buying without the trial swaps the cart line.
-		( new SFLS_Woo() )->buy( $this->plan_products['pro']->get_id(), false );
-		WC()->cart->calculate_totals();
-		$this->assertSame( 79.0, (float) WC()->cart->get_total( 'edit' ) );
-		$this->assertCount( 1, WC()->cart->get_cart() );
-		$errors = new WP_Error();
-		( new SFLS_Woo_Paddle() )->classic_validate(
-			array(
-				'billing_email'  => $email,
-				'payment_method' => 'sfls_paddle',
-			),
-			$errors
-		);
-		$this->assertFalse( $errors->has_errors() );
 	}
 
 	// ── Renewals ────────────────────────────────────────────────────────
@@ -478,7 +443,7 @@ class SFLS_Paddle_Woo_Gateway_Test extends SFLS_Test_Case {
 	 */
 	public function test_renewal_creates_order_without_new_license(): void {
 		$user  = $this->make_user();
-		$order = $this->buy_with_paddle( $user->user_email, 'pro', false, $user );
+		$order = $this->buy_with_paddle( $user->user_email, 'pro', $user );
 		$lic   = $this->licenses_of_order( $order->get_id() )[0];
 		$sub   = $this->subs[ $lic['paddle_subscription_id'] ];
 		$this->mails = array();
@@ -704,7 +669,7 @@ class SFLS_Paddle_Woo_Gateway_Test extends SFLS_Test_Case {
 	 */
 	public function test_upgrade_updates_subscription(): void {
 		$user  = $this->make_user();
-		$order = $this->buy_with_paddle( $user->user_email, 'pro', false, $user );
+		$order = $this->buy_with_paddle( $user->user_email, 'pro', $user );
 		$lic   = $this->licenses_of_order( $order->get_id() )[0];
 		$sub   = $this->subs[ $lic['paddle_subscription_id'] ];
 		wp_set_current_user( $user->ID );
@@ -737,7 +702,7 @@ class SFLS_Paddle_Woo_Gateway_Test extends SFLS_Test_Case {
 		) + $this->paddle_routes;
 
 		WC()->cart->empty_cart();
-		$this->cart_plan( 'agency', false, array( 'sfls_upgrade_license' => (int) $lic['id'] ) );
+		$this->cart_plan( 'agency', array( 'sfls_upgrade_license' => (int) $lic['id'] ) );
 		$this->assertSame( array( 'sfls_paddle' ), $this->offered() );
 		$estimate = (float) WC()->cart->get_total( 'edit' );
 		$this->assertGreaterThan( 100, $estimate );
@@ -788,36 +753,6 @@ class SFLS_Paddle_Woo_Gateway_Test extends SFLS_Test_Case {
 		$this->assertSame( array(), $this->mails_with( 'payment' ), 'The upgrade order already told the customer.' );
 	}
 
-	/**
-	 * During a trial an upgrade charges nothing and still goes through Paddle.
-	 */
-	public function test_upgrade_during_trial(): void {
-		$user  = $this->make_user();
-		$order = $this->buy_with_paddle( $user->user_email, 'pro', true, $user );
-		$lic   = $this->licenses_of_order( $order->get_id() )[0];
-		$this->assertSame( 'trialing', $lic['billing_status'] );
-		$sub = $this->subs[ $lic['paddle_subscription_id'] ];
-		wp_set_current_user( $user->ID );
-		$this->paddle_routes = array(
-			'#^PATCH /subscriptions/sub_\w+$#' => function ( $call ) use ( $sub ) {
-				$sub['items'][0]['price']['id'] = $call['body']['items'][0]['price_id'];
-				return $sub;
-			},
-		) + $this->paddle_routes;
-
-		WC()->cart->empty_cart();
-		$this->cart_plan( 'agency', false, array( 'sfls_upgrade_license' => (int) $lic['id'] ) );
-		$this->assertSame( 0.0, (float) WC()->cart->get_total( 'edit' ) );
-		$this->assertTrue( WC()->cart->needs_payment() );
-		$upgrade = $this->checkout_order( $user->user_email );
-		$this->assertSame( 'success', $this->pay( $upgrade )['result'] );
-		$patch = $this->calls( 'PATCH', '/subscriptions/' . $sub['id'] )[0]['body'];
-		$this->assertSame( 'do_not_bill', $patch['proration_billing_mode'] );
-		$this->assertEmpty( $this->calls( 'PATCH', '/subscriptions/' . $sub['id'] . '/preview' ) );
-		$this->assertSame( 'completed', wc_get_order( $upgrade->get_id() )->get_status() );
-		$this->assertSame( 'agency', SFLS_Licenses::find( (int) $lic['id'] )['plan'] );
-	}
-
 	// ── Tax, pricing, migration ─────────────────────────────────────────
 
 	/**
@@ -857,15 +792,15 @@ class SFLS_Paddle_Woo_Gateway_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * The pricing cards link to the cart, with the trial flag.
+	 * The pricing cards link to the cart.
 	 */
 	public function test_pricing_links_to_cart(): void {
 		wp_dequeue_script( 'sfls-paddle' ); // Left over from the overlay tests.
 		$html = do_shortcode( '[sfls_pricing]' );
 		$pro  = $this->plan_products['pro']->get_id();
-		$this->assertStringContainsString( 'sfls_buy=' . $pro . '&#038;sfls_trial=1', $html );
-		$this->assertStringContainsString( 'Start 14-day free trial', $html );
-		$this->assertStringContainsString( 'or buy now without a trial', $html );
+		$this->assertStringContainsString( 'sfls_buy=' . $pro, $html );
+		$this->assertStringNotContainsString( 'sfls_trial', $html );
+		$this->assertStringNotContainsString( 'free trial', $html );
 		$this->assertStringContainsString( 'sfls_buy=' . $this->plan_products['agency']->get_id(), $html );
 		$this->assertStringNotContainsString( 'sfls-paddle-buy', $html );
 		$this->assertFalse( wp_script_is( 'sfls-paddle', 'enqueued' ), 'No Paddle.js on the pricing page.' );

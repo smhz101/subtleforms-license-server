@@ -78,26 +78,6 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * Upgrading during a trial switches to the new plan's trial price and
-	 * bills nothing now; the trial stays at 1 site.
-	 */
-	public function test_upgrade_during_trial(): void {
-		[ $lic, $sub ] = $this->start_trial();
-		$this->paddle_routes[ 'PATCH /subscriptions/' . $sub['id'] ] = static function ( $call ) use ( $sub ) {
-			$updated                            = $sub;
-			$updated['items'][0]['price']['id'] = $call['body']['items'][0]['price_id'];
-			$updated['custom_data']['sfls_plan'] = 'agency';
-			return $updated;
-		};
-		$after = SFLS_Billing::change_plan( $lic, 'agency' );
-		$body  = $this->calls( 'PATCH', '/subscriptions/' . $sub['id'] )[0]['body'];
-		$this->assertSame( 'do_not_bill', $body['proration_billing_mode'] );
-		$this->assertSame( 'pri_agency', $body['items'][0]['price_id'], 'Agency has no trial price, so its yearly price is used.' );
-		$this->assertSame( 'agency', $after['plan'] );
-		$this->assertSame( 1, (int) $after['sites_allowed'] );
-	}
-
-	/**
 	 * A refused update leaves the license alone and returns the error.
 	 */
 	public function test_failed_upgrade_changes_nothing(): void {
@@ -232,54 +212,31 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * A trial card says when it ends, that it covers 1 site, and offers Cancel.
-	 */
-	public function test_members_area_trial_card(): void {
-		$user = $this->make_user();
-		[ $lic ] = $this->start_trial( $user->user_email );
-		// The owner has confirmed the address (SFLS_Claims), which links it.
-		SFLS_Licenses::update( (int) $lic['id'], array( 'user_id' => (int) $user->ID ) );
-		$lic = SFLS_Licenses::find( (int) $lic['id'] );
-		wp_set_current_user( $user->ID );
-		ob_start();
-		( new SFLS_Account() )->licenses_page();
-		$html = (string) ob_get_clean();
-		$this->assertStringContainsString( 'Free trial', $html );
-		$this->assertStringContainsString( 'Trial ends on', $html );
-		$this->assertStringContainsString( 'Trial covers 1 site', $html );
-		$this->assertStringContainsString( 'Then $79.00 a year', $html );
-		$this->assertStringContainsString( 'value="cancel"', $html );
-		$this->assertSame( (int) $user->ID, (int) $lic['user_id'] );
-	}
-
-	/**
 	 * Payload: billing fields for every kind of license; old fields stay.
 	 */
 	public function test_payload_fields(): void {
 		$old = array( 'valid', 'status', 'plan', 'features', 'expires_at', 'grace_period_ends_at', 'sites_allowed', 'sites_used', 'check_again_in', 'is_local' );
-		$new = array( 'billing', 'billing_status', 'trial', 'trial_ends_at', 'renews_at', 'cancels_at', 'renewal_amount', 'manage_url', 'branding_version' );
+		$new = array( 'billing', 'billing_status', 'renews_at', 'cancels_at', 'renewal_amount', 'manage_url', 'branding_version' );
 
 		$manual = SFLS_Licenses::payload( $this->make_license() );
 		foreach ( array_merge( $old, $new ) as $key ) {
 			$this->assertArrayHasKey( $key, $manual, $key );
 		}
 		$this->assertSame( 'manual', $manual['billing'] );
-		$this->assertFalse( $manual['trial'] );
 		$this->assertNull( $manual['billing_status'] );
-		$this->assertNull( $manual['trial_ends_at'] );
 		$this->assertNull( $manual['renewal_amount'] );
 
 		$woo = SFLS_Licenses::payload( $this->make_license( array( 'order_id' => 123456 ) ) );
 		$this->assertSame( 'woocommerce', $woo['billing'] );
 
-		[ $trial ] = $this->start_trial();
-		$payload   = SFLS_Licenses::payload( $trial, 'example.com' );
+		[ $paddle ] = $this->start_subscription();
+		$payload    = SFLS_Licenses::payload( $paddle, 'example.com' );
 		$this->assertTrue( $payload['valid'] );
 		$this->assertSame( 'valid', $payload['status'], 'Old Pro versions see a normal valid license.' );
 		$this->assertSame( 'paddle', $payload['billing'] );
-		$this->assertSame( 'trialing', $payload['billing_status'] );
-		$this->assertTrue( $payload['trial'] );
-		$this->assertMatchesRegularExpression( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$/', $payload['trial_ends_at'] );
+		$this->assertSame( 'active', $payload['billing_status'] );
+		$this->assertArrayNotHasKey( 'trial', $payload );
+		$this->assertArrayNotHasKey( 'trial_ends_at', $payload );
 		$this->assertNotNull( $payload['renews_at'] );
 		$this->assertNull( $payload['cancels_at'] );
 		$this->assertSame( '$79.00', $payload['renewal_amount'] );
@@ -287,36 +244,31 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 		$this->assertFalse( $payload['is_local'] );
 
 		// Through the REST API Pro calls.
-		SFLS_Licenses::add_activation( (int) $trial['id'], 'example.com' );
+		SFLS_Licenses::add_activation( (int) $paddle['id'], 'example.com' );
 		$api = $this->rest(
 			'POST',
 			'/sfls/v1/license/validate',
 			array(
-				'license_key' => $trial['license_key'],
+				'license_key' => $paddle['license_key'],
 				'site_url'    => 'https://example.com',
 			)
 		)->get_data();
-		$this->assertTrue( $api['trial'] );
 		$this->assertSame( 'paddle', $api['billing'] );
 		$this->assertTrue( $api['valid'] );
 	}
 
 	/**
-	 * Trial ending (3 days before) and renewal notices (14 and 3 days),
-	 * once each; WooCommerce reminders skip Paddle licenses.
+	 * Renewal notices (14 and 3 days), once each; WooCommerce reminders skip
+	 * Paddle licenses.
 	 */
-	public function test_trial_and_renewal_notices(): void {
+	public function test_renewal_notices(): void {
 		$this->settings(
 			array(
-				'trial_notice'    => 3,
 				'renewal_notice'  => '14,3',
 				'reminder_days'   => '30,7',
 				'lapsed_reminder' => 0,
 			)
 		);
-		[ $trial ] = $this->start_trial();
-		SFLS_Licenses::update( (int) $trial['id'], array( 'trial_ends_at' => gmdate( 'Y-m-d H:i:s', time() + 2 * DAY_IN_SECONDS ) ) );
-
 		[ $paid ] = $this->paid();
 		SFLS_Licenses::update(
 			(int) $paid['id'],
@@ -328,12 +280,7 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 		$this->mails = array();
 
 		SFLS_Reminders::run();
-		$trial_mail = array_values( array_filter( $this->mails, static fn( $m ) => str_contains( $m['subject'], 'trial ends on' ) ) );
-		$this->assertCount( 1, $trial_mail );
-		$this->assertStringContainsString( '$79.00', $trial_mail[0]['message'] );
-		$this->assertStringContainsString( 'Cancel auto-renew', $trial_mail[0]['message'] );
-		$this->assertStringContainsString( wp_date( get_option( 'date_format' ), time() + 2 * DAY_IN_SECONDS ), $trial_mail[0]['message'] );
-
+		$this->assertSame( array(), array_values( array_filter( $this->mails, static fn( $m ) => str_contains( $m['subject'], 'trial' ) ) ), 'No trial email exists any more.' );
 		$renewal = array_values( array_filter( $this->mails, static fn( $m ) => str_contains( $m['subject'], 'SubtleForms Pro renews on' ) ) );
 		$this->assertCount( 1, $renewal );
 		$this->assertStringContainsString( '$79.00', $renewal[0]['message'] );
@@ -385,7 +332,7 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 
 		$sub = $this->subscription();
 		$txn = 'txn_' . strtolower( wp_generate_password( 14, false, false ) );
-		[ $lic ] = $this->start_trial( '', array( 'id' => $sub['id'] ) + $sub );
+		[ $lic ] = $this->start_subscription( '', array( 'id' => $sub['id'] ) + $sub );
 		SFLS_Licenses::update( (int) $lic['id'], array( 'paddle_transaction_id' => $txn ) );
 		$token = $sub['custom_data']['sfls_token'];
 		SFLS_Licenses::update( (int) $lic['id'], array( 'checkout_token_hash' => hash( 'sha256', $token ) ) );
@@ -401,8 +348,8 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 		$this->assertTrue( $ready['ready'] );
 		$this->assertTrue( $ready['authorized'] );
 		$this->assertSame( $lic['license_key'], $ready['license_key'] );
-		$this->assertTrue( $ready['trial'] );
-		$this->assertNotSame( '', $ready['trial_ends'] );
+		$this->assertArrayNotHasKey( 'trial', $ready );
+		$this->assertArrayNotHasKey( 'trial_ends', $ready );
 		$this->assertSame( '$79.00', $ready['amount'] );
 
 		$stranger = $this->rest(
@@ -419,27 +366,17 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 	}
 
 	/**
-	 * Pricing in Paddle mode: trial and buy buttons with the right data.
+	 * Pricing in Paddle mode: buy buttons with the right data.
 	 */
 	public function test_pricing_cards(): void {
 		$html = ( new SFLS_Shortcodes() )->pricing( array() );
-		$this->assertStringContainsString( 'Start 14-day free trial', $html );
-		$this->assertStringContainsString( 'Start 7-day free trial', $html );
-		$this->assertStringContainsString( 'Then $79/year, cancel anytime', $html );
-		$this->assertStringContainsString( 'data-trial-price="pri_pro_trial"', $html );
+		$this->assertStringContainsString( 'Buy Pro', $html );
+		$this->assertStringContainsString( 'data-price="pri_pro"', $html );
 		$this->assertStringContainsString( 'data-price="pri_agency"', $html );
 		$this->assertStringContainsString( 'Buy Agency', $html );
-		$this->assertStringContainsString( 'sfls-trial-email', $html );
+		$this->assertStringContainsString( 'Billed yearly, cancel anytime', $html );
+		$this->assertStringNotContainsStringIgnoringCase( 'trial', $html );
 		$this->assertTrue( wp_script_is( 'sfls-paddle', 'enqueued' ) );
-
-		// A signed-in customer who had a trial sees Buy now with the reason.
-		$user = $this->make_user();
-		SFLS_Trials::record_start( (int) $this->make_license()['id'], $user->user_email );
-		wp_set_current_user( $user->ID );
-		$html = ( new SFLS_Shortcodes() )->pricing( array() );
-		$this->assertStringNotContainsString( 'free trial</button>', $html );
-		$this->assertStringContainsString( 'data-mode="buy"', $html );
-		$this->assertStringContainsString( 'already had a free trial', $html );
 	}
 
 	/**
@@ -457,7 +394,6 @@ class SFLS_Paddle_Billing_Test extends SFLS_Test_Case {
 		SFLS_Licenses::update( (int) $old['id'], array( 'billing' => '' ) );
 		SFLS_DB::install();
 		$this->assertSame( 'woocommerce', SFLS_Licenses::find( (int) $old['id'] )['billing'] );
-		$this->assertSame( 0, (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}sfls_trial_claims WHERE kind = 'nothing'" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$this->assertNotNull( $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}sfls_paddle_events" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 }
