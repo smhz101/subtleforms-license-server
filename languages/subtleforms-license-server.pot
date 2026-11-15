@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-15T09:58:13+00:00\n"
+"POT-Creation-Date: 2026-11-15T09:59:17+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: subtleforms-license-server\n"
@@ -121,7 +121,7 @@ msgid "%s sites, no limit"
 msgstr ""
 
 #: includes/class-sfls-account.php:347
-#: includes/class-sfls-billing-emails.php:379
+#: includes/class-sfls-billing-emails.php:384
 #: includes/class-sfls-checkout-paddle.php:331
 #: includes/class-sfls-delivery.php:276
 #: includes/class-sfls-delivery.php:506
@@ -188,8 +188,8 @@ msgstr ""
 #: includes/class-sfls-admin.php:760
 #: includes/class-sfls-admin.php:772
 #: includes/class-sfls-admin.php:801
-#: includes/class-sfls-billing-emails.php:372
-#: includes/class-sfls-billing-emails.php:410
+#: includes/class-sfls-billing-emails.php:377
+#: includes/class-sfls-billing-emails.php:415
 #: includes/class-sfls-reminders.php:285
 #: includes/class-sfls-woo.php:343
 msgid "Sites"
@@ -251,7 +251,7 @@ msgstr ""
 
 #: includes/class-sfls-account.php:520
 #: includes/class-sfls-admin.php:597
-#: includes/class-sfls-billing-emails.php:373
+#: includes/class-sfls-billing-emails.php:378
 msgid "Renews"
 msgstr ""
 
@@ -272,13 +272,13 @@ msgid "Your last payment failed. Update your card to keep Pro working."
 msgstr ""
 
 #: includes/class-sfls-account.php:584
-#: includes/class-sfls-billing-emails.php:462
+#: includes/class-sfls-billing-emails.php:467
 msgid "Update payment method"
 msgstr ""
 
 #: includes/class-sfls-account.php:592
 #: includes/class-sfls-admin.php:352
-#: includes/class-sfls-billing-emails.php:474
+#: includes/class-sfls-billing-emails.php:479
 msgid "Resume"
 msgstr ""
 
@@ -479,8 +479,8 @@ msgstr ""
 
 #: includes/class-sfls-account.php:965
 #: includes/class-sfls-admin.php:1181
-#: includes/class-sfls-billing-emails.php:409
-#: includes/class-sfls-billing-emails.php:438
+#: includes/class-sfls-billing-emails.php:414
+#: includes/class-sfls-billing-emails.php:443
 #: includes/class-sfls-connect.php:539
 #: includes/class-sfls-reminders.php:283
 msgid "License"
@@ -767,7 +767,7 @@ msgid "None"
 msgstr ""
 
 #: includes/class-sfls-account.php:1320
-#: includes/class-sfls-billing-emails.php:439
+#: includes/class-sfls-billing-emails.php:444
 msgid "Next renewal"
 msgstr ""
 
@@ -1679,7 +1679,7 @@ msgstr ""
 #: includes/class-sfls-admin.php:801
 #: includes/class-sfls-admin.php:836
 #: includes/class-sfls-admin.php:1142
-#: includes/class-sfls-billing-emails.php:371
+#: includes/class-sfls-billing-emails.php:376
 #: includes/class-sfls-reminders.php:282
 #: includes/class-sfls-woo.php:336
 msgid "Plan"
@@ -2743,72 +2743,72 @@ msgid "wp_mail returned false"
 msgstr ""
 
 #. translators: 1: email template, 2: error
-#: includes/class-sfls-billing-emails.php:213
+#: includes/class-sfls-billing-emails.php:218
 #, php-format
 msgid "The \"%1$s\" email to the customer could not be sent after 3 tries: %2$s"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:230
+#: includes/class-sfls-billing-emails.php:235
 msgid "SubtleForms license server: some customer emails could not be sent."
 msgstr ""
 
 #. translators: 1: email template, 2: license ID, 3: error
-#: includes/class-sfls-billing-emails.php:235
+#: includes/class-sfls-billing-emails.php:240
 #, php-format
 msgid "\"%1$s\" for license #%2$d: %3$s"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:242
+#: includes/class-sfls-billing-emails.php:247
 msgid "Dismiss"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:294
+#: includes/class-sfls-billing-emails.php:299
 msgid "This is a test. The license shown is an example and no customer received this email."
 msgstr ""
 
 #. translators: %s: first name
-#: includes/class-sfls-billing-emails.php:351
+#: includes/class-sfls-billing-emails.php:356
 #: includes/class-sfls-reminders.php:288
 #, php-format
 msgid "Hi %s,"
 msgstr ""
 
 #. translators: %s: first name
-#: includes/class-sfls-billing-emails.php:351
+#: includes/class-sfls-billing-emails.php:356
 #: includes/class-sfls-delivery.php:190
 #: includes/class-sfls-reminders.php:288
 msgid "Hi,"
 msgstr ""
 
 #. translators: %s: support email
-#: includes/class-sfls-billing-emails.php:355
+#: includes/class-sfls-billing-emails.php:360
 #: includes/class-sfls-delivery.php:207
 #: includes/class-sfls-reminders.php:299
 #, php-format
 msgid "Questions? Reply to this email or write to %s."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:359
+#: includes/class-sfls-billing-emails.php:364
 msgid "plus sales tax or VAT where it applies"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:364
+#: includes/class-sfls-billing-emails.php:369
 #: includes/class-sfls-delivery.php:189
 #: includes/class-sfls-woo.php:288
 msgid "Your SubtleForms Pro license key"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:365
+#: includes/class-sfls-billing-emails.php:370
 #: includes/class-sfls-checkout-paddle.php:261
 #: includes/class-sfls-checkout-paddle.php:324
 msgid "Welcome to SubtleForms Pro"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:367
+#: includes/class-sfls-billing-emails.php:372
 msgid "Thanks for buying SubtleForms Pro. Here is your license key."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:381
+#: includes/class-sfls-billing-emails.php:386
 #: includes/class-sfls-delivery.php:93
 #: includes/class-sfls-delivery.php:199
 #: includes/class-sfls-delivery.php:489
@@ -2816,101 +2816,101 @@ msgstr ""
 msgid "How to install Pro"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:387
+#: includes/class-sfls-billing-emails.php:392
 msgid "We created an account for you with this email address. A separate email has a link to set your password, so you can sign in to download Pro and manage your license."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:389
+#: includes/class-sfls-billing-emails.php:394
 msgid "Paddle, our payment provider, sends the receipt for the payment separately."
 msgstr ""
 
 #. translators: %s: date
-#: includes/class-sfls-billing-emails.php:395
+#: includes/class-sfls-billing-emails.php:400
 #, php-format
 msgid "SubtleForms Pro renews on %s"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:396
+#: includes/class-sfls-billing-emails.php:401
 msgid "Your yearly renewal is coming up"
 msgstr ""
 
 #. translators: 1: plan, 2: date, 3: amount, 4: tax note
-#: includes/class-sfls-billing-emails.php:400
+#: includes/class-sfls-billing-emails.php:405
 #, php-format
 msgid "Your SubtleForms Pro %1$s license renews automatically on %2$s. We will charge %3$s (%4$s) to the card on file, and Pro keeps running with updates and support for another year."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:403
+#: includes/class-sfls-billing-emails.php:408
 msgid "the plan price"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:413
+#: includes/class-sfls-billing-emails.php:418
 msgid "To change the card, or to stop the renewal, open My Account › Licenses and use Update payment method or Cancel auto-renew."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:414
+#: includes/class-sfls-billing-emails.php:419
 msgid "Manage billing"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:418
+#: includes/class-sfls-billing-emails.php:423
 msgid "Payment received for SubtleForms Pro"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:419
+#: includes/class-sfls-billing-emails.php:424
 msgid "Thanks, your payment went through"
 msgstr ""
 
 #. translators: 1: amount, 2: plan
-#: includes/class-sfls-billing-emails.php:423
+#: includes/class-sfls-billing-emails.php:428
 #, php-format
 msgid "We received %1$s for your upgrade. Your license is now on the %2$s plan with the same key."
 msgstr ""
 
 #. translators: 1: amount, 2: plan
-#: includes/class-sfls-billing-emails.php:430
+#: includes/class-sfls-billing-emails.php:435
 #, php-format
 msgid "We received %1$s and renewed your SubtleForms Pro %2$s license for another year."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:442
+#: includes/class-sfls-billing-emails.php:447
 msgid "Paddle, our payment provider, emails the receipt separately."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:446
+#: includes/class-sfls-billing-emails.php:451
 msgid "Payment failed for SubtleForms Pro"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:447
+#: includes/class-sfls-billing-emails.php:452
 msgid "We could not charge your card"
 msgstr ""
 
 #. translators: %s: plan
-#: includes/class-sfls-billing-emails.php:451
+#: includes/class-sfls-billing-emails.php:456
 #, php-format
 msgid "The payment for your SubtleForms Pro %s license did not go through. Paddle will try again over the next days."
 msgstr ""
 
 #. translators: %s: date
-#: includes/class-sfls-billing-emails.php:458
+#: includes/class-sfls-billing-emails.php:463
 #, php-format
 msgid "Pro keeps working until %s. Update your payment method to keep it running without a break."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:467
+#: includes/class-sfls-billing-emails.php:472
 msgid "Auto-renew is off for SubtleForms Pro"
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:468
+#: includes/class-sfls-billing-emails.php:473
 msgid "Your subscription is canceled"
 msgstr ""
 
 #. translators: %s: date
-#: includes/class-sfls-billing-emails.php:470
+#: includes/class-sfls-billing-emails.php:475
 #, php-format
 msgid "Auto-renew is off. Your license stays active until %s, the end of the period you paid for, and then Pro stops on your sites."
 msgstr ""
 
-#: includes/class-sfls-billing-emails.php:473
+#: includes/class-sfls-billing-emails.php:478
 msgid "Changed your mind? Click Resume in My Account › Licenses before that date and nothing changes."
 msgstr ""
 
