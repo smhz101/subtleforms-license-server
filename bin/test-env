@@ -41,8 +41,8 @@ if [ -z "${SFLS_WP_PATH:-}" ]; then
 	wp wc hpos enable
 	wp rewrite structure '/%postname%/'
 	wp option update woocommerce_cheque_settings '{"enabled":"yes","title":"Check payments"}' --format=json
-	# The CI job also seeds one license, one published release and the product wizard
-	# (see "Install WooCommerce and activate the plugin" in checks.yml); keep in sync if tests need it.
+	# The same seed as CI (plans pricing, one license, one published release).
+	wp eval-file "$root/tests/bin/seed-site.php"
 	wp config set WP_HTTP_BLOCK_EXTERNAL true --raw
 	export SFLS_WP_PATH="$WP_DIR"
 	echo "Throwaway WordPress at $WP_DIR"
