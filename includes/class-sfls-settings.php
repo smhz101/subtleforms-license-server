@@ -38,6 +38,8 @@ final class SFLS_Settings {
 			'trusted_proxy'    => 0,
 			// 1.10.1: days Pro keeps working while Paddle retries a failed renewal payment.
 			'dunning_grace_days' => 30,
+			// 1.11.0: percent of an order that must be refunded before its licenses are suspended.
+			'refund_suspend_threshold' => 100,
 		);
 	}
 
@@ -78,6 +80,9 @@ final class SFLS_Settings {
 		}
 		if ( array_key_exists( 'dunning_grace_days', $input ) ) {
 			$values['dunning_grace_days'] = min( 60, absint( $input['dunning_grace_days'] ) );
+		}
+		if ( array_key_exists( 'refund_suspend_threshold', $input ) ) {
+			$values['refund_suspend_threshold'] = max( 1, min( 100, absint( $input['refund_suspend_threshold'] ) ) );
 		}
 		if ( array_key_exists( 'retention_days', $input ) ) {
 			$values['retention_days'] = min( 3650, absint( $input['retention_days'] ) );
@@ -214,6 +219,13 @@ final class SFLS_Settings {
 		$days = array_unique( array_filter( array_map( 'absint', explode( ',', (string) self::get( 'renewal_notice' ) ) ) ) );
 		rsort( $days );
 		return array_values( $days );
+	}
+
+	/**
+	 * Percent of an order that must be refunded to suspend its licenses (1 to 100).
+	 */
+	public static function refund_suspend_threshold(): int {
+		return max( 1, min( 100, absint( self::get( 'refund_suspend_threshold' ) ) ) );
 	}
 
 	/**
