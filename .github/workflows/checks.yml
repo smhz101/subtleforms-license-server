@@ -44,9 +44,15 @@ jobs:
           exit $status
 
   phpunit:
-    name: PHPUnit
+    # The 10.2.1 run keeps the plain name "PHPUnit" because branch protection requires it.
+    name: ${{ matrix.wc == '10.2.1' && 'PHPUnit' || format('PHPUnit (WooCommerce {0})', matrix.wc) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # 10.2.1 is the verified pin; 11.3.0 is what production runs.
+        wc: ['10.2.1', '11.3.0']
     services:
       mysql:
         image: mysql:8.0
@@ -62,7 +68,7 @@ jobs:
           --health-retries=20
     env:
       WP_DIR: /tmp/wordpress
-      WC_VERSION: '10.2.1'
+      WC_VERSION: ${{ matrix.wc }}
     steps:
       - uses: actions/checkout@v4
         with:

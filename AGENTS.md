@@ -56,6 +56,13 @@ Local inspection, tests on disposable WordPress, and drafting PRs are allowed.
 
 - Integration suite: `SFLS_WP_PATH=/path/to/wordpress phpunit -c phpunit.xml` (WooCommerce required)
 
+## Running tests
+
+- One command: `composer install && bin/test-env` (extra args go to phpunit, e.g. `bin/test-env --filter ReleaseApi`).
+- With `SFLS_WP_PATH` set it uses that WordPress. Otherwise it builds a throwaway site (needs `wp`, MySQL via `DB_HOST/DB_USER/DB_PASS/DB_NAME`) with WooCommerce `WC_VERSION` (default: the CI pin). Env vars are documented at the top of `bin/test-env`.
+- The bootstrap allows http for the release API, as CI does via `WP_ENVIRONMENT_TYPE=local`.
+- CI runs PHPUnit against WooCommerce 10.2.1 and 11.3.0 (production runs 11.3.x).
+
 ## Cursor AI team
 
 Project subagents, skills, and commands live under `.cursor/` (see `.cursor/AI_TEAM.md`). Orchestration and stop rules: `.cursor/AI_TEAM.md`. They delegate to this file and `.cursor/rules/subtleforms-license-server.mdc`; they do not replace them.

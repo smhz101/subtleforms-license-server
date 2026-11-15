@@ -1,0 +1,15 @@
+{
+	"name": "subtleforms/license-server",
+	"description": "Development tooling for the SubtleForms License Server plugin (not shipped).",
+	"type": "wordpress-plugin",
+	"license": "proprietary",
+	"require-dev": {
+		"phpunit/phpunit": "^9.6"
+	},
+	"config": {
+		"sort-packages": true
+	},
+	"scripts": {
+		"test": "phpunit -c phpunit.xml"
+	}
+}
