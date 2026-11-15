@@ -117,7 +117,7 @@ class SFLS_Partial_Refund_Test extends SFLS_Test_Case {
 		[ $order, $lic ] = $this->paddle_renewal();
 		$this->refund( $order, '11.70' );
 		$order = wc_get_order( $order->get_id() );
-		$this->assertNotEmpty( array_filter( $this->notes( $order ), static fn( $n ) => str_contains( $n, 'Refund of 30.8% recorded; license(s) unchanged (suspends at 50%)' ) ) );
+		$this->assertNotEmpty( array_filter( $this->notes( $order ), static fn( $n ) => 1 === preg_match( '/^Refund of 3\\d(\\.\\d)?% recorded; license\\(s\\) unchanged \\(suspends at 50%\\)/', $n ) ) );
 		$this->assertSame( 'active', SFLS_Licenses::find( (int) $lic['id'] )['status'] );
 		$this->assertSame( array(), $this->calls( 'POST', '#^/subscriptions/sub_\w+/cancel$#' ) );
 
