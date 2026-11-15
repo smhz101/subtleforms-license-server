@@ -1276,11 +1276,13 @@ final class SFLS_Woo_Paddle_Orders {
 	 */
 	public static function cancel_on_full_refund( $order_id ): void {
 		$order = wc_get_order( (int) $order_id );
-		if ( ! $order instanceof WC_Order || SFLS_Woo_Paddle::GATEWAY !== $order->get_payment_method() || 'yes' === $order->get_meta( '_sfls_paddle_renewal' ) || ! SFLS_Paddle::has_api_key() ) {
+		if ( ! $order instanceof WC_Order || SFLS_Woo_Paddle::GATEWAY !== $order->get_payment_method() || ! SFLS_Paddle::has_api_key() ) {
 			return;
 		}
-		foreach ( SFLS_Woo::order_licenses( $order->get_id() ) as $lic ) {
-			if ( (int) $lic['order_id'] !== $order->get_id() || ! SFLS_Licenses::is_paddle( $lic ) || 'canceled' === $lic['billing_status'] ) {
+		$renewal = 'yes' === $order->get_meta( '_sfls_paddle_renewal' );
+		$lics    = $renewal ? SFLS_Woo::renewal_refund_licenses( $order ) : SFLS_Woo::order_licenses( $order->get_id() );
+		foreach ( $lics as $lic ) {
+			if ( ( ! $renewal && (int) $lic['order_id'] !== $order->get_id() ) || ! SFLS_Licenses::is_paddle( $lic ) || 'canceled' === $lic['billing_status'] ) {
 				continue;
 			}
 			$sub = SFLS_Paddle::cancel_subscription( (string) $lic['paddle_subscription_id'], true );

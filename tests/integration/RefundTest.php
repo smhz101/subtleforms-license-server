@@ -10,6 +10,8 @@
  */
 class SFLS_Refund_Test extends SFLS_Test_Case {
 
+	use SFLS_Paddle_Helpers;
+
 	/**
 	 * A license of a customer that expires in some days.
 	 *
@@ -160,5 +162,85 @@ class SFLS_Refund_Test extends SFLS_Test_Case {
 		$this->assertNotWPError( $refund );
 		$this->assertSame( 'completed', wc_get_order( $order->get_id() )->get_status() );
 		$this->assertSame( $now['expires_at'], SFLS_Licenses::find( (int) $lic['id'] )['expires_at'] );
+	}
+
+	/**
+	 * A Paddle renewal order for a license billed by a subscription, paid.
+	 *
+	 * @param string $license_sub Subscription on the license.
+	 * @param string $order_sub   Subscription on the order.
+	 * @return array{0:WC_Order,1:array} Order and license.
+	 */
+	private function paddle_renewal( string $license_sub = 'sub_01renew', string $order_sub = 'sub_01renew' ): array {
+		$this->paddle();
+		$this->paddle_routes['#^POST /subscriptions/sub_\w+/cancel$#'] = fn( $call ) => array( 'id' => basename( dirname( $call['path'] ) ) ) + $this->subscription( array( 'status' => 'canceled' ) );
+		$user = $this->make_user();
+		$lic  = $this->owned_license( $user, 'pro', 30 );
+		SFLS_Licenses::update(
+			(int) $lic['id'],
+			array(
+				'paddle_subscription_id' => $license_sub,
+				'billing'                => 'paddle',
+				'billing_status'         => 'active',
+			)
+		);
+		$order = $this->renew( $user, SFLS_Licenses::find( (int) $lic['id'] ) );
+		$order->set_payment_method( SFLS_Woo_Paddle::GATEWAY );
+		$order->update_meta_data( '_sfls_paddle_renewal', 'yes' );
+		$order->update_meta_data( '_sfls_paddle_subscription_id', $order_sub );
+		$order->save();
+		return array( wc_get_order( $order->get_id() ), SFLS_Licenses::find( (int) $lic['id'] ) );
+	}
+
+	/**
+	 * Full refund of a Paddle renewal suspends the license and cancels the
+	 * subscription at once; a second run changes nothing.
+	 */
+	public function test_full_refund_of_paddle_renewal_suspends_and_cancels(): void {
+		[ $order, $lic ] = $this->paddle_renewal();
+		$this->refund_all( $order );
+		$this->assertSame( 'suspended', SFLS_Licenses::find( (int) $lic['id'] )['status'] );
+		$cancels = $this->calls( 'POST', '#^/subscriptions/sub_\w+/cancel$#' );
+		$this->assertCount( 1, $cancels );
+		$this->assertSame( 'immediately', $cancels[0]['body']['effective_from'] );
+		$count = count( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) );
+
+		do_action( 'woocommerce_order_status_refunded', $order->get_id() );
+		$this->assertSame( 'suspended', SFLS_Licenses::find( (int) $lic['id'] )['status'] );
+		$this->assertCount( $count, wc_get_order_notes( array( 'order_id' => $order->get_id() ) ) );
+	}
+
+	/**
+	 * A cancelled (unrefunded) renewal does not suspend or cancel anything.
+	 */
+	public function test_cancelled_paddle_renewal_does_not_suspend(): void {
+		[ $order, $lic ] = $this->paddle_renewal();
+		$order->update_status( 'cancelled' );
+		$this->assertSame( 'active', SFLS_Licenses::find( (int) $lic['id'] )['status'] );
+		$this->assertSame( array(), $this->calls( 'POST', '#^/subscriptions/sub_\w+/cancel$#' ) );
+	}
+
+	/**
+	 * A renewal whose subscription is not the license's leaves it alone.
+	 */
+	public function test_refunded_renewal_with_other_subscription_does_not_suspend(): void {
+		[ $order, $lic ] = $this->paddle_renewal( 'sub_01renew', 'sub_01other' );
+		$this->refund_all( $order );
+		$this->assertSame( 'active', SFLS_Licenses::find( (int) $lic['id'] )['status'] );
+		$this->assertSame( array(), $this->calls( 'POST', '#^/subscriptions/sub_\w+/cancel$#' ) );
+	}
+
+	/**
+	 * A refunded first order still suspends the key it issued.
+	 */
+	public function test_refunded_first_order_still_suspends(): void {
+		$user    = $this->make_user();
+		$product = $this->make_license_product( 'pro', 12, '79' );
+		$order   = $this->make_order( array( $product ), $user );
+		$order->payment_complete( 'ch_test' );
+		$lics = $this->licenses_of_order( $order->get_id() );
+		$this->assertNotEmpty( $lics );
+		$this->refund_all( wc_get_order( $order->get_id() ) );
+		$this->assertSame( 'suspended', $this->licenses_of_order( $order->get_id() )[0]['status'] );
 	}
 }

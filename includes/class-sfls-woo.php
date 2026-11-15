@@ -969,7 +969,43 @@ final class SFLS_Woo {
 		$order = wc_get_order( $order_id );
 		if ( $order instanceof WC_Order ) {
 			self::revert_changes( $order );
+			if ( 'refunded' === $order->get_status() ) {
+				foreach ( self::renewal_refund_licenses( $order ) as $lic ) {
+					if ( 'suspended' === $lic['status'] ) {
+						continue;
+					}
+					SFLS_Licenses::update( (int) $lic['id'], array( 'status' => 'suspended' ) );
+					/* translators: %s: masked license key */
+					$order->add_order_note( sprintf( __( 'License %s suspended because this renewal order was fully refunded.', 'subtleforms-license-server' ), SFLS_Licenses::mask_key( (string) $lic['license_key'] ) ) );
+				}
+			}
 		}
+	}
+
+	/**
+	 * Licenses a Paddle renewal order paid for, when the license is billed by
+	 * the subscription named on the order. Other orders: none.
+	 *
+	 * @param WC_Order $order Order.
+	 * @return array[]
+	 */
+	public static function renewal_refund_licenses( WC_Order $order ): array {
+		$sub = (string) $order->get_meta( '_sfls_paddle_subscription_id' );
+		if ( 'yes' !== $order->get_meta( '_sfls_paddle_renewal' ) || '' === $sub ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $order->get_items() as $item ) {
+			$ids = (string) $item->get_meta( '_sfls_renew_license' );
+			$ids = '' !== $ids ? $ids : (string) $item->get_meta( '_sfls_license_ids' );
+			foreach ( array_filter( array_map( 'intval', explode( ',', $ids ) ) ) as $id ) {
+				$lic = SFLS_Licenses::find( $id );
+				if ( $lic && (string) $lic['paddle_subscription_id'] === $sub ) {
+					$out[ $id ] = $lic;
+				}
+			}
+		}
+		return array_values( $out );
 	}
 
 	/**
