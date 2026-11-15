@@ -1326,7 +1326,7 @@
 
 /* ── Paddle: pricing cards (1.4.0) ───────────────────────────────────── */
 
-.sfls .sfls-plan .sfls-plan-trial-note {
+.sfls .sfls-plan .sfls-plan-note {
 	margin: 8px 0 0;
 	color: var(--sfls-muted);
 	font-size: 13px;
@@ -1348,60 +1348,7 @@
 	display: none !important;
 }
 
-.sfls .sfls-trial-email {
-	margin: 0;
-}
-
-.sfls .sfls-trial-email label {
-	display: block;
-	margin: 0 0 6px;
-	font-size: 13px;
-	font-weight: 600;
-}
-
-.sfls .sfls-trial-email-row {
-	display: flex;
-	gap: 6px;
-}
-
-.sfls .sfls-trial-email input[type="email"] {
-	flex: 1 1 auto;
-	min-width: 0;
-	min-height: 40px;
-	padding: 8px 10px;
-	border: 1px solid var(--sfls-border-strong);
-	border-radius: var(--sfls-radius-sm);
-	background: var(--sfls-surface);
-	color: var(--sfls-text);
-	font: inherit;
-	font-size: 14px;
-}
-
-.sfls .sfls-trial-email input[type="email"]:focus {
-	outline: 2px solid var(--sfls-accent);
-	outline-offset: 0;
-	border-color: var(--sfls-accent);
-}
-
-.sfls .sfls-trial-email-help,
-.sfls .sfls-trial-email-error {
-	margin: 6px 0 0;
-	font-size: 12px;
-	line-height: 1.4;
-	color: var(--sfls-muted);
-}
-
-.sfls .sfls-trial-email-error {
-	color: var(--sfls-bad);
-}
-
 /* ── Paddle: members area billing (1.4.0) ────────────────────────────── */
-
-.sfls .sfls-tag--trial {
-	margin-inline-start: 6px;
-	background: var(--sfls-accent-soft);
-	color: var(--sfls-accent);
-}
 
 .sfls .sfls-inline-form {
 	display: inline-flex;
@@ -1502,7 +1449,7 @@
 	color: var(--sfls-ok);
 }
 
-.sfls .sfls-welcome .sfls-welcome-trial {
+.sfls .sfls-welcome .sfls-welcome-renews {
 	margin: 0 0 12px;
 	padding: 10px 12px;
 	border-radius: var(--sfls-radius-sm);
@@ -2012,44 +1959,6 @@
 
 .sfls .sfls-license-acc .sfls-license-head {
 	justify-content: flex-end;
-}
-
-/* Trial email code step. */
-.sfls .sfls-trial-code-lead {
-	margin: 0;
-	color: var(--sfls-muted);
-}
-
-.sfls .sfls-trial-code-email {
-	display: inline-flex;
-	align-items: center;
-	justify-self: start;
-	align-self: flex-start;
-	max-inline-size: 100%;
-	margin: 0;
-	padding: 6px 14px;
-	border-radius: var(--sfls-radius-pill);
-	background: var(--sfls-accent-soft);
-	color: var(--sfls-text);
-	font-weight: 600;
-	overflow-wrap: anywhere;
-}
-
-.sfls .sfls-trial-code-help {
-	margin: 0;
-	color: var(--sfls-muted);
-	font-size: 14px;
-}
-
-.sfls .sfls-trial-code-tips {
-	display: grid;
-	gap: 4px;
-	padding-block-start: 12px;
-	border-block-start: 1px solid var(--sfls-border);
-}
-
-.sfls .sfls-trial-code-tips p {
-	margin: 0;
 }
 
 .sfls .sfls-paddle-ok,

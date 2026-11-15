@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '11';
+	const SCHEMA_VERSION = '12';
 
 	/**
 	 * Licence IDs whose Agency seats were already more than the plan's 25
@@ -56,14 +56,6 @@ final class SFLS_DB {
 	public static function download_tokens(): string {
 		global $wpdb;
 		return $wpdb->prefix . 'sfls_download_tokens';
-	}
-
-	/**
-	 * Trial claims table name (who already had a free trial).
-	 */
-	public static function trial_claims(): string {
-		global $wpdb;
-		return $wpdb->prefix . 'sfls_trial_claims';
 	}
 
 	/**
@@ -123,14 +115,6 @@ final class SFLS_DB {
 	}
 
 	/**
-	 * Email confirmation codes for free trials (schema 8).
-	 */
-	public static function trial_codes(): string {
-		global $wpdb;
-		return $wpdb->prefix . 'sfls_trial_codes';
-	}
-
-	/**
 	 * Create or upgrade the tables and the private release folder.
 	 */
 	public static function install(): void {
@@ -142,7 +126,6 @@ final class SFLS_DB {
 		$acts     = self::activations();
 		$log      = self::activation_log();
 		$tokens   = self::download_tokens();
-		$claims   = self::trial_claims();
 		$events   = self::paddle_events();
 		$releases = self::releases();
 		$hooks    = self::github_deliveries();
@@ -150,7 +133,6 @@ final class SFLS_DB {
 		$brev     = self::branding_revisions();
 		$bsites   = self::branding_sites();
 		$rates    = self::rate_limits();
-		$codes    = self::trial_codes();
 
 		dbDelta(
 			"CREATE TABLE {$licenses} (
@@ -170,9 +152,6 @@ final class SFLS_DB {
   updated_at datetime NOT NULL,
   billing varchar(20) NOT NULL DEFAULT '',
   billing_status varchar(20) NOT NULL DEFAULT '',
-  trial tinyint(1) NOT NULL DEFAULT 0,
-  trial_started_at datetime NULL,
-  trial_ends_at datetime NULL,
   renews_at datetime NULL,
   cancels_at datetime NULL,
   billing_amount varchar(32) NOT NULL DEFAULT '',
@@ -235,23 +214,6 @@ final class SFLS_DB {
   used_at datetime NOT NULL,
   PRIMARY KEY  (token),
   KEY used_at (used_at)
-) {$charset};"
-		);
-
-		// Schema 4 (1.4.0): free trials already used, by email, company domain or site.
-		dbDelta(
-			"CREATE TABLE {$claims} (
-  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  kind varchar(10) NOT NULL,
-  value varchar(190) NOT NULL,
-  license_id bigint(20) unsigned NOT NULL DEFAULT 0,
-  order_id bigint(20) unsigned NOT NULL DEFAULT 0,
-  status varchar(10) NOT NULL DEFAULT 'active',
-  created_at datetime NOT NULL,
-  PRIMARY KEY  (id),
-  KEY kind_value (kind,value),
-  KEY license_id (license_id),
-  KEY order_id (order_id)
 ) {$charset};"
 		);
 
@@ -364,10 +326,8 @@ final class SFLS_DB {
 ) {$charset};"
 		);
 
-		// Schema 8: atomic rate limit counters, and the one-time codes
-		// that confirm an email address before a free trial. Claims got an
-		// order and a status (pending until the payment, released when it
-		// fails), licenses got indexes on status and expires_at.
+		// Schema 8: atomic rate limit counters. Licenses got indexes on status
+		// and expires_at.
 		dbDelta(
 			"CREATE TABLE {$rates} (
   bucket char(32) NOT NULL,
@@ -375,19 +335,6 @@ final class SFLS_DB {
   hits int(11) unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY  (bucket),
   KEY window_start (window_start)
-) {$charset};"
-		);
-
-		dbDelta(
-			"CREATE TABLE {$codes} (
-  email_hash char(64) NOT NULL,
-  code_hash char(64) NOT NULL DEFAULT '',
-  attempts tinyint(3) unsigned NOT NULL DEFAULT 0,
-  expires_at datetime NOT NULL,
-  verified_until datetime NULL,
-  created_at datetime NOT NULL,
-  PRIMARY KEY  (email_hash),
-  KEY expires_at (expires_at)
 ) {$charset};"
 		);
 
@@ -410,6 +357,11 @@ final class SFLS_DB {
 		// current root site with a seat of its own.
 		if ( '' !== $previous && version_compare( $previous, '11', '<' ) ) {
 			self::mark_legacy_activations();
+		}
+
+		// Schema 12 (1.10.0): free trials were removed. Drop their tables, columns and settings.
+		if ( version_compare( $previous, '12', '<' ) ) {
+			self::remove_trials();
 		}
 
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
@@ -471,6 +423,45 @@ final class SFLS_DB {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		return (int) $wpdb->query( $wpdb->prepare( 'UPDATE %i SET legacy = 1 WHERE domain NOT LIKE %s', self::activations(), '%/%' ) );
+	}
+
+	/**
+	 * Schema 12 (1.10.0): remove what free trials left behind. Drops the claims
+	 * and codes tables and the trial columns of the licenses table (only when
+	 * they exist), strips trial_days and trial_price_id from every Paddle plan
+	 * and the trial-only keys from the settings. Safe to run again.
+	 */
+	public static function remove_trials(): void {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_trial_claims" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_trial_codes" );
+		$table = self::licenses();
+		foreach ( array( 'trial', 'trial_started_at', 'trial_ends_at' ) as $column ) {
+			if ( $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$table} LIKE %s", $column ) ) ) {
+				$wpdb->query( "ALTER TABLE {$table} DROP COLUMN {$column}" );
+			}
+		}
+		// phpcs:enable
+
+		$paddle = get_option( 'sfls_paddle' );
+		if ( is_array( $paddle ) && is_array( $paddle['plans'] ?? null ) ) {
+			foreach ( $paddle['plans'] as $plan => $row ) {
+				if ( is_array( $row ) ) {
+					unset( $row['trial_days'], $row['trial_price_id'] );
+					$paddle['plans'][ $plan ] = $row;
+				}
+			}
+			update_option( 'sfls_paddle', $paddle, false );
+		}
+		$settings = get_option( SFLS_Settings::OPTION );
+		if ( is_array( $settings ) ) {
+			foreach ( array( 'trial_notice', 'trial_verify', 'block_disposable', 'disposable_extra' ) as $key ) {
+				unset( $settings[ $key ] );
+			}
+			update_option( SFLS_Settings::OPTION, $settings );
+		}
+		delete_option( 'sfls_paddle_rejected' );
 	}
 
 	/**
@@ -556,17 +547,15 @@ final class SFLS_DB {
 	}
 
 	/**
-	 * Delete rate limit counters whose window ended more than a day ago, and
-	 * confirmation codes that expired more than a day ago. Returns how many
-	 * rows were deleted.
+	 * Delete rate limit counters whose window ended more than a day ago.
+	 * Returns how many rows were deleted.
 	 */
 	public static function prune_counters(): int {
 		global $wpdb;
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$rates = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_rate_limits WHERE window_start < %d", time() - DAY_IN_SECONDS ) );
-		$codes = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}sfls_trial_codes WHERE expires_at < %s AND ( verified_until IS NULL OR verified_until < %s )", gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ), gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ) ) );
 		// phpcs:enable
-		return $rates + $codes;
+		return $rates;
 	}
 
 	/**

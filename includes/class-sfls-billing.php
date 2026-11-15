@@ -5,13 +5,13 @@
  * One Paddle subscription is one license. The license follows the
  * subscription:
  *
- *   trialing  license active, 1 site, trial_ends_at set,
- *             expires_at = trial end (a trial has no grace period)
  *   active    the plan's site limit, expires_at = current billing period end
+ *             (a `trialing` subscription from before trials were removed is
+ *             handled like active)
  *   past_due  unchanged expiry: stays valid until the paid period ends, then the
  *             one 14-day grace period of SFLS_Licenses::state() applies
  *   paused    same as past_due
- *   canceled  a paid license keeps its expiry; a trial that never paid ends now
+ *   canceled  a paid license keeps its expiry
  *
  * `renews_at` is the next charge (none while set to cancel), `cancels_at` the
  * date a scheduled cancellation takes effect. Changing plans keeps the key.
@@ -25,11 +25,6 @@ defined( 'ABSPATH' ) || exit;
  * Subscription sync and the customer's billing actions.
  */
 final class SFLS_Billing {
-
-	/**
-	 * Subscriptions refused as a second trial (never turned into a license).
-	 */
-	const REJECTED_OPTION = 'sfls_paddle_rejected';
 
 	/**
 	 * GMT "Y-m-d H:i:s" from an RFC 3339 date, or null.
@@ -172,18 +167,6 @@ final class SFLS_Billing {
 		$next       = self::gmt( $sub['next_billed_at'] ?? null );
 		$scheduled  = is_array( $sub['scheduled_change'] ?? null ) ? $sub['scheduled_change'] : array();
 		$cancels_at = 'cancel' === ( $scheduled['action'] ?? '' ) ? self::gmt( $scheduled['effective_at'] ?? null ) : null;
-		$trial_end  = self::gmt( $item['trial_dates']['ends_at'] ?? null );
-
-		if ( 'trialing' === $status ) {
-			$trial = 1;
-		} elseif ( 'active' === $status ) {
-			$trial = 0;
-		} else {
-			$trial = $lic ? (int) $lic['trial'] : 0;
-		}
-		if ( $trial && null === $trial_end ) {
-			$trial_end = $lic && ! empty( $lic['trial_ends_at'] ) ? (string) $lic['trial_ends_at'] : ( $next ?? $period_end );
-		}
 
 		$quantity = max( 1, (int) ( $item['quantity'] ?? 1 ) );
 		$unit     = (string) ( $item['price']['unit_price']['amount'] ?? '' );
@@ -191,9 +174,7 @@ final class SFLS_Billing {
 			'billing'                => 'paddle',
 			'billing_status'         => sanitize_key( $status ),
 			'plan'                   => $plan,
-			'sites_allowed'          => $trial ? 1 : (int) ( SFLS_Plans::get( $plan )['sites'] ?? 1 ),
-			'trial'                  => $trial,
-			'trial_ends_at'          => $trial ? $trial_end : ( $lic['trial_ends_at'] ?? null ),
+			'sites_allowed'          => (int) ( SFLS_Plans::get( $plan )['sites'] ?? 1 ),
 			'renews_at'              => in_array( $status, array( 'active', 'trialing', 'past_due' ), true ) && null === $cancels_at ? $next : null,
 			'cancels_at'             => 'canceled' === $status ? null : $cancels_at,
 			'billing_amount'         => '' !== $unit ? (string) ( (int) $unit * $quantity ) : (string) ( $lic['billing_amount'] ?? '' ),
@@ -205,16 +186,11 @@ final class SFLS_Billing {
 
 		switch ( $status ) {
 			case 'trialing':
-				$fields['expires_at'] = self::plus_grace( $trial_end );
-				break;
 			case 'active':
 				$fields['expires_at'] = self::plus_grace( $period_end ?? $next );
 				break;
 			case 'canceled':
-				if ( $trial ) {
-					// Canceled during the trial: nothing was paid, so it ends now.
-					$fields['expires_at'] = self::gmt( $sub['canceled_at'] ?? null ) ?? current_time( 'mysql', true );
-				} elseif ( $lic && ! empty( $lic['expires_at'] ) ) {
+				if ( $lic && ! empty( $lic['expires_at'] ) ) {
 					$fields['expires_at'] = $lic['expires_at']; // Paid until the end of the period.
 				} else {
 					$fields['expires_at'] = self::plus_grace( $period_end ) ?? current_time( 'mysql', true );
@@ -314,8 +290,7 @@ final class SFLS_Billing {
 	}
 
 	/**
-	 * First event of a subscription: check the trial rules and create the
-	 * license (or cancel a second trial before any charge).
+	 * First event of a subscription: create the license.
 	 *
 	 * @param array  $sub         Subscription.
 	 * @param string $transaction Checkout transaction ID.
@@ -331,23 +306,12 @@ final class SFLS_Billing {
 			'license' => null,
 		);
 
-		if ( in_array( $sub_id, (array) get_option( self::REJECTED_OPTION, array() ), true ) ) {
-			$result['note'] = 'Subscription was refused as a second trial.';
-			return $result;
-		}
 		if ( ! in_array( $status, array( 'trialing', 'active', 'past_due' ), true ) ) {
 			$result['note'] = sprintf( 'No license for a %s subscription.', $status );
 			return $result;
 		}
 
 		[ $email, $name ] = self::customer( $sub );
-
-		if ( 'trialing' === $status ) {
-			$check = SFLS_Trials::check( $email );
-			if ( ! $check['eligible'] ) {
-				return self::reject_trial( $sub, $email, $name, $check );
-			}
-		}
 
 		[ $user_id, $created ] = self::customer_user( $email, $name );
 		$fields                = self::fields_for( $sub, null );
@@ -361,7 +325,6 @@ final class SFLS_Billing {
 					'months'                => 12,
 					'paddle_transaction_id' => $transaction,
 					'checkout_token_hash'   => '' !== $token ? hash( 'sha256', $token ) : '',
-					'trial_started_at'      => 'trialing' === $status ? current_time( 'mysql', true ) : null,
 					'billing_synced_at'     => '' !== $occurred ? $occurred : current_time( 'mysql', true ),
 					'notes'                 => sprintf(
 						/* translators: %s: Paddle subscription ID */
@@ -373,56 +336,18 @@ final class SFLS_Billing {
 		);
 		$lic = SFLS_Licenses::find( (int) $lic['id'] ) ?? $lic;
 
-		if ( 'trialing' === $status ) {
-			SFLS_Trials::record_start( (int) $lic['id'], $email );
-		}
 		SFLS_Billing_Emails::send_once( $lic, 'welcome', 'welcome', array( 'new_account' => $created ) );
 		do_action( 'sfls_paddle_license_created', $lic, $sub );
 
 		$result['action']  = 'created';
 		$result['license'] = $lic;
-		$result['note']    = 'trialing' === $status ? 'Trial license created.' : 'License created.';
+		$result['note']    = 'License created.';
 		return $result;
 	}
 
 	/**
-	 * Backstop for a second trial that got past the checkout check: cancel
-	 * the subscription at once (nothing has been charged during a trial) and
-	 * tell the customer.
-	 *
-	 * @param array  $sub   Subscription.
-	 * @param string $email Customer email.
-	 * @param string $name  Customer name.
-	 * @param array  $check Eligibility result.
-	 * @return array{action:string,note:string,license:?array}
-	 */
-	private static function reject_trial( array $sub, string $email, string $name, array $check ): array {
-		$sub_id   = (string) $sub['id'];
-		$rejected = (array) get_option( self::REJECTED_OPTION, array() );
-		$rejected = array_slice( array_values( array_unique( array_merge( $rejected, array( $sub_id ) ) ) ), -500 );
-		update_option( self::REJECTED_OPTION, $rejected, false );
-
-		$cancel = SFLS_Paddle::cancel_subscription( $sub_id, true );
-		$note   = is_wp_error( $cancel )
-			? sprintf( 'Second trial (%s). Cancelling it failed: %s', $check['reason'], $cancel->get_error_message() )
-			: sprintf( 'Second trial (%s). Subscription canceled before any charge.', $check['reason'] );
-
-		if ( is_email( $email ) ) {
-			SFLS_Billing_Emails::send_to( $email, $name, 'trial_rejected', array( 'reason' => $check['message'] ) );
-		}
-		do_action( 'sfls_paddle_trial_rejected', $sub, $email, $check, $cancel );
-
-		return array(
-			'action'  => is_wp_error( $cancel ) ? 'failed' : 'rejected',
-			'note'    => $note,
-			'license' => null,
-		);
-	}
-
-	/**
 	 * A completed transaction: link the checkout to its license, and for a
-	 * real payment extend the license to the end of the paid period and end
-	 * the trial.
+	 * real payment extend the license to the end of the paid period.
 	 *
 	 * @param array $txn Transaction entity.
 	 * @return array{action:string,note:string,license:?array}
@@ -465,7 +390,6 @@ final class SFLS_Billing {
 				$fields['expires_at'] = $expires;
 			}
 			$plan                    = self::plan_of( $txn, $lic );
-			$fields['trial']         = 0;
 			$fields['sites_allowed'] = (int) ( SFLS_Plans::get( $plan )['sites'] ?? 1 );
 			if ( in_array( $lic['billing_status'], array( 'trialing', 'past_due', '' ), true ) ) {
 				$fields['billing_status'] = 'active';
@@ -485,7 +409,6 @@ final class SFLS_Billing {
 				'paid|' . (string) $txn['id'],
 				array(
 					'amount'      => SFLS_Paddle::format_amount( (string) $total, (string) ( $txn['details']['totals']['currency_code'] ?? $txn['currency_code'] ?? $after['billing_currency'] ) ),
-					'was_trial'   => ! empty( $lic['trial'] ),
 					'is_upgrade'  => 'subscription_update' === ( $txn['origin'] ?? '' ),
 				)
 			);
@@ -535,9 +458,7 @@ final class SFLS_Billing {
 		if ( ! SFLS_Licenses::is_paddle( $lic ) || ! SFLS_Plans::get( $plan ) ) {
 			return new WP_Error( 'sfls_not_paddle', __( 'This license is not billed through Paddle.', 'subtleforms-license-server' ) );
 		}
-		$map      = SFLS_Paddle::plan( $plan );
-		$trialing = 'trialing' === $lic['billing_status'];
-		$price    = $trialing && '' !== $map['trial_price_id'] ? $map['trial_price_id'] : $map['price_id'];
+		$price = SFLS_Paddle::plan( $plan )['price_id'];
 		if ( '' === $price ) {
 			return new WP_Error( 'sfls_no_price', __( 'This plan is not on sale right now. Contact support and we will sort it out.', 'subtleforms-license-server' ) );
 		}
@@ -548,12 +469,9 @@ final class SFLS_Billing {
 					'quantity' => 1,
 				),
 			),
-			// During a trial nothing has been paid: the new plan is charged when the trial ends.
-			'proration_billing_mode' => $trialing ? 'do_not_bill' : 'prorated_immediately',
+			'proration_billing_mode' => 'prorated_immediately',
+			'on_payment_failure'     => 'prevent_change',
 		);
-		if ( ! $trialing ) {
-			$body['on_payment_failure'] = 'prevent_change';
-		}
 		$sub = SFLS_Paddle::update_subscription( (string) $lic['paddle_subscription_id'], $body );
 		if ( is_wp_error( $sub ) ) {
 			return $sub;
@@ -566,7 +484,7 @@ final class SFLS_Billing {
 	}
 
 	/**
-	 * Turn auto-renew off: cancel at the end of the period (or of the trial).
+	 * Turn auto-renew off: cancel at the end of the period.
 	 *
 	 * @param array $lic License.
 	 * @return array|WP_Error Updated license.
@@ -639,20 +557,6 @@ final class SFLS_Billing {
 		$fmt  = get_option( 'date_format' );
 		$date = static fn( $gmt ) => $gmt ? wp_date( $fmt, strtotime( $gmt . ' UTC' ) ) : '';
 		switch ( $lic['billing_status'] ) {
-			case 'trialing':
-				if ( ! empty( $lic['cancels_at'] ) ) {
-					/* translators: %s: date */
-					return array( 'warn', sprintf( __( 'Free trial, cancels on %s. You will not be charged.', 'subtleforms-license-server' ), $date( $lic['cancels_at'] ) ) );
-				}
-				$amount = SFLS_Licenses::renewal_amount( $lic );
-				return array(
-					'info',
-					null !== $amount
-						/* translators: 1: date, 2: amount */
-						? sprintf( __( 'Trial ends on %1$s. Then %2$s a year.', 'subtleforms-license-server' ), $date( $lic['trial_ends_at'] ), $amount )
-						/* translators: %s: date */
-						: sprintf( __( 'Trial ends on %s.', 'subtleforms-license-server' ), $date( $lic['trial_ends_at'] ) ),
-				);
 			case 'past_due':
 				return array( 'bad', __( 'Past due. The last payment failed. Update your payment method to keep Pro running.', 'subtleforms-license-server' ) );
 			case 'paused':

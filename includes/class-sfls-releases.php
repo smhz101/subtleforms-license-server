@@ -1127,11 +1127,11 @@ final class SFLS_Releases {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$rows = (array) $wpdb->get_results(
-			"SELECT a.plugin_version AS version, l.status, l.expires_at, l.trial, COUNT(*) AS sites
+			"SELECT a.plugin_version AS version, l.status, l.expires_at, COUNT(*) AS sites
 			FROM {$wpdb->prefix}sfls_activations a
 			INNER JOIN {$wpdb->prefix}sfls_licenses l ON l.id = a.license_id
 			WHERE a.plugin_version <> ''
-			GROUP BY a.plugin_version, l.status, l.expires_at, l.trial",
+			GROUP BY a.plugin_version, l.status, l.expires_at",
 			ARRAY_A
 		);
 		$out = array();

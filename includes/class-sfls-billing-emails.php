@@ -3,14 +3,11 @@
  * Emails for Paddle licenses. Paddle sends its own receipts; these carry
  * what only we know: the key, the site limit, dates and how to manage it.
  *
- *   welcome            The license key, Download Pro and the install steps
- *                      (and the trial end date for a trial).
- *   trial_ending       Before the trial ends: amount, date and how to cancel.
+ *   welcome            The license key, Download Pro and the install steps.
  *   renewal_notice     Before each yearly renewal: amount, date, how to cancel.
- *   payment_succeeded  A payment went through (trial converted, renewal, upgrade).
+ *   payment_succeeded  A payment went through (renewal, upgrade).
  *   payment_failed     A renewal charge failed: update the card.
  *   canceled           Auto-renew turned off (or the subscription ended).
- *   trial_rejected     A second trial was canceled before any charge.
  *
  * The license-ended email is the lapsed stage of SFLS_Reminders.
  *
@@ -34,13 +31,10 @@ final class SFLS_Billing_Emails {
 	public static function templates(): array {
 		return array(
 			'welcome'           => __( 'License key and install steps', 'subtleforms-license-server' ),
-			'welcome_trial'     => __( 'Free trial started', 'subtleforms-license-server' ),
-			'trial_ending'      => __( 'Trial ends soon', 'subtleforms-license-server' ),
 			'renewal_notice'    => __( 'Renewal coming up', 'subtleforms-license-server' ),
 			'payment_succeeded' => __( 'Payment received', 'subtleforms-license-server' ),
 			'payment_failed'    => __( 'Payment failed', 'subtleforms-license-server' ),
 			'canceled'          => __( 'Auto-renew turned off', 'subtleforms-license-server' ),
-			'trial_rejected'    => __( 'Second trial canceled', 'subtleforms-license-server' ),
 		);
 	}
 
@@ -69,19 +63,6 @@ final class SFLS_Billing_Emails {
 	}
 
 	/**
-	 * Send a template to an address that has no license (trial_rejected).
-	 *
-	 * @param string $to       Recipient.
-	 * @param string $name     First name.
-	 * @param string $template Template slug.
-	 * @param array  $extra    Template data.
-	 */
-	public static function send_to( string $to, string $name, string $template, array $extra = array() ): bool {
-		[ $subject, $heading, $body ] = self::build( $template, array(), $extra, $name );
-		return SFLS_Reminders::deliver( $to, $subject, $heading, $body );
-	}
-
-	/**
 	 * An example of a template, sent to an admin. No license is touched.
 	 *
 	 * @param string $to       Recipient.
@@ -91,23 +72,20 @@ final class SFLS_Billing_Emails {
 		if ( ! is_email( $to ) || ! isset( self::templates()[ $template ] ) ) {
 			return false;
 		}
-		$trial = in_array( $template, array( 'welcome_trial', 'trial_ending' ), true );
-		$now   = time();
-		$lic   = array(
+		$now = time();
+		$lic = array(
 			'id'               => 0,
 			'license_key'      => 'SFP-EXAMPLE0-00000000-00000000-12345678',
 			'plan'             => 'pro',
 			'status'           => 'active',
-			'sites_allowed'    => $trial ? 1 : (int) ( SFLS_Plans::get( 'pro' )['sites'] ?? 5 ),
+			'sites_allowed'    => (int) ( SFLS_Plans::get( 'pro' )['sites'] ?? 5 ),
 			'customer_email'   => $to,
 			'user_id'          => 0,
 			'billing'          => 'paddle',
-			'billing_status'   => $trial ? 'trialing' : ( 'payment_failed' === $template ? 'past_due' : 'active' ),
-			'trial'            => $trial ? 1 : 0,
-			'trial_ends_at'    => $trial ? gmdate( 'Y-m-d H:i:s', $now + 3 * DAY_IN_SECONDS ) : null,
-			'renews_at'        => gmdate( 'Y-m-d H:i:s', $now + ( $trial ? 3 : 14 ) * DAY_IN_SECONDS ),
+			'billing_status'   => 'payment_failed' === $template ? 'past_due' : 'active',
+			'renews_at'        => gmdate( 'Y-m-d H:i:s', $now + 14 * DAY_IN_SECONDS ),
 			'cancels_at'       => 'canceled' === $template ? gmdate( 'Y-m-d H:i:s', $now + 120 * DAY_IN_SECONDS ) : null,
-			'expires_at'       => gmdate( 'Y-m-d H:i:s', $now + ( $trial ? 6 : 125 ) * DAY_IN_SECONDS ),
+			'expires_at'       => gmdate( 'Y-m-d H:i:s', $now + 125 * DAY_IN_SECONDS ),
 			'billing_amount'   => '7900',
 			'billing_currency' => 'USD',
 			'paddle_customer_id'     => 'ctm_example',
@@ -117,11 +95,9 @@ final class SFLS_Billing_Emails {
 		$name  = $user->ID ? ( $user->first_name ? $user->first_name : $user->display_name ) : '';
 		$extra = array(
 			'amount'      => SFLS_Paddle::format_amount( '7900', 'USD' ),
-			'was_trial'   => false,
 			'new_account' => false,
-			'reason'      => __( 'This email address already had a free trial.', 'subtleforms-license-server' ),
 		);
-		[ $subject, $heading, $body ] = self::build( 'welcome_trial' === $template ? 'welcome' : $template, $lic, $extra, (string) $name );
+		[ $subject, $heading, $body ] = self::build( $template, $lic, $extra, (string) $name );
 		return SFLS_Reminders::deliver( $to, $subject, $heading, $body, __( 'This is a test. The license shown is an example and no customer received this email.', 'subtleforms-license-server' ) );
 	}
 
@@ -171,8 +147,8 @@ final class SFLS_Billing_Emails {
 	 * Subject, heading and body HTML of a template.
 	 *
 	 * @param string $template Template slug.
-	 * @param array  $lic      License (empty for trial_rejected).
-	 * @param array  $extra    amount, was_trial, is_upgrade, new_account, reason.
+	 * @param array  $lic      License .
+	 * @param array  $extra    amount, is_upgrade, new_account.
 	 * @param string $name     First name.
 	 * @return array{0:string,1:string,2:string}
 	 */
@@ -188,33 +164,20 @@ final class SFLS_Billing_Emails {
 			)
 		);
 		$tax     = __( 'plus sales tax or VAT where it applies', 'subtleforms-license-server' );
-		$sites   = $lic ? SFLS_Plans::sites_label( (int) ( SFLS_Plans::get( (string) $lic['plan'] )['sites'] ?? 1 ) ) : '';
 		$manage  = $lic ? self::manage_link( $lic ) : SFLS_Settings::pricing_url();
 
 		switch ( $template ) {
 			case 'welcome':
-				$trial   = ! empty( $lic['trial'] );
-				$subject = $trial ? __( 'Your SubtleForms Pro free trial has started', 'subtleforms-license-server' ) : __( 'Your SubtleForms Pro license key', 'subtleforms-license-server' );
-				$heading = $trial ? __( 'Your free trial has started', 'subtleforms-license-server' ) : __( 'Welcome to SubtleForms Pro', 'subtleforms-license-server' );
+				$subject = __( 'Your SubtleForms Pro license key', 'subtleforms-license-server' );
+				$heading = __( 'Welcome to SubtleForms Pro', 'subtleforms-license-server' );
 				$body    = $hello;
-				$body   .= self::p(
-					$trial
-						? sprintf(
-							/* translators: 1: plan, 2: date, 3: amount */
-							__( 'Your free trial of SubtleForms Pro %1$s is ready. It covers 1 site and ends on %2$s. Then your card is charged %3$s for the first year, unless you cancel before.', 'subtleforms-license-server' ),
-							$plan,
-							self::date( $lic['trial_ends_at'] ?? null ),
-							'' !== $amount ? $amount : __( 'the plan price', 'subtleforms-license-server' )
-						)
-						: __( 'Thanks for buying SubtleForms Pro. Here is your license key.', 'subtleforms-license-server' )
-				);
+				$body   .= self::p( __( 'Thanks for buying SubtleForms Pro. Here is your license key.', 'subtleforms-license-server' ) );
 				$body .= '<p style="margin:0 0 4px;"><code style="font-family:Menlo,Consolas,monospace;font-size:15px;padding:10px 12px;background:#f6f7f7;border:1px solid #dcdcde;border-radius:6px;display:inline-block;word-break:break-all;">' . esc_html( (string) $lic['license_key'] ) . '</code></p>';
 				$body .= self::table(
 					array(
-						__( 'Plan', 'subtleforms-license-server' )        => $plan,
-						__( 'Sites', 'subtleforms-license-server' )       => SFLS_Plans::sites_label( (int) $lic['sites_allowed'] ),
-						__( 'Trial ends', 'subtleforms-license-server' )  => $trial ? self::date( $lic['trial_ends_at'] ?? null ) : '',
-						__( 'Renews', 'subtleforms-license-server' )      => ! $trial ? self::date( $lic['renews_at'] ?? $lic['expires_at'] ?? null ) : '',
+						__( 'Plan', 'subtleforms-license-server' )    => $plan,
+						__( 'Sites', 'subtleforms-license-server' )   => SFLS_Plans::sites_label( (int) $lic['sites_allowed'] ),
+						__( 'Renews', 'subtleforms-license-server' )  => self::date( $lic['renews_at'] ?? $lic['expires_at'] ?? null ),
 					)
 				);
 
@@ -231,26 +194,6 @@ final class SFLS_Billing_Emails {
 					$body .= self::p( __( 'We created an account for you with this email address. A separate email has a link to set your password, so you can sign in to download Pro and manage your license.', 'subtleforms-license-server' ) );
 				}
 				$body .= self::p( __( 'Paddle, our payment provider, sends the receipt for the payment separately.', 'subtleforms-license-server' ) );
-				break;
-
-			case 'trial_ending':
-				$date    = self::date( $lic['trial_ends_at'] ?? null );
-				/* translators: %s: date */
-				$subject = sprintf( __( 'Your SubtleForms Pro trial ends on %s', 'subtleforms-license-server' ), $date );
-				$heading = __( 'Your free trial ends soon', 'subtleforms-license-server' );
-				$body    = $hello . self::p(
-					sprintf(
-						/* translators: 1: date, 2: amount, 3: tax note, 4: plan, 5: sites */
-						__( 'Your SubtleForms Pro free trial ends on %1$s. On that day your card is charged %2$s (%3$s) for a year of the %4$s plan, and your license grows from 1 site to %5$s. You do not need to do anything to keep Pro.', 'subtleforms-license-server' ),
-						$date,
-						'' !== $amount ? $amount : __( 'the plan price', 'subtleforms-license-server' ),
-						$tax,
-						$plan,
-						strtolower( $sites )
-					)
-				);
-				$body .= self::p( __( 'Not for you? Cancel before the trial ends in My Account › Licenses with Cancel auto-renew, and you will not be charged.', 'subtleforms-license-server' ) );
-				$body .= SFLS_Reminders::button( $manage, __( 'Manage billing', 'subtleforms-license-server' ) );
 				break;
 
 			case 'renewal_notice':
@@ -281,15 +224,7 @@ final class SFLS_Billing_Emails {
 			case 'payment_succeeded':
 				$subject = __( 'Payment received for SubtleForms Pro', 'subtleforms-license-server' );
 				$heading = __( 'Thanks, your payment went through', 'subtleforms-license-server' );
-				if ( ! empty( $extra['was_trial'] ) ) {
-					$intro = sprintf(
-						/* translators: 1: amount, 2: plan, 3: sites */
-						__( 'Your free trial is over and we received %1$s. Your %2$s license now covers %3$s.', 'subtleforms-license-server' ),
-						$amount,
-						$plan,
-						strtolower( SFLS_Plans::sites_label( (int) $lic['sites_allowed'] ) )
-					);
-				} elseif ( ! empty( $extra['is_upgrade'] ) ) {
+				if ( ! empty( $extra['is_upgrade'] ) ) {
 					$intro = sprintf(
 						/* translators: 1: amount, 2: plan */
 						__( 'We received %1$s for your upgrade. Your license is now on the %2$s plan with the same key.', 'subtleforms-license-server' ),
@@ -338,15 +273,8 @@ final class SFLS_Billing_Emails {
 				$until   = ! empty( $lic['cancels_at'] ) ? self::date( $lic['cancels_at'] ) : SFLS_Licenses::expiry_label( $lic );
 				$subject = __( 'Auto-renew is off for SubtleForms Pro', 'subtleforms-license-server' );
 				$heading = __( 'Your subscription is canceled', 'subtleforms-license-server' );
-				if ( ! empty( $lic['trial'] ) ) {
-					$intro = ! empty( $lic['cancels_at'] )
-						/* translators: %s: date */
-						? sprintf( __( 'Your free trial will not turn into a paid plan. Pro keeps working until %s and you will not be charged.', 'subtleforms-license-server' ), $until )
-						: __( 'Your free trial is canceled and you will not be charged.', 'subtleforms-license-server' );
-				} else {
-					/* translators: %s: date */
-					$intro = sprintf( __( 'Auto-renew is off. Your license stays active until %s, the end of the period you paid for, and then Pro stops on your sites.', 'subtleforms-license-server' ), $until );
-				}
+				/* translators: %s: date */
+				$intro = sprintf( __( 'Auto-renew is off. Your license stays active until %s, the end of the period you paid for, and then Pro stops on your sites.', 'subtleforms-license-server' ), $until );
 				$body = $hello . self::p( $intro );
 				if ( ! empty( $lic['cancels_at'] ) ) {
 					$body .= self::p( __( 'Changed your mind? Click Resume in My Account › Licenses before that date and nothing changes.', 'subtleforms-license-server' ) );
@@ -354,14 +282,8 @@ final class SFLS_Billing_Emails {
 				}
 				break;
 
-			case 'trial_rejected':
 			default:
-				$subject = __( 'We could not start your SubtleForms Pro trial', 'subtleforms-license-server' );
-				$heading = __( 'Your free trial was not started', 'subtleforms-license-server' );
-				$body    = $hello . self::p( trim( (string) ( $extra['reason'] ?? '' ) . ' ' . __( 'Each customer, company and site can try SubtleForms Pro for free once, so we canceled the new subscription before any charge. You have not been billed.', 'subtleforms-license-server' ) ) );
-				$body   .= self::p( __( 'You can buy SubtleForms Pro straight away from the pricing page.', 'subtleforms-license-server' ) );
-				$body   .= SFLS_Reminders::button( SFLS_Settings::pricing_url(), __( 'See plans', 'subtleforms-license-server' ) );
-				break;
+				return array( '', '', '' );
 		}
 
 		return array( $subject, $heading, $body . $support );

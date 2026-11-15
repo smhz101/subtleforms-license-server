@@ -411,9 +411,8 @@ final class SFLS_Woo {
 		}
 
 		if ( $buy ) {
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Public buy link.
-			$trial = isset( $_GET['sfls_trial'] ) && '1' === sanitize_key( wp_unslash( $_GET['sfls_trial'] ) );
-			$this->buy( $buy, $trial );
+			// Old links may still carry sfls_trial; it is ignored.
+			$this->buy( $buy );
 			wp_safe_redirect( wc_get_checkout_url() );
 			exit;
 		}
@@ -455,21 +454,12 @@ final class SFLS_Woo {
 	 *
 	 * @param int $product_id Product ID.
 	 */
-	public function buy( int $product_id, bool $trial = false ): bool {
+	public function buy( int $product_id ): bool {
 		$product = wc_get_product( $product_id );
 		if ( ! $product || ! $product->is_purchasable() || ! self::is_license_product( $product ) ) {
 			return false;
 		}
 		$data = array();
-		if ( $trial && SFLS_Woo_Paddle::trial_allowed( $product_id ) ) {
-			$user  = wp_get_current_user();
-			$check = $user->ID ? SFLS_Trials::check( $user->user_email ) : array( 'eligible' => true );
-			if ( $check['eligible'] ) {
-				$data['sfls_trial'] = 1;
-			} else {
-				wc_add_notice( trim( $check['message'] . ' ' . __( 'You can buy the plan right away instead.', 'subtleforms-license-server' ) ), 'notice' );
-			}
-		}
 		return $this->put_in_cart( $product_id, $data );
 	}
 
@@ -497,7 +487,7 @@ final class SFLS_Woo {
 			$same = (int) $item['product_id'] === $product_id
 				&& (int) ( $item['sfls_renew_license'] ?? 0 ) === (int) ( $data['sfls_renew_license'] ?? 0 )
 				&& (int) ( $item['sfls_upgrade_license'] ?? 0 ) === (int) ( $data['sfls_upgrade_license'] ?? 0 )
-				&& (int) ( $item['sfls_trial'] ?? 0 ) === (int) ( $data['sfls_trial'] ?? 0 );
+				&& empty( $item['sfls_trial'] ); // A line left over from a free trial is replaced.
 			if ( $same ) {
 				continue; // Already there; keep it.
 			}
@@ -510,7 +500,7 @@ final class SFLS_Woo {
 				return true;
 			}
 		}
-		$swapped = $swapped && ! self::only_trial_changed( $product_id, $data );
+		$swapped = $swapped && array( $product_id ) !== array_values( array_unique( $this->removed ) ); // Same product replaced: no swap notice.
 		try {
 			$added = WC()->cart->add_to_cart( $product_id, 1, 0, array(), $data );
 		} catch ( Exception $e ) {
@@ -529,18 +519,6 @@ final class SFLS_Woo {
 	 * @var int[]
 	 */
 	private array $removed = array();
-
-	/**
-	 * Whether put_in_cart() only switched the free trial on or off for the
-	 * same product (no "we swapped your cart" notice then).
-	 *
-	 * @param int   $product_id Product.
-	 * @param array $data       Cart item data.
-	 */
-	private function only_trial_changed( int $product_id, array $data ): bool {
-		unset( $data );
-		return array( $product_id ) === array_values( array_unique( $this->removed ) );
-	}
 
 	/**
 	 * "You can buy one plan at a time. We swapped your cart to {plan}."

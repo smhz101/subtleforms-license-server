@@ -127,7 +127,7 @@
 	 * Open the Paddle payment form inside `root`.
 	 *
 	 * @param {HTMLElement} root Container.
-	 * @param {Object}      opts { transactionId, successUrl, payUrl, trial, cancelable }
+	 * @param {Object}      opts { transactionId, successUrl, payUrl, cancelable }
 	 * @return {Promise<string>} 'completed', 'cancelled' or 'failed'.
 	 */
 	function mount( root, opts ) {
@@ -143,7 +143,7 @@
 
 			var head = document.createElement( 'p' );
 			head.className = 'sfls-paddle-inline__lead';
-			head.textContent = 'yes' === opts.trial ? i18n.leadTrial : i18n.lead;
+			head.textContent = i18n.lead;
 
 			var status = document.createElement( 'p' );
 			status.className = 'sfls-paddle-inline__status';
@@ -252,7 +252,6 @@
 					transactionId: result.sfls_paddle_txn,
 					successUrl: result.sfls_paddle_success,
 					payUrl: result.sfls_paddle_pay_url,
-					trial: result.sfls_paddle_trial,
 					cancelable: true,
 				} ).then( function ( outcome ) {
 					if ( 'cancelled' === outcome ) {
@@ -270,7 +269,6 @@
 		mount( payRoot, {
 			transactionId: cfg.pay.transactionId,
 			successUrl: cfg.pay.successUrl,
-			trial: cfg.pay.trial,
 			cancelable: false,
 		} );
 	}

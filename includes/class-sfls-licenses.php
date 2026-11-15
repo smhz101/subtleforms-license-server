@@ -17,7 +17,7 @@ final class SFLS_Licenses {
 	/**
 	 * Billing columns (schema 4) that create() accepts as they are.
 	 */
-	const BILLING_COLUMNS = array( 'billing_status', 'trial', 'trial_started_at', 'trial_ends_at', 'renews_at', 'cancels_at', 'billing_amount', 'billing_currency', 'paddle_customer_id', 'paddle_subscription_id', 'paddle_price_id', 'paddle_transaction_id', 'checkout_token_hash', 'billing_synced_at' );
+	const BILLING_COLUMNS = array( 'billing_status', 'renews_at', 'cancels_at', 'billing_amount', 'billing_currency', 'paddle_customer_id', 'paddle_subscription_id', 'paddle_price_id', 'paddle_transaction_id', 'checkout_token_hash', 'billing_synced_at' );
 
 	/**
 	 * New key: SFP-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX (128 random bits).
@@ -425,13 +425,6 @@ final class SFLS_Licenses {
 
 		self::upgrade_legacy_activation( (int) $lic['id'], $domain );
 		$existing = self::activation( (int) $lic['id'], $domain );
-		if ( ! $existing && ! empty( $lic['trial'] ) && ! self::is_local_domain( $domain ) && SFLS_Trials::site_used_by_other( $domain, (int) $lic['id'] ) ) {
-			return new WP_Error(
-				'trial_site_used',
-				__( 'This site already had a SubtleForms Pro free trial. Buy a license to use Pro here, or start the trial on a site that has not had one.', 'subtleforms-license-server' ),
-				array( 'status' => 403 )
-			);
-		}
 		if ( ! $existing && ! self::is_local_domain( $domain ) && ! self::has_seat_for( $lic, $domain ) ) {
 			return self::seat_error( (int) $lic['sites_allowed'] );
 		}
@@ -445,9 +438,6 @@ final class SFLS_Licenses {
 				return self::seat_error( (int) $lic['sites_allowed'] );
 			}
 			self::log( (int) $lic['id'], $domain, 'activate', $source );
-			if ( ! empty( $lic['trial'] ) && ! self::is_local_domain( $domain ) ) {
-				SFLS_Trials::record_site( (int) $lic['id'], $domain );
-			}
 			do_action( 'sfls_domain_activated', $lic, $domain, $version );
 		}
 
@@ -778,7 +768,7 @@ final class SFLS_Licenses {
 
 	/**
 	 * The host part of a site identity: "example.com" for "example.com/staging".
-	 * Staging and local rules, trials and the connect check look at the host.
+	 * Staging and local rules and the connect check look at the host.
 	 *
 	 * @param string $domain Normalised domain, or a bare host.
 	 */
@@ -974,8 +964,7 @@ final class SFLS_Licenses {
 				'grace_period_ends_at' => null,
 			);
 		}
-		// A free trial that ended without a payment has no grace period.
-		$grace_end = ! empty( $lic['trial'] ) ? $expires : $expires + self::GRACE_DAYS * DAY_IN_SECONDS;
+		$grace_end = $expires + self::GRACE_DAYS * DAY_IN_SECONDS;
 		if ( $grace_end > time() ) {
 			return array(
 				'status'               => 'grace_period',
@@ -1065,12 +1054,9 @@ final class SFLS_Licenses {
 			'sites_used'           => self::used_slots( (int) $lic['id'] ),
 			'check_again_in'       => 12 * HOUR_IN_SECONDS,
 			'is_local'             => '' !== $domain && self::is_local_domain( $domain ),
-			// Billing (1.4.0). During a free trial the license stays valid with
-			// status "valid", so older Pro versions keep working.
+			// Billing (1.4.0).
 			'billing'              => self::billing_source( $lic ),
 			'billing_status'       => 'paddle' === self::billing_source( $lic ) && '' !== (string) ( $lic['billing_status'] ?? '' ) ? (string) $lic['billing_status'] : null,
-			'trial'                => ! empty( $lic['trial'] ),
-			'trial_ends_at'        => self::iso( $lic['trial_ends_at'] ?? null ),
 			'renews_at'            => self::iso( $lic['renews_at'] ?? null ),
 			'cancels_at'           => self::iso( $lic['cancels_at'] ?? null ),
 			'renewal_amount'       => self::renewal_amount( $lic ),
@@ -1321,10 +1307,10 @@ final class SFLS_Licenses {
 	}
 
 	/**
-	 * Paddle licenses whose trial ends, or whose subscription renews, in a
+	 * Paddle licenses whose subscription renews in a
 	 * window, and that are not set to cancel.
 	 *
-	 * @param string $column   trial_ends_at | renews_at.
+	 * @param string $column   renews_at.
 	 * @param string $from     GMT datetime (exclusive).
 	 * @param string $to       GMT datetime (inclusive).
 	 * @param int    $after_id Last ID of the previous page (0 for the first).
@@ -1333,10 +1319,7 @@ final class SFLS_Licenses {
 	public static function paddle_due( string $column, string $from, string $to, int $after_id = 0 ): array {
 		global $wpdb;
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		if ( 'trial_ends_at' === $column ) {
-			return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE status = 'active' AND billing = 'paddle' AND trial = 1 AND billing_status = 'trialing' AND cancels_at IS NULL AND trial_ends_at IS NOT NULL AND trial_ends_at > %s AND trial_ends_at <= %s AND id > %d ORDER BY id ASC LIMIT %d", $from, $to, $after_id, self::PAGE ), ARRAY_A );
-		}
-		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE status = 'active' AND billing = 'paddle' AND trial = 0 AND billing_status IN ( 'active', 'past_due' ) AND cancels_at IS NULL AND renews_at IS NOT NULL AND renews_at > %s AND renews_at <= %s AND id > %d ORDER BY id ASC LIMIT %d", $from, $to, $after_id, self::PAGE ), ARRAY_A );
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sfls_licenses WHERE status = 'active' AND billing = 'paddle' AND billing_status IN ( 'active', 'past_due' ) AND cancels_at IS NULL AND renews_at IS NOT NULL AND renews_at > %s AND renews_at <= %s AND id > %d ORDER BY id ASC LIMIT %d", $from, $to, $after_id, self::PAGE ), ARRAY_A );
 		// phpcs:enable
 	}
 }
