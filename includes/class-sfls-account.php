@@ -572,6 +572,9 @@ final class SFLS_Account {
 		$live   = in_array( $status, array( 'active', 'trialing', 'past_due' ), true );
 		$action = wc_get_account_endpoint_url( self::EP_LICENSES );
 
+		if ( 'past_due' === $status ) {
+			echo '<p class="sfls-notice sfls-notice--bad" role="alert">' . esc_html__( 'Your last payment failed. Update your card to keep Pro working.', 'subtleforms-license-server' ) . '</p>';
+		}
 		echo '<div class="sfls-billing sfls-billing--' . esc_attr( $line[0] ) . '" data-billing-status="' . esc_attr( $status ) . '">';
 		echo '<div class="sfls-billing-text"><strong>' . esc_html( $line[1] ) . '</strong>';
 		echo '</div><div class="sfls-billing-actions">';

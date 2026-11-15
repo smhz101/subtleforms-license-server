@@ -965,6 +965,10 @@ final class SFLS_Licenses {
 			);
 		}
 		$grace_end = $expires + self::GRACE_DAYS * DAY_IN_SECONDS;
+		if ( 'paddle' === self::billing_source( $lic ) && 'past_due' === ( $lic['billing_status'] ?? '' ) ) {
+			// Paddle is still retrying the payment: keep Pro on for as long as it may collect.
+			$grace_end = max( $grace_end, $expires + SFLS_Settings::dunning_grace_days() * DAY_IN_SECONDS );
+		}
 		if ( $grace_end > time() ) {
 			return array(
 				'status'               => 'grace_period',

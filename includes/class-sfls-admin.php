@@ -924,6 +924,8 @@ final class SFLS_Admin {
 
 		echo '<tr><th scope="row"><label for="sfls-days">' . esc_html__( 'Renewal reminders', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-days" type="text" name="reminder_days" value="' . esc_attr( $s['reminder_days'] ) . '" class="regular-text" placeholder="30,7"><p class="description">' . esc_html__( 'Days before expiry to email the customer, separated by commas. Leave empty to turn reminders off.', 'subtleforms-license-server' ) . '</p></td></tr>';
 
+		echo '<tr><th scope="row"><label for="sfls-dunning">' . esc_html__( 'Failed payment grace', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-dunning" type="number" min="0" max="60" name="dunning_grace_days" value="' . esc_attr( (string) SFLS_Settings::dunning_grace_days() ) . '" class="small-text"> ' . esc_html__( 'days', 'subtleforms-license-server' ) . '<p class="description">' . esc_html__( 'How long Pro keeps working while Paddle retries a failed renewal payment.', 'subtleforms-license-server' ) . '</p></td></tr>';
+
 		echo '<tr><th scope="row">' . esc_html__( 'After expiry', 'subtleforms-license-server' ) . '</th><td><label><input type="checkbox" name="lapsed_reminder" value="1"' . checked( (int) $s['lapsed_reminder'], 1, false ) . '> ' . esc_html__( 'Send one more reminder the day after a license expires', 'subtleforms-license-server' ) . '</label></td></tr>';
 
 		$support = SFLS_Settings::support_email();
@@ -1618,6 +1620,9 @@ final class SFLS_Admin {
 		$extra = array();
 		if ( isset( $_POST['staging_hosts'] ) ) {
 			$extra['staging_hosts'] = sanitize_textarea_field( wp_unslash( $_POST['staging_hosts'] ) );
+		}
+		if ( isset( $_POST['dunning_grace_days'] ) ) {
+			$extra['dunning_grace_days'] = absint( $_POST['dunning_grace_days'] );
 		}
 		if ( isset( $_POST['retention_days'] ) ) {
 			$extra['retention_days'] = absint( $_POST['retention_days'] );
