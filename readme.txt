@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.10.0
+Stable tag: 1.10.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,6 +25,11 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.10.1 - 2026-11-15 =
+* Change: Failures in payment paths (Paddle lookups, order polling, webhook database writes, account creation) are now written to the WooCommerce log under the source sfls-paddle and, where an order exists, to a private order note.
+* Fix: A license whose Paddle renewal payment failed now keeps working while Paddle retries it (30 days by default, set under Settings), and My Account tells the customer to update their card.
+* Fix: A billing or reminder email is marked as sent only after it was sent; a failed billing email is tried again by the daily job, and after three failures the admin sees a notice and the order gets a private note.
 
 = 1.10.0 - 2026-11-15 =
 * Removed: Free trials of paid plans. The free WordPress.org plugin is the trial now. Checkout is always a paid purchase: old links with sfls_trial=1 or 0 still work and add the plan as a normal paid item. The eligibility route (POST /paddle/eligibility), the email code step, the trial reminder and trial emails, the plan trial fields and the trial email settings are gone. A subscription that still arrives from Paddle with the trialing status is handled like an active one. The update drops the wp_sfls_trial_claims and wp_sfls_trial_codes tables, the trial, trial_started_at and trial_ends_at columns of wp_sfls_licenses, and the trial settings (schema 12).
