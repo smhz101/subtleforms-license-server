@@ -1096,6 +1096,8 @@ final class SFLS_Woo_Paddle_Orders {
 				$order->save_meta_data();
 				if ( 'rejected' === $status ) {
 					self::undo_refund( $order, (int) ( $entry['refund_id'] ?? 0 ), $id );
+					// Other approved refunds may now reach the threshold on their own.
+					( new SFLS_Woo() )->on_refund( $order->get_id() );
 					return self::result( 'rejected', 'Refund rejected by Paddle.' );
 				}
 				if ( 'approved' === $status ) {
@@ -1240,6 +1242,8 @@ final class SFLS_Woo_Paddle_Orders {
 		$refund = $refund_id ? wc_get_order( $refund_id ) : null;
 		if ( $refund instanceof WC_Order_Refund ) {
 			$refund->delete( true );
+			// Deleting a refund leaves the cached refunded total behind.
+			WC_Cache_Helper::invalidate_cache_group( 'orders' );
 		}
 		$order = wc_get_order( $order->get_id() );
 		if ( $order->has_status( 'refunded' ) ) {

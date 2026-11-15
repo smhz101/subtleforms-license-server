@@ -240,4 +240,43 @@ class SFLS_Partial_Refund_Test extends SFLS_Test_Case {
 		$this->assertSame( array(), $this->calls( 'POST', '#^/subscriptions/sub_\w+/cancel$#' ) );
 		$this->assertCount( 0, wc_get_order( $order->get_id() )->get_refunds() );
 	}
+	/**
+	 * Approved 60% while a 10% refund is pending, then the 10% is rejected:
+	 * the approved share alone crosses the threshold, so the license is suspended.
+	 */
+	public function test_threshold_rechecked_when_last_pending_refund_is_rejected(): void {
+		[ $order, $lic, $adj_id ] = $this->pending_gateway_refund();
+		$this->paddle_routes['POST /adjustments'] = array(
+			201,
+			array(
+				'id'             => 'adj_01second',
+				'status'         => 'pending_approval',
+				'action'         => 'refund',
+				'transaction_id' => 'txn_01refund',
+				'totals'         => array(
+					'total'         => '390',
+					'currency_code' => 'USD',
+				),
+			),
+		);
+		$second = wc_create_refund(
+			array(
+				'order_id'       => $order->get_id(),
+				'amount'         => '3.90',
+				'refund_payment' => true,
+			)
+		);
+		$this->assertInstanceOf( WC_Order_Refund::class, $second, is_wp_error( $second ) ? $second->get_error_message() : '' );
+
+		SFLS_Woo_Paddle_Orders::adjustment( $this->adjustment_event( $adj_id, 'approved' ), self::when( 0 ) );
+		$this->assertSame( 'active', SFLS_Licenses::find( (int) $lic['id'] )['status'], 'Still waiting for the second refund.' );
+		$this->assertSame( array(), $this->calls( 'POST', '#^/subscriptions/sub_\w+/cancel$#' ) );
+
+		$rejected                   = $this->adjustment_event( 'adj_01second', 'rejected' );
+		$rejected['totals']['total'] = '390';
+		SFLS_Woo_Paddle_Orders::adjustment( $rejected, self::when( 0 ) );
+		$this->assertSame( 'suspended', SFLS_Licenses::find( (int) $lic['id'] )['status'] );
+		$this->assertCount( 1, $this->calls( 'POST', '#^/subscriptions/sub_\w+/cancel$#' ) );
+		$this->assertCount( 1, wc_get_order( $order->get_id() )->get_refunds() );
+	}
 }
