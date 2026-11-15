@@ -579,8 +579,10 @@ final class SFLS_Woo_Paddle_Orders {
 		try {
 			self::complete_checkout( $order, $txn );
 		} catch ( RuntimeException $e ) {
-			// Another request is completing it, or it could not be completed: leave a trace either way.
-			SFLS_Log::payment( 'poll', 'Completing the order failed: ' . $e->getMessage(), $order );
+			// The webhook and the order page often complete the same payment at once: that race is
+			// normal, so it is logged without an order note. Any other failure gets a note.
+			$race = false !== strpos( $e->getMessage(), 'being completed by another request' );
+			SFLS_Log::payment( 'poll', 'Completing the order failed: ' . $e->getMessage(), $race ? null : $order );
 		}
 	}
 
