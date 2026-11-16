@@ -35,27 +35,6 @@ final class SFLS_Standard_Reports {
 	}
 
 	/**
-	 * Revenue measures.
-	 */
-	private static function revenue_measures(): array {
-		return array(
-			array( 'fn' => 'count' ),
-			array(
-				'fn'    => 'sum',
-				'field' => 'revenue',
-			),
-			array(
-				'fn'    => 'sum',
-				'field' => 'refunded',
-			),
-			array(
-				'fn'    => 'sum',
-				'field' => 'net_revenue',
-			),
-		);
-	}
-
-	/**
 	 * Every standard report: key => group, label, def (or null), run (or null).
 	 *
 	 * @return array<string,array>
@@ -68,18 +47,10 @@ final class SFLS_Standard_Reports {
 				'value' => self::PAID,
 			),
 		);
-		$rev  = static fn( string $by, array $more = array() ) => self::def(
-			'orders',
-			$more + array(
-				'group_by' => array( $by ),
-				'measures' => self::revenue_measures(),
-				'filters'  => $paid,
-			)
-		);
 		$std  = array(
-			'revenue-month'    => array( __( 'Revenue', 'subtleforms-license-server' ), __( 'Revenue by month', 'subtleforms-license-server' ), $rev( 'purchase_month' ), null ),
-			'revenue-plan'     => array( __( 'Revenue', 'subtleforms-license-server' ), __( 'Revenue by plan', 'subtleforms-license-server' ), $rev( 'plan', array( 'display' => 'pie' ) ), null ),
-			'revenue-country'  => array( __( 'Revenue', 'subtleforms-license-server' ), __( 'Revenue by country', 'subtleforms-license-server' ), $rev( 'country', array( 'sort' => 'sum_net_revenue:desc' ) ), null ),
+			'revenue-month'    => array( __( 'Revenue', 'subtleforms-license-server' ), __( 'Revenue by month', 'subtleforms-license-server' ), null, array( self::class, 'revenue_month' ) ),
+			'revenue-plan'     => array( __( 'Revenue', 'subtleforms-license-server' ), __( 'Revenue by plan', 'subtleforms-license-server' ), null, array( self::class, 'revenue_plan' ) ),
+			'revenue-country'  => array( __( 'Revenue', 'subtleforms-license-server' ), __( 'Revenue by country', 'subtleforms-license-server' ), null, array( self::class, 'revenue_country' ) ),
 			'licenses-month'   => array( __( 'Licenses', 'subtleforms-license-server' ), __( 'New, renewed and expired by month', 'subtleforms-license-server' ), null, array( self::class, 'licenses_month' ) ),
 			'licenses-plan'    => array(
 				__( 'Licenses', 'subtleforms-license-server' ),
@@ -279,6 +250,112 @@ final class SFLS_Standard_Reports {
 			'columns'    => $columns,
 			'rows'       => array_values( $rows ),
 			'total_rows' => count( $rows ),
+		);
+	}
+
+	/**
+	 * Revenue by month: the same ledger as the dashboard (SFLS_Metrics::money).
+	 *
+	 * @param string $from Y-m-d.
+	 * @param string $to   Y-m-d.
+	 */
+	public static function revenue_month( string $from = '', string $to = '' ): array {
+		return self::ledger( 'purchase_month', __( 'Month', 'subtleforms-license-server' ), $from, $to );
+	}
+
+	/**
+	 * Revenue by plan.
+	 *
+	 * @param string $from Y-m-d.
+	 * @param string $to   Y-m-d.
+	 */
+	public static function revenue_plan( string $from = '', string $to = '' ): array {
+		return self::ledger( 'plan', __( 'Plan', 'subtleforms-license-server' ), $from, $to );
+	}
+
+	/**
+	 * Revenue by country.
+	 *
+	 * @param string $from Y-m-d.
+	 * @param string $to   Y-m-d.
+	 */
+	public static function revenue_country( string $from = '', string $to = '' ): array {
+		return self::ledger( 'country', __( 'Country', 'subtleforms-license-server' ), $from, $to );
+	}
+
+	/**
+	 * Gross sales, refunds, net sales, fees and net earnings grouped by month
+	 * (sales by paid date, refunds by refund date), plan or country.
+	 *
+	 * @param string $by    purchase_month, plan or country.
+	 * @param string $label Label of the group column.
+	 * @param string $from  Y-m-d.
+	 * @param string $to    Y-m-d.
+	 */
+	private static function ledger( string $by, string $label, string $from, string $to ): array {
+		$tz   = wp_timezone();
+		$utc  = static fn( string $day, string $time ): string => ( new DateTimeImmutable( $day . ' ' . $time, $tz ) )->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+		$f    = '' !== $from ? $utc( $from, '00:00:00' ) : '1970-01-02 00:00:00';
+		$t    = '' !== $to ? $utc( $to, '23:59:59' ) : '2100-01-01 00:00:00';
+		$key  = static function ( array $r ) use ( $by ): string {
+			if ( 'purchase_month' === $by ) {
+				return wp_date( 'Y-m', (int) strtotime( $r['date'] . ' UTC' ) );
+			}
+			return (string) $r[ $by ];
+		};
+		$rows = array();
+		$add  = static function ( array $r, bool $sale ) use ( &$rows, $key ): void {
+			$k = $key( $r );
+			if ( ! isset( $rows[ $k ] ) ) {
+				$rows[ $k ] = array(
+					'key'             => $k,
+					'count'           => 0,
+					'sum_revenue'     => 0.0,
+					'sum_refunded'    => 0.0,
+					'sum_net_revenue' => 0.0,
+					'sum_fees'        => 0.0,
+					'sum_earnings'    => 0.0,
+				);
+			}
+			$g = &$rows[ $k ];
+			if ( $sale ) {
+				++$g['count'];
+				$g['sum_revenue']     += $r['gross'];
+				$g['sum_net_revenue'] += $r['gross'];
+				$g['sum_fees']        += (float) $r['fee'];
+			} else {
+				$g['sum_refunded']    += $r['amount'];
+				$g['sum_net_revenue'] -= $r['amount'];
+				$g['sum_fees']        -= $r['fee'];
+			}
+			$g['sum_earnings'] += $r['earnings'];
+		};
+		foreach ( SFLS_Metrics::orders( $f, $t )['rows'] as $r ) {
+			$add( $r, true );
+		}
+		foreach ( SFLS_Metrics::refunds( $f, $t ) as $r ) {
+			$add( $r, false );
+		}
+		if ( 'purchase_month' === $by ) {
+			ksort( $rows );
+		} else {
+			uasort( $rows, static fn( $a, $b ) => $b['sum_net_revenue'] <=> $a['sum_net_revenue'] );
+		}
+		$rows = array_map(
+			static fn( $r ) => array( $by => $r['key'] ) + array_map( static fn( $v ) => is_float( $v ) ? round( $v, 2 ) : $v, array_diff_key( $r, array( 'key' => 1 ) ) ),
+			$rows
+		);
+		return self::result(
+			array(
+				$by               => array( $label, 'purchase_month' === $by ? 'date' : 'string' ),
+				'count'           => array( __( 'Orders', 'subtleforms-license-server' ), 'number', true ),
+				'sum_revenue'     => array( __( 'Gross sales', 'subtleforms-license-server' ), 'money', true ),
+				'sum_refunded'    => array( __( 'Refunds', 'subtleforms-license-server' ), 'money', true ),
+				'sum_net_revenue' => array( __( 'Net sales', 'subtleforms-license-server' ), 'money', true ),
+				'sum_fees'        => array( __( 'Paddle fees', 'subtleforms-license-server' ), 'money', true ),
+				'sum_earnings'    => array( __( 'Net earnings', 'subtleforms-license-server' ), 'money', true ),
+			),
+			$rows
 		);
 	}
 

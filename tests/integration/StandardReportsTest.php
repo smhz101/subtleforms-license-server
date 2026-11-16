@@ -223,9 +223,9 @@ class SFLS_Standard_Reports_Test extends SFLS_Test_Case {
 		$res                         = SFLS_Standard_Reports::run( 'dunning' );
 		$res['rows']                 = array( array_fill_keys( wp_list_pluck( $res['columns'], 'key' ), '=HYPERLINK("x")' ) );
 		$this->assertStringContainsString( "'=HYPERLINK", SFLS_Reports_Admin::csv( $res ) );
-		$std = SFLS_Standard_Reports::find( 'revenue-plan' );
+		$std = SFLS_Standard_Reports::find( 'refunds-month' );
 		$def = SFLS_Standard_Reports::definition( $std, '2001-01-01', '' );
-		$this->assertSame( 'orders', $def['dataset'] );
+		$this->assertSame( 'refunds', $def['dataset'] );
 		$this->assertNull( SFLS_Standard_Reports::find( 'nope' ) );
 		$this->assertInstanceOf( WP_Error::class, SFLS_Standard_Reports::run( 'nope' ) );
 	}

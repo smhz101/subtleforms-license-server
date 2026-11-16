@@ -141,6 +141,16 @@ parameters:
 			path: includes/class-sfls-woo.php
 
 		-
+			message: "#^Call to static method success\\(\\) on an unknown class WP_CLI\\.$#"
+			count: 2
+			path: includes/class-sfls-cli-finance.php
+
+		-
+			message: "#^Function WP_CLI\\\\Utils\\\\format_items not found\\.$#"
+			count: 1
+			path: includes/class-sfls-cli-finance.php
+
+		-
 			message: "#^Call to static method add_command\\(\\) on an unknown class WP_CLI\\.$#"
-			count: 4
+			count: 5
 			path: subtleforms-license-server.php

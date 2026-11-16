@@ -182,8 +182,8 @@ class SFLS_Metrics_Test extends SFLS_Test_Case {
 	public function test_kpis_match_the_fixture(): void {
 		$k = SFLS_Metrics::kpis( self::FROM, self::TO );
 
-		$this->assertSame( 8, $k['active']['value'] );
-		$this->assertSame( 6, $k['active']['previous'] );
+		$this->assertSame( 7, $k['active']['value'], 'A9 is canceled in Paddle.' );
+		$this->assertSame( 5, $k['active']['previous'] );
 		$this->assertSame( 4, $k['new']['value'] );
 		$this->assertSame( 1, $k['new']['previous'] );
 		$this->assertEqualsWithDelta( 500.0, $k['revenue']['value'], 0.001 );

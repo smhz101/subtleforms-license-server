@@ -26,6 +26,7 @@ final class SFLS_Dashboard {
 		add_action( 'admin_menu', array( $this, 'menu' ), 20 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ), 5 );
 		add_action( 'admin_post_sfls_metrics_refresh', array( $this, 'handle_refresh' ) );
+		add_action( 'admin_post_sfls_finance_sync', array( 'SFLS_Finance', 'handle_sync' ) );
 	}
 
 	/**
@@ -85,8 +86,9 @@ final class SFLS_Dashboard {
 		$plan = SFLS_Plans::get( $plan ) ? $plan : '';
 		$now  = current_time( 'mysql', true );
 		if ( 'custom' === $range && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $cfrom ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $cto ) && strtotime( $cfrom ) && strtotime( $cto ) && $cfrom <= $cto ) {
-			$from = $cfrom . ' 00:00:00';
-			$to   = $cto . ' 23:59:59';
+			$utc  = static fn( string $local ): string => ( new DateTimeImmutable( $local, wp_timezone() ) )->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+			$from = $utc( $cfrom . ' 00:00:00' );
+			$to   = $utc( $cto . ' 23:59:59' );
 		} elseif ( '12m' === $range ) {
 			$range = '12m';
 			$from  = gmdate( 'Y-m-d H:i:s', strtotime( '-12 months', strtotime( $now . ' UTC' ) ) );
@@ -141,13 +143,7 @@ final class SFLS_Dashboard {
 		if ( 'percent' === $kpi['format'] ) {
 			$text = number_format_i18n( abs( $diff ), 1 ) . ' ' . __( 'pts', 'subtleforms-license-server' );
 		} elseif ( 0.0 === (float) $prev ) {
-			if ( 0.0 === $diff ) {
-				return array(
-					'text' => '= 0%',
-					'tone' => 'flat',
-				);
-			}
-			$text = __( 'new', 'subtleforms-license-server' );
+			return null; // No percent change from nothing.
 		} else {
 			$text = number_format_i18n( abs( $diff / (float) $prev * 100 ), 1 ) . '%';
 		}
@@ -174,15 +170,23 @@ final class SFLS_Dashboard {
 		return array(
 			'active'         => __( 'Active licenses', 'subtleforms-license-server' ),
 			'new'            => __( 'New licenses', 'subtleforms-license-server' ),
-			'revenue'        => __( 'Revenue', 'subtleforms-license-server' ),
-			'net_revenue'    => __( 'Net revenue', 'subtleforms-license-server' ),
-			'mrr'            => __( 'MRR', 'subtleforms-license-server' ),
-			'arr'            => __( 'ARR', 'subtleforms-license-server' ),
+			'earnings'       => __( 'Net earnings (Paddle payout)', 'subtleforms-license-server' ),
+			'revenue'        => __( 'Gross sales', 'subtleforms-license-server' ),
+			'refunds'        => __( 'Refunds', 'subtleforms-license-server' ),
+			'net_revenue'    => __( 'Net sales', 'subtleforms-license-server' ),
+			'tax'            => __( 'Tax collected', 'subtleforms-license-server' ),
+			'fees'           => __( 'Paddle fees', 'subtleforms-license-server' ),
+			'paying'         => __( 'Paying customers', 'subtleforms-license-server' ),
+			'mrr'            => __( 'MRR (billed amount)', 'subtleforms-license-server' ),
+			'arr'            => __( 'ARR (billed amount)', 'subtleforms-license-server' ),
+			'projected_30'   => __( 'Expected renewals, 30 days', 'subtleforms-license-server' ),
+			'projected_60'   => __( 'Expected renewals, 60 days', 'subtleforms-license-server' ),
+			'projected_90'   => __( 'Expected renewals, 90 days', 'subtleforms-license-server' ),
 			'renewal_rate'   => __( 'Renewal rate', 'subtleforms-license-server' ),
 			'churn'          => __( 'Churn', 'subtleforms-license-server' ),
 			'refund_rate'    => __( 'Refund rate', 'subtleforms-license-server' ),
 			'dunning_count'  => __( 'Past due', 'subtleforms-license-server' ),
-			'dunning_amount' => __( 'Amount at risk', 'subtleforms-license-server' ),
+			'dunning_amount' => __( 'At risk (past due)', 'subtleforms-license-server' ),
 			'active_sites'   => __( 'Active sites', 'subtleforms-license-server' ),
 		);
 	}
@@ -244,8 +248,8 @@ final class SFLS_Dashboard {
 			__( 'Dashboard', 'subtleforms-license-server' ),
 			'',
 			sprintf(
-				/* translators: 1: from date, 2: to date (UTC) */
-				__( '%1$s to %2$s (UTC), compared with the previous period of the same length.', 'subtleforms-license-server' ),
+				/* translators: 1: from date, 2: to date (site time) */
+				__( '%1$s to %2$s (site time), sales by paid date and refunds by refund date, compared with the previous period of the same length.', 'subtleforms-license-server' ),
 				$date( $f['from'] ),
 				$date( $f['to'] )
 			)
@@ -266,8 +270,8 @@ final class SFLS_Dashboard {
 			echo '<option value="' . esc_attr( $value ) . '"' . selected( $f['range'], (string) $value, false ) . '>' . esc_html( $label ) . '</option>';
 		}
 		echo '</select></label> ';
-		echo '<label>' . esc_html__( 'From', 'subtleforms-license-server' ) . ' <input type="date" name="from" value="' . esc_attr( 'custom' === $f['range'] ? substr( $f['from'], 0, 10 ) : '' ) . '"></label> ';
-		echo '<label>' . esc_html__( 'To', 'subtleforms-license-server' ) . ' <input type="date" name="to" value="' . esc_attr( 'custom' === $f['range'] ? substr( $f['to'], 0, 10 ) : '' ) . '"></label> ';
+		echo '<label>' . esc_html__( 'From', 'subtleforms-license-server' ) . ' <input type="date" name="from" value="' . esc_attr( 'custom' === $f['range'] ? wp_date( 'Y-m-d', strtotime( $f['from'] . ' UTC' ) ) : '' ) . '"></label> ';
+		echo '<label>' . esc_html__( 'To', 'subtleforms-license-server' ) . ' <input type="date" name="to" value="' . esc_attr( 'custom' === $f['range'] ? wp_date( 'Y-m-d', strtotime( $f['to'] . ' UTC' ) ) : '' ) . '"></label> ';
 		echo '<label>' . esc_html__( 'Plan', 'subtleforms-license-server' ) . ' <select name="plan"><option value="">' . esc_html__( 'All plans', 'subtleforms-license-server' ) . '</option>';
 		foreach ( array_keys( SFLS_Plans::all() ) as $slug ) {
 			echo '<option value="' . esc_attr( $slug ) . '"' . selected( $f['plan'], $slug, false ) . '>' . esc_html( SFLS_Plans::label( $slug ) ) . '</option>';
@@ -278,6 +282,21 @@ final class SFLS_Dashboard {
 		wp_nonce_field( 'sfls_metrics_refresh' );
 		echo '<button type="submit" class="button">' . esc_html__( 'Refresh', 'subtleforms-license-server' ) . '</button> <span class="sfls-muted">' . esc_html__( 'Figures are cached for 15 minutes.', 'subtleforms-license-server' ) . '</span></form></div>';
 
+		// Estimated figures: Paddle's totals are missing on some orders.
+		$estimated = array_filter( array_column( $kpis, 'estimated' ) );
+		if ( $estimated || isset( $_GET['sfls_synced'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			echo '<div class="notice notice-info inline"><p>';
+			if ( isset( $_GET['sfls_synced'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				echo esc_html( sprintf( /* translators: %s: counts such as 3-5 */ __( 'Paddle sync: %s (stored-checked).', 'subtleforms-license-server' ), sanitize_text_field( wp_unslash( $_GET['sfls_synced'] ) ) ) ) . ' '; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			}
+			if ( $estimated ) {
+				echo esc_html__( 'Some figures are estimated (marked ~): Paddle fees and payout are not stored for every order.', 'subtleforms-license-server' ) . ' ';
+			}
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline"><input type="hidden" name="action" value="sfls_finance_sync">';
+			wp_nonce_field( 'sfls_finance_sync' );
+			echo '<button type="submit" class="button">' . esc_html__( 'Sync Paddle figures', 'subtleforms-license-server' ) . '</button></form></p></div>';
+		}
+
 		// KPI cards.
 		echo '<div class="sfls-dash-kpis">';
 		foreach ( self::labels() as $key => $label ) {
@@ -287,7 +306,14 @@ final class SFLS_Dashboard {
 				'format'   => 'number',
 			);
 			$delta = self::delta( $key, $kpi );
-			echo '<div class="sfls-card sfls-kpi"><div class="sfls-kpi__label">' . esc_html( $label ) . '</div><div class="sfls-kpi__value">' . esc_html( self::format_value( $kpi['value'], $kpi['format'] ) ) . '</div>';
+			echo '<div class="sfls-card sfls-kpi"><div class="sfls-kpi__label">' . esc_html( $label ) . '</div><div class="sfls-kpi__value">' . esc_html( ( ! empty( $kpi['estimated'] ) ? '~' : '' ) . self::format_value( $kpi['value'], $kpi['format'] ) ) . '</div>';
+			if ( isset( $kpi['n'] ) ) {
+				/* translators: %d: number of licenses or orders the rate is based on */
+				echo '<div class="sfls-kpi__delta">' . esc_html( null === $kpi['value'] ? __( 'No data in this period', 'subtleforms-license-server' ) : sprintf( __( 'based on %d', 'subtleforms-license-server' ), $kpi['n'] ) ) . '</div>';
+			} elseif ( isset( $kpi['count'] ) ) {
+				/* translators: %d: number of orders */
+				echo '<div class="sfls-kpi__delta">' . esc_html( sprintf( _n( '%d order', '%d orders', (int) $kpi['count'], 'subtleforms-license-server' ), (int) $kpi['count'] ) ) . '</div>';
+			}
 			if ( $delta ) {
 				echo '<div class="sfls-kpi__delta is-' . esc_attr( $delta['tone'] ) . '">' . esc_html( $delta['text'] ) . '</div>';
 			}

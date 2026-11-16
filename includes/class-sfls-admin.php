@@ -37,7 +37,46 @@ final class SFLS_Admin {
 		add_action( 'admin_post_sfls_paddle_map', array( $this, 'handle_paddle_map' ) );
 		add_action( 'admin_post_sfls_paddle_create', array( $this, 'handle_paddle_create' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( SFLS_FILE ), array( $this, 'action_links' ) );
+		self::highlight_hooks();
 		$this->releases()->register();
+	}
+
+	/**
+	 * Menu highlight hooks.
+	 */
+	public static function highlight_hooks(): void {
+		add_filter( 'submenu_file', array( __CLASS__, 'submenu_file' ), 20, 2 );
+		add_filter( 'parent_file', array( __CLASS__, 'parent_file' ), 20 );
+	}
+
+	/**
+	 * The License Server screen being shown ('' = none). The core plugin
+	 * blanks $submenu_file on every admin page, so highlight it ourselves.
+	 */
+	private static function current_page(): string {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		return in_array( $page, array( 'sfls', 'sfls-dashboard', 'sfls-new', 'sfls-products', 'sfls-release', 'sfls-settings', 'sfls-reports', 'sfls-customer' ), true ) ? $page : '';
+	}
+
+	/**
+	 * Highlight the submenu item (the hidden customer view belongs to All licenses).
+	 *
+	 * @param string|null $file   Current value.
+	 * @param string      $menu_parent Parent file.
+	 */
+	public static function submenu_file( $file, $menu_parent = '' ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+		$page = self::current_page();
+		return '' === $page ? $file : ( 'sfls-customer' === $page ? 'sfls' : $page );
+	}
+
+	/**
+	 * Keep the Licenses menu open on its screens.
+	 *
+	 * @param string $file Current value.
+	 */
+	public static function parent_file( $file ) {
+		return '' === self::current_page() ? $file : 'sfls';
 	}
 
 	/**

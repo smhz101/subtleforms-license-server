@@ -56,6 +56,7 @@ require_once SFLS_DIR . 'includes/class-sfls-woo-paddle.php';
 require_once SFLS_DIR . 'includes/class-sfls-woo-paddle-orders.php';
 require_once SFLS_DIR . 'includes/class-sfls-admin.php';
 require_once SFLS_DIR . 'includes/class-sfls-admin-releases.php';
+require_once SFLS_DIR . 'includes/class-sfls-finance.php';
 require_once SFLS_DIR . 'includes/class-sfls-metrics.php';
 require_once SFLS_DIR . 'includes/class-sfls-dashboard.php';
 require_once SFLS_DIR . 'includes/class-sfls-report-query.php';
@@ -115,6 +116,7 @@ add_action(
 		( new SFLS_Guest() )->register();
 		( new SFLS_Shortcodes() )->register();
 		( new SFLS_Reminders() )->register();
+		SFLS_Finance::register();
 		SFLS_Signing_Check::register();
 		SFLS_Billing_Emails::register();
 		SFLS_Templates::register();
@@ -137,6 +139,8 @@ add_action(
 			WP_CLI::add_command( 'sfls', 'SFLS_CLI' );
 			WP_CLI::add_command( 'sfls release', 'SFLS_CLI_Releases' );
 			WP_CLI::add_command( 'sfls release token', 'SFLS_CLI_Tokens' );
+			require_once SFLS_DIR . 'includes/class-sfls-cli-finance.php';
+			WP_CLI::add_command( 'sfls finance', 'SFLS_CLI_Finance' );
 			WP_CLI::add_command( 'sfls token', 'SFLS_CLI_Tokens' );
 		}
 	}
