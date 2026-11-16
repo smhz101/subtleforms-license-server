@@ -130,6 +130,14 @@ add_action(
 	}
 );
 
+// Translations.
+add_action(
+	'init',
+	static function () {
+		load_plugin_textdomain( 'subtleforms-license-server', false, dirname( plugin_basename( SFLS_FILE ) ) . '/languages' );
+	}
+);
+
 // One-time data migrations that need WooCommerce orders.
 add_action( 'init', array( 'SFLS_DB', 'run_migrations' ), 20 );
 
