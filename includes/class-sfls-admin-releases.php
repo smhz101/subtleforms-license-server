@@ -238,7 +238,7 @@ final class SFLS_Admin_Releases {
 		);
 		echo '<div class="sfls-admin-cards sfls-release-cards">';
 		foreach ( $cards as [ $label, $value, $chip ] ) {
-			echo '<div class="sfls-admin-card"><span class="sfls-admin-card-label">' . esc_html( $label ) . '</span><span class="sfls-admin-card-value">' . esc_html( $value );
+			echo '<div class="sfls-admin-card sfls-stat"><span class="sfls-admin-card-label">' . esc_html( $label ) . '</span><span class="sfls-admin-card-value">' . esc_html( $value );
 			if ( '' !== $chip ) {
 				echo ' <span class="sfls-admin-pill sfls-admin-pill--info">' . esc_html( $chip ) . '</span>';
 			}
@@ -300,7 +300,7 @@ final class SFLS_Admin_Releases {
 		}
 		echo '</tr></thead><tbody>';
 		if ( ! $rows ) {
-			echo '<tr><td colspan="9">' . esc_html__( 'No releases yet. Upload the SubtleForms Pro zip below, or connect GitHub or CI in Git and CI settings.', 'subtleforms-license-server' ) . '</td></tr>';
+			echo '<tr class="no-items"><td colspan="9" class="sfls-empty">' . esc_html__( 'No releases yet. Upload the SubtleForms Pro zip below, or connect GitHub or CI in Git and CI settings.', 'subtleforms-license-server' ) . ' <a class="button button-primary" href="#sfls-upload">' . esc_html__( 'Upload release', 'subtleforms-license-server' ) . '</a></td></tr>';
 		}
 		foreach ( $rows as $rel ) {
 			$id       = (int) $rel['id'];
@@ -372,7 +372,7 @@ final class SFLS_Admin_Releases {
 	 * @param array|null $latest Latest stable release.
 	 */
 	private function upload_panel( ?array $latest ): void {
-		echo '<form id="sfls-upload" method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-panel">';
+		echo '<form id="sfls-upload" method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-card sfls-panel">';
 		wp_nonce_field( 'sfls_release_upload' );
 		echo '<input type="hidden" name="action" value="sfls_release_upload"><h2>' . esc_html__( 'Upload a release', 'subtleforms-license-server' ) . '</h2><table class="form-table" role="presentation"><tbody>';
 		echo '<tr><th scope="row"><label for="sfls-zip">' . esc_html__( 'Plugin zip', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-zip" type="file" name="package" accept=".zip,application/zip" required><p class="description">' . esc_html(
@@ -401,9 +401,9 @@ final class SFLS_Admin_Releases {
 	 * @param array<string,int> $sites Version => sites.
 	 */
 	private function sites_panel( array $sites ): void {
-		echo '<div class="sfls-panel sfls-sites-panel"><h2>' . esc_html__( 'Versions on sites', 'subtleforms-license-server' ) . '</h2>';
+		echo '<div class="sfls-card sfls-panel sfls-sites-panel"><h2>' . esc_html__( 'Versions on sites', 'subtleforms-license-server' ) . '</h2>';
 		if ( ! $sites ) {
-			echo '<p class="description">' . esc_html__( 'No site with an active license has reported its Pro version yet. Sites report it when they check for updates.', 'subtleforms-license-server' ) . '</p></div>';
+			echo '<p class="sfls-empty">' . esc_html__( 'No site with an active license has reported its Pro version yet. Sites report it when they check for updates.', 'subtleforms-license-server' ) . '</p></div>';
 			return;
 		}
 		echo '<p class="description">' . esc_html__( 'The Pro version each site with an active license had when it last checked for updates.', 'subtleforms-license-server' ) . '</p>';
@@ -435,7 +435,7 @@ final class SFLS_Admin_Releases {
 		$latest = SFLS_Releases::latest( 'stable' );
 
 		echo '<div class="sfls-edit"><div class="sfls-edit-main">';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-panel">';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-card sfls-panel">';
 		wp_nonce_field( 'sfls_release_edit_' . $id );
 		echo '<input type="hidden" name="action" value="sfls_release_edit"><input type="hidden" name="id" value="' . esc_attr( (string) $id ) . '"><h2>' . esc_html__( 'Details', 'subtleforms-license-server' ) . '</h2><table class="form-table" role="presentation"><tbody>';
 		echo '<tr><th scope="row"><label for="sfls-channel">' . esc_html__( 'Channel', 'subtleforms-license-server' ) . '</label></th><td><select id="sfls-channel" name="channel">';
@@ -459,7 +459,7 @@ final class SFLS_Admin_Releases {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Highlights the yank form only.
 		$focus = isset( $_GET['yank'] );
 		if ( 'published' === $rel['status'] ) {
-			echo '<form id="sfls-yank" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-panel sfls-panel--danger' . ( $focus ? ' is-focused' : '' ) . '">';
+			echo '<form id="sfls-yank" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-card sfls-panel sfls-panel--danger' . ( $focus ? ' is-focused' : '' ) . '">';
 			wp_nonce_field( 'sfls_release_yank_' . $id );
 			echo '<input type="hidden" name="action" value="sfls_release_yank"><input type="hidden" name="id" value="' . esc_attr( (string) $id ) . '"><h2>' . esc_html__( 'Yank this version', 'subtleforms-license-server' ) . '</h2>';
 			echo '<p class="description">' . esc_html__( 'Sites stop being offered this version, and customers can no longer download it. The previous published version becomes the latest again. The zip is kept, and you can publish it again later.', 'subtleforms-license-server' ) . '</p>';
@@ -469,7 +469,7 @@ final class SFLS_Admin_Releases {
 		}
 		echo '</div>';
 
-		echo '<div class="sfls-edit-side"><div class="sfls-panel"><h2>' . esc_html__( 'Package', 'subtleforms-license-server' ) . '</h2><ul class="sfls-meta-list">';
+		echo '<div class="sfls-edit-side"><div class="sfls-card sfls-panel"><h2>' . esc_html__( 'Package', 'subtleforms-license-server' ) . '</h2><ul class="sfls-meta-list">';
 		$meta = array(
 			__( 'Status', 'subtleforms-license-server' )    => wp_kses_post( self::status_pill( $rel ) ),
 			__( 'Released', 'subtleforms-license-server' )  => esc_html( $rel['released_at'] ? self::when( $rel['released_at'] ) : __( 'Not yet', 'subtleforms-license-server' ) ),
@@ -510,7 +510,7 @@ final class SFLS_Admin_Releases {
 		}
 		echo '<p class="sfls-button-row">' . implode( ' ', $buttons ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Built from escaped parts.
 
-		echo '<div class="sfls-panel sfls-panel--danger"><h2>' . esc_html__( 'Delete', 'subtleforms-license-server' ) . '</h2><p class="description">' . esc_html__( 'Removes this release and its zip files. Customers can no longer download it. This cannot be undone.', 'subtleforms-license-server' ) . '</p>';
+		echo '<div class="sfls-card sfls-panel sfls-panel--danger"><h2>' . esc_html__( 'Delete', 'subtleforms-license-server' ) . '</h2><p class="description">' . esc_html__( 'Removes this release and its zip files. Customers can no longer download it. This cannot be undone.', 'subtleforms-license-server' ) . '</p>';
 		echo '<p><a class="button sfls-button-danger" href="' . esc_url( $this->action_url( 'delete', $id ) ) . '" onclick="return confirm(\'' . esc_js( sprintf( /* translators: %s: version */ __( 'Delete %s and its zip file permanently? Customers can no longer download it. This cannot be undone.', 'subtleforms-license-server' ), $rel['version'] ) ) . '\');">' . esc_html__( 'Delete release', 'subtleforms-license-server' ) . '</a></p></div>';
 		echo '</div></div></div>';
 	}
@@ -711,7 +711,7 @@ final class SFLS_Admin_Releases {
 	 */
 	private function tokens_panel(): void {
 		$tokens = SFLS_Deploy_Tokens::all();
-		echo '<div class="sfls-panel" id="sfls-tokens"><h2>' . esc_html__( 'Deploy tokens', 'subtleforms-license-server' ) . '</h2>';
+		echo '<div class="sfls-card sfls-panel" id="sfls-tokens"><h2>' . esc_html__( 'Deploy tokens', 'subtleforms-license-server' ) . '</h2>';
 		echo '<p class="description">' . esc_html__( 'A deploy token lets CI (for example GitHub Actions) upload and publish releases through the release API. It can only manage releases (scope releases:write). It is shown once and stored as a hash.', 'subtleforms-license-server' ) . '</p>';
 		if ( $tokens ) {
 			echo '<table class="widefat striped sfls-acts sfls-token-table"><thead><tr><th>' . esc_html__( 'Name', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Token', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Created', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Last used', 'subtleforms-license-server' ) . '</th><th>' . esc_html__( 'Status', 'subtleforms-license-server' ) . '</th><th><span class="screen-reader-text">' . esc_html__( 'Actions', 'subtleforms-license-server' ) . '</span></th></tr></thead><tbody>';
@@ -743,7 +743,7 @@ final class SFLS_Admin_Releases {
 	private function ci_panel(): void {
 		$settings = SFLS_Releases::settings();
 		$endpoint = rest_url( 'sfls/v1/releases' );
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-panel" id="sfls-ci"><h2>' . esc_html__( 'Release API for CI', 'subtleforms-license-server' ) . '</h2>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="sfls-card sfls-panel" id="sfls-ci"><h2>' . esc_html__( 'Release API for CI', 'subtleforms-license-server' ) . '</h2>';
 		wp_nonce_field( 'sfls_release_ci' );
 		echo '<input type="hidden" name="action" value="sfls_release_ci"><table class="form-table" role="presentation"><tbody>';
 		echo '<tr><th scope="row"><label for="sfls-ci-url">' . esc_html__( 'Endpoint', 'subtleforms-license-server' ) . '</label></th><td><input id="sfls-ci-url" type="text" readonly class="large-text sfls-mono" value="' . esc_attr( $endpoint ) . '" onfocus="this.select();"><p class="description">' . esc_html__( 'POST the zip as a multipart field named "package" with Authorization: Bearer and a deploy token. Optional fields: changelog, channel (stable or beta), publish, git_ref, git_commit, sha256, replace.', 'subtleforms-license-server' ) . '</p></td></tr>';
@@ -759,7 +759,7 @@ final class SFLS_Admin_Releases {
 	 */
 	private function github_panel(): void {
 		$config = SFLS_GitHub::config();
-		echo '<div class="sfls-panel" id="sfls-github"><h2>' . esc_html__( 'GitHub connection', 'subtleforms-license-server' ) . '</h2>';
+		echo '<div class="sfls-card sfls-panel" id="sfls-github"><h2>' . esc_html__( 'GitHub connection', 'subtleforms-license-server' ) . '</h2>';
 		echo '<p class="description">' . esc_html__( 'Publish a release on GitHub with the Pro zip attached, and GitHub tells this site through a webhook. The zip is downloaded, checked and stored as a release. Pre-releases go to the beta channel.', 'subtleforms-license-server' ) . '</p>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( 'sfls_github_settings' );
@@ -811,7 +811,7 @@ final class SFLS_Admin_Releases {
 	 */
 	private function deliveries_panel(): void {
 		$rows = SFLS_GitHub::recent_deliveries( 20 );
-		echo '<div class="sfls-panel" id="sfls-deliveries"><h2>' . esc_html__( 'Recent GitHub deliveries', 'subtleforms-license-server' ) . '</h2>';
+		echo '<div class="sfls-card sfls-panel" id="sfls-deliveries"><h2>' . esc_html__( 'Recent GitHub deliveries', 'subtleforms-license-server' ) . '</h2>';
 		if ( ! $rows ) {
 			echo '<p class="description">' . esc_html__( 'None yet. When the webhook is added, GitHub sends a ping that shows up here.', 'subtleforms-license-server' ) . '</p></div>';
 			return;
