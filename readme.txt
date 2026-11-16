@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.11.0
+Stable tag: 1.11.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,6 +25,10 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.11.1 - 2026-11-16 =
+* Fix: A partial refund sent to Paddle from WooCommerce that crosses the suspend threshold now waits for Paddle to approve it before suspending the license and cancelling the subscription. A rejected refund leaves the license untouched.
+* Dev: CI and bin/test-env seed the test site from one shared script (tests/bin/seed-site.php).
 
 = 1.11.0 - 2026-11-16 =
 * New: Partial refunds. New setting "Suspend the license when refunds reach N% of the order" (default 100%, unchanged behaviour). Every partial refund adds an order note with the refunded share; crossing the threshold suspends the license and, for a Paddle renewal, cancels the subscription.

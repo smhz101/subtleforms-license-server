@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: SubtleForms License Server 1.11.0\n"
+"Project-Id-Version: SubtleForms License Server 1.11.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/subtleforms-license-server\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-15T23:36:21+00:00\n"
+"POT-Creation-Date: 2026-11-16T00:05:06+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: subtleforms-license-server\n"
@@ -4600,7 +4600,7 @@ msgid "waiting for Paddle to approve it"
 msgstr ""
 
 #. translators: 1: adjustment ID, 2: number of licenses
-#: includes/class-sfls-woo-paddle-orders.php:1061
+#: includes/class-sfls-woo-paddle-orders.php:1075
 #, php-format
 msgid "Paddle reversed a chargeback (%1$s). %2$d license is active again."
 msgid_plural "Paddle reversed a chargeback (%1$s). %2$d licenses are active again."
@@ -4608,62 +4608,62 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: adjustment ID
-#: includes/class-sfls-woo-paddle-orders.php:1063
+#: includes/class-sfls-woo-paddle-orders.php:1077
 #, php-format
 msgid "Paddle reversed a chargeback (%s). No suspended license was found to restore."
 msgstr ""
 
 #. translators: %s: adjustment ID
-#: includes/class-sfls-woo-paddle-orders.php:1070
+#: includes/class-sfls-woo-paddle-orders.php:1084
 #, php-format
 msgid "Paddle reported a chargeback warning (%s). Nothing was refunded yet."
 msgstr ""
 
 #. translators: %s: adjustment ID
-#: includes/class-sfls-woo-paddle-orders.php:1089
+#: includes/class-sfls-woo-paddle-orders.php:1105
 #, php-format
 msgid "Paddle approved refund %s."
 msgstr ""
 
 #. translators: 1: amount, 2: adjustment ID
-#: includes/class-sfls-woo-paddle-orders.php:1106
+#: includes/class-sfls-woo-paddle-orders.php:1124
 #, php-format
 msgid "A refund of %1$s was requested in Paddle (%2$s) and is waiting for approval."
 msgstr ""
 
 #. translators: %s: adjustment ID
-#: includes/class-sfls-woo-paddle-orders.php:1117
-#: includes/class-sfls-woo-paddle-orders.php:1178
+#: includes/class-sfls-woo-paddle-orders.php:1135
+#: includes/class-sfls-woo-paddle-orders.php:1196
 #, php-format
 msgid "Chargeback in Paddle (%s)"
 msgstr ""
 
 #. translators: 1: adjustment ID, 2: reason
-#: includes/class-sfls-woo-paddle-orders.php:1119
+#: includes/class-sfls-woo-paddle-orders.php:1137
 #, php-format
 msgid "Refunded in Paddle (%1$s) %2$s"
 msgstr ""
 
 #. translators: 1: amount, 2: reason
-#: includes/class-sfls-woo-paddle-orders.php:1147
+#: includes/class-sfls-woo-paddle-orders.php:1165
 #, php-format
 msgid "Recorded a refund of %1$s: %2$s."
 msgstr ""
 
 #. translators: %s: adjustment ID
-#: includes/class-sfls-woo-paddle-orders.php:1238
+#: includes/class-sfls-woo-paddle-orders.php:1258
 #, php-format
 msgid "Paddle rejected refund %s, so the WooCommerce refund was removed. No money was returned."
 msgstr ""
 
 #. translators: 1: subscription ID, 2: error
-#: includes/class-sfls-woo-paddle-orders.php:1261
+#: includes/class-sfls-woo-paddle-orders.php:1281
 #, php-format
 msgid "Could not cancel Paddle subscription %1$s after the refund: %2$s. Cancel it in Paddle."
 msgstr ""
 
 #. translators: %s: subscription ID
-#: includes/class-sfls-woo-paddle-orders.php:1266
+#: includes/class-sfls-woo-paddle-orders.php:1286
 #, php-format
 msgid "Paddle subscription %s canceled because the order was fully refunded."
 msgstr ""
@@ -4885,20 +4885,26 @@ msgstr ""
 msgid "Refund of %1$s%% recorded; license(s) unchanged (suspends at %2$d%%)."
 msgstr ""
 
+#. translators: %d: threshold percent
+#: includes/class-sfls-woo.php:996
+#, php-format
+msgid "Refunds reached the %d%% suspend threshold; the license will be suspended once Paddle approves the refund."
+msgstr ""
+
 #. translators: 1: masked key, 2: new expiry
-#: includes/class-sfls-woo.php:1055
+#: includes/class-sfls-woo.php:1067
 #, php-format
 msgid "Renewal of SubtleForms license %1$s undone because the order was refunded or cancelled. It now expires %2$s."
 msgstr ""
 
 #. translators: 1: masked key, 2: plan
-#: includes/class-sfls-woo.php:1064
+#: includes/class-sfls-woo.php:1076
 #, php-format
 msgid "SubtleForms license %1$s was not moved back after the refund because it changed to %2$s since. Check it by hand."
 msgstr ""
 
 #. translators: 1: masked key, 2: plan, 3: sites
-#: includes/class-sfls-woo.php:1081
+#: includes/class-sfls-woo.php:1093
 #, php-format
 msgid "Upgrade of SubtleForms license %1$s undone because the order was refunded or cancelled. Back to %2$s (%3$s)."
 msgstr ""

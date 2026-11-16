@@ -986,6 +986,18 @@ final class SFLS_Woo {
 		if ( 'yes' === $order->get_meta( '_sfls_refund_suspended' ) ) {
 			return;
 		}
+		// A refund sent to Paddle may still be rejected: act only once Paddle
+		// approves it (SFLS_Woo_Paddle_Orders::adjustment() calls back here).
+		if ( SFLS_Woo_Paddle_Orders::refund_pending( $order ) ) {
+			if ( 'yes' !== $order->get_meta( '_sfls_refund_threshold_waiting' ) ) {
+				$order->update_meta_data( '_sfls_refund_threshold_waiting', 'yes' );
+				$order->save_meta_data();
+				/* translators: %d: threshold percent */
+				$order->add_order_note( sprintf( __( 'Refunds reached the %d%% suspend threshold; the license will be suspended once Paddle approves the refund.', 'subtleforms-license-server' ), $threshold ) );
+			}
+			return;
+		}
+		$order->delete_meta_data( '_sfls_refund_threshold_waiting' );
 		$order->update_meta_data( '_sfls_refund_suspended', 'yes' );
 		$order->save_meta_data();
 		$this->suspend_for_order( $order->get_id(), true );

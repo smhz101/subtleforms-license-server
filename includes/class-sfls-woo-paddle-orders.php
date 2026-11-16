@@ -986,6 +986,20 @@ final class SFLS_Woo_Paddle_Orders {
 	}
 
 	/**
+	 * Whether a refund made from WooCommerce still waits for Paddle's decision.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	public static function refund_pending( WC_Order $order ): bool {
+		foreach ( self::adjustments_of( $order ) as $entry ) {
+			if ( 'woo' === ( $entry['source'] ?? '' ) && ! in_array( (string) ( $entry['status'] ?? '' ), array( 'approved', 'rejected' ), true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Remember which Paddle adjustment a WooCommerce refund created.
 	 *
 	 * @param int $order_id  Order.
@@ -1082,11 +1096,15 @@ final class SFLS_Woo_Paddle_Orders {
 				$order->save_meta_data();
 				if ( 'rejected' === $status ) {
 					self::undo_refund( $order, (int) ( $entry['refund_id'] ?? 0 ), $id );
+					// Other approved refunds may now reach the threshold on their own.
+					( new SFLS_Woo() )->on_refund( $order->get_id() );
 					return self::result( 'rejected', 'Refund rejected by Paddle.' );
 				}
 				if ( 'approved' === $status ) {
 					/* translators: %s: adjustment ID */
 					$order->add_order_note( sprintf( __( 'Paddle approved refund %s.', 'subtleforms-license-server' ), $id ) );
+					// A threshold crossing waited for this approval.
+					( new SFLS_Woo() )->on_refund( $order->get_id() );
 				}
 				return self::result( 'updated', 'Refund ' . $status . '.' );
 			}
@@ -1224,6 +1242,8 @@ final class SFLS_Woo_Paddle_Orders {
 		$refund = $refund_id ? wc_get_order( $refund_id ) : null;
 		if ( $refund instanceof WC_Order_Refund ) {
 			$refund->delete( true );
+			// Deleting a refund leaves the cached refunded total behind.
+			WC_Cache_Helper::invalidate_cache_group( 'orders' );
 		}
 		$order = wc_get_order( $order->get_id() );
 		if ( $order->has_status( 'refunded' ) ) {
