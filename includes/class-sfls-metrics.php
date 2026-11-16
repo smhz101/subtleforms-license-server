@@ -12,17 +12,34 @@ defined( 'ABSPATH' ) || exit;
  * audit log. Ranges are UTC 'Y-m-d H:i:s' (both ends inclusive); results are
  * cached for 15 minutes.
  *
- * Definitions:
+ * Definitions (money is in the store currency; every figure also has the
+ * number of orders and an `estimated` flag, true when an order lacks Paddle's
+ * payout totals, see SFLS_Finance):
  * - A license order is a paid order (processing, completed, refunded) with the
- *   `_sfls_issued` flag. Revenue is the order total in the store currency, by
- *   paid date; net revenue subtracts the refunds created in the range.
+ *   `_sfls_issued` flag. Sales are counted by paid date, refunds by refund date.
+ * - Gross sales: order totals paid in the range, tax included. Refunds: refund
+ *   amounts created in the range. Net sales: gross minus refunds.
+ * - Tax: tax collected on the sales minus tax refunded (net tax; an estimated
+ *   refund returns the order's tax in proportion). Fees: Paddle fees on the sales minus fees
+ *   returned on refunds (a fee kept on a refunded order stays a cost).
+ * - Net earnings: Paddle's earnings (payout) of the sales plus the earnings of
+ *   the refunds (negative). Without Paddle totals: total - tax, and refunds
+ *   in full, marked estimated.
+ * - Active licenses: status active, not expired, not on a fully refunded
+ *   order, and when billed by Paddle with billing status active, trialing or
+ *   past due. Paying customers: distinct emails of active licenses that were
+ *   bought (not issued manually).
+ * - MRR: billed amount (the subscription's unit price, before tax) / 12 of
+ *   Paddle subscriptions that are active, trialing or past due and not
+ *   canceling; ARR is MRR x 12. Projections: billed amounts of non-canceling
+ *   subscriptions renewing in the next 30/60/90 days; at risk: past due.
  * - Renewed: licenses named by `_sfls_renew_license` on paid orders in the
  *   range. Due: renewed plus active licenses whose expiry still lies in the
  *   range. Churned: licenses whose Paddle subscription was canceled in the
  *   range (by last update), plus active licenses that expired in the range.
- * - MRR: renewal amount / 12 of Paddle subscriptions that are active, trialing
- *   or past due and not canceling, in the store currency (all plans are yearly).
+ *   Rates are null without a denominator and come with it (`n`).
  * - Active sites: non-local activations seen in the 30 days up to the end.
+ * - Filter `sfls_metrics_exclude_order` (false, WC_Order) drops an order.
  */
 final class SFLS_Metrics {
 
@@ -108,7 +125,38 @@ final class SFLS_Metrics {
 	 * @param string $plan Plan.
 	 */
 	public static function active_at( string $at, string $plan = '' ): int {
-		return self::count( "l.status = 'active' AND l.created_at <= %s AND ( l.expires_at IS NULL OR l.expires_at > %s )", array( $at, $at ), $plan );
+		return self::count( 'l.created_at <= %s AND ' . self::active_clause(), array( $at, $at ), $plan );
+	}
+
+	/**
+	 * SQL for an active license (one %s: the moment).
+	 */
+	private static function active_clause(): string {
+		$sql = "l.status = 'active' AND ( l.expires_at IS NULL OR l.expires_at > %s ) AND ( l.billing <> 'paddle' OR l.billing_status IN ( 'active', 'trialing', 'past_due' ) )";
+		$ids = function_exists( 'wc_get_orders' ) ? array_map(
+			'intval',
+			(array) wc_get_orders(
+				array(
+					'type'   => 'shop_order',
+					'status' => 'refunded',
+					'limit'  => -1,
+					'return' => 'ids',
+				)
+			)
+		) : array();
+		return $ids ? $sql . ' AND l.order_id NOT IN ( ' . implode( ',', $ids ) . ' )' : $sql;
+	}
+
+	/**
+	 * Distinct customers with an active, bought (not issued by hand) license.
+	 *
+	 * @param string $plan Plan.
+	 */
+	public static function paying_customers( string $plan = '' ): int {
+		global $wpdb;
+		[ $psql, $pargs ] = self::plan_sql( $plan );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(DISTINCT LOWER(l.customer_email)) FROM ' . SFLS_DB::licenses() . ' l WHERE l.billing <> \'manual\' AND ( l.billing = \'paddle\' OR l.order_id > 0 ) AND ' . self::active_clause() . $psql, array_merge( array( current_time( 'mysql', true ) ), $pargs ) ) );
 	}
 
 	/**
@@ -151,12 +199,80 @@ final class SFLS_Metrics {
 	}
 
 	/**
+	 * Minor units to a major amount.
+	 *
+	 * @param int    $minor    Minor units.
+	 * @param string $currency Currency.
+	 */
+	private static function major( int $minor, string $currency ): float {
+		return (float) SFLS_Paddle::to_decimal( (string) $minor, $currency );
+	}
+
+	/**
+	 * Plan of an order: the plan of the license it renewed, else of its product.
+	 *
+	 * @param WC_Order $order Order.
+	 */
+	private static function plan_of( WC_Order $order ): string {
+		foreach ( $order->get_items( array( 'line_item', 'fee' ) ) as $item ) {
+			$id = (int) $item->get_meta( '_sfls_renew_license' );
+			if ( $id > 0 ) {
+				$lic = SFLS_Licenses::find( $id );
+				return $lic ? (string) $lic['plan'] : '';
+			}
+		}
+		foreach ( $order->get_items() as $item ) {
+			if ( $item instanceof WC_Order_Item_Product ) {
+				$plan = (string) get_post_meta( (int) $item->get_product_id(), '_sfls_plan', true );
+				if ( '' !== $plan ) {
+					return $plan;
+				}
+			}
+		}
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (string) $wpdb->get_var( $wpdb->prepare( 'SELECT MIN(plan) FROM ' . SFLS_DB::licenses() . ' WHERE order_id = %d', $order->get_id() ) );
+	}
+
+	/**
+	 * Ledger row of a paid order: what the customer paid and, from Paddle's
+	 * payout totals when stored, tax, fee and earnings.
+	 *
+	 * @param WC_Order $order Order.
+	 * @return array{order_id:int,date:string,plan:string,country:string,gross:float,tax:float,fee:?float,earnings:float,estimated:bool}
+	 */
+	private static function sale_row( WC_Order $order ): array {
+		$cur   = strtoupper( (string) $order->get_currency() );
+		$t     = $order->get_meta( SFLS_Finance::META );
+		$gross = (float) $order->get_total();
+		$paid  = $order->get_date_paid();
+		$row   = array(
+			'order_id'  => $order->get_id(),
+			'date'      => $paid ? gmdate( 'Y-m-d H:i:s', $paid->getTimestamp() ) : '',
+			'plan'      => self::plan_of( $order ),
+			'country'   => (string) $order->get_billing_country(),
+			'gross'     => $gross,
+			'tax'       => (float) $order->get_total_tax(),
+			'fee'       => null,
+			'earnings'  => $gross - (float) $order->get_total_tax(),
+			'estimated' => true,
+		);
+		if ( is_array( $t ) && strtoupper( (string) ( $t['currency'] ?? '' ) ) === $cur && '1' === (string) ( $t['rate'] ?? '1' ) ) {
+			$row['tax']       = self::major( (int) $t['tax'], $cur );
+			$row['fee']       = self::major( (int) $t['fee'], $cur );
+			$row['earnings']  = self::major( (int) $t['earnings'], $cur );
+			$row['estimated'] = false;
+		}
+		return $row;
+	}
+
+	/**
 	 * Paid license orders of a range.
 	 *
 	 * @param string $from From.
 	 * @param string $to   To.
 	 * @param string $plan Plan.
-	 * @return array{paid:int,gross:float,refunded:int,renewed:int[]}
+	 * @return array{paid:int,gross:float,refunded:int,renewed:int[],rows:array[]}
 	 */
 	public static function orders( string $from, string $to, string $plan = '' ): array {
 		return self::cached(
@@ -168,6 +284,7 @@ final class SFLS_Metrics {
 					'gross'    => 0.0,
 					'refunded' => 0,
 					'renewed'  => array(),
+					'rows'     => array(),
 				);
 				$orders = function_exists( 'wc_get_orders' ) ? wc_get_orders(
 					array(
@@ -184,11 +301,12 @@ final class SFLS_Metrics {
 					)
 				) : array();
 				foreach ( $orders as $order ) {
-					if ( ! $order instanceof WC_Order || 'yes' !== $order->get_meta( '_sfls_issued' ) || ! self::order_matches( $order, $plan ) ) {
+					if ( ! $order instanceof WC_Order || 'yes' !== $order->get_meta( '_sfls_issued' ) || ! self::order_matches( $order, $plan ) || apply_filters( 'sfls_metrics_exclude_order', false, $order ) ) {
 						continue;
 					}
 					++$out['paid'];
 					$out['gross'] += (float) $order->get_total();
+					$out['rows'][] = self::sale_row( $order );
 					if ( (float) $order->get_total_refunded() > 0 ) {
 						++$out['refunded'];
 					}
@@ -239,13 +357,27 @@ final class SFLS_Metrics {
 					if ( ! $parent instanceof WC_Order || 'yes' !== $parent->get_meta( '_sfls_issued' ) || ! self::order_matches( $parent, $plan ) ) {
 						continue;
 					}
+					if ( apply_filters( 'sfls_metrics_exclude_order', false, $parent ) ) {
+						continue;
+					}
 					$created = $refund->get_date_created();
+					$amount  = abs( (float) $refund->get_amount() );
+					$cur     = strtoupper( (string) $parent->get_currency() );
+					$adjs    = $parent->get_meta( '_sfls_paddle_adjustments' );
+					$payout  = is_array( $adjs ) ? ( $adjs[ (string) $refund->get_meta( '_sfls_paddle_adjustment_id' ) ]['payout_totals'] ?? null ) : null;
+					$known   = is_array( $payout ) && strtoupper( (string) ( $payout['currency'] ?? '' ) ) === $cur;
 					$rows[]  = array(
-						'order_id' => $parent->get_id(),
-						'amount'   => abs( (float) $refund->get_amount() ),
-						'date'     => $created ? gmdate( 'Y-m-d H:i:s', $created->getTimestamp() ) : '',
-						'email'    => (string) $parent->get_billing_email(),
-						'reason'   => (string) $refund->get_reason(),
+						'order_id'  => $parent->get_id(),
+						'plan'      => self::plan_of( $parent ),
+						'country'   => (string) $parent->get_billing_country(),
+						'tax'       => $known ? self::major( (int) ( $payout['tax'] ?? 0 ), $cur ) : ( (float) $parent->get_total() > 0 ? min( 1.0, $amount / (float) $parent->get_total() ) * (float) $parent->get_total_tax() : 0.0 ),
+						'fee'       => $known ? self::major( (int) $payout['fee'] - (int) ( $payout['retained_fee'] ?? 0 ), $cur ) : 0.0,
+						'earnings'  => $known ? -self::major( (int) $payout['earnings'] + (int) ( $payout['retained_fee'] ?? 0 ), $cur ) : -$amount,
+						'estimated' => ! $known,
+						'amount'    => $amount,
+						'date'      => $created ? gmdate( 'Y-m-d H:i:s', $created->getTimestamp() ) : '',
+						'email'     => (string) $parent->get_billing_email(),
+						'reason'    => (string) $refund->get_reason(),
 					);
 					if ( $limit > 0 && count( $rows ) >= $limit ) {
 						break;
@@ -268,25 +400,85 @@ final class SFLS_Metrics {
 	}
 
 	/**
-	 * Gross revenue of a range.
+	 * Money figures of a range (see the class doc): gross, refunds, net_sales,
+	 * tax, fees, earnings, each with amount, count of orders and estimated.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 * @return array<string,array{amount:float,count:int,estimated:bool}>
+	 */
+	public static function money( string $from, string $to, string $plan = '' ): array {
+		return self::cached(
+			'money',
+			array( $from, $to, $plan ),
+			static function () use ( $from, $to, $plan ) {
+				$sales    = self::orders( $from, $to, $plan )['rows'];
+				$refunds  = self::refunds( $from, $to, $plan );
+				$sum      = static fn( array $rows, string $key ): float => (float) array_sum( array_map( static fn( $r ) => (float) $r[ $key ], $rows ) );
+				$est      = static fn( array $rows ): bool => (bool) array_filter( $rows, static fn( $r ) => $r['estimated'] );
+				$fig      = static fn( float $amount, int $count, bool $estimated ): array => array(
+					'amount'    => round( $amount, 2 ),
+					'count'     => $count,
+					'estimated' => $estimated,
+				);
+				$n        = count( $sales );
+				$refunded = count( array_unique( wp_list_pluck( $refunds, 'order_id' ) ) );
+				$both     = $est( $sales ) || $est( $refunds );
+				return array(
+					'gross'     => $fig( $sum( $sales, 'gross' ), $n, false ),
+					'refunds'   => $fig( $sum( $refunds, 'amount' ), $refunded, false ),
+					'net_sales' => $fig( $sum( $sales, 'gross' ) - $sum( $refunds, 'amount' ), $n, false ),
+					'tax'       => $fig( $sum( $sales, 'tax' ) - $sum( $refunds, 'tax' ), $n, $both ),
+					'fees'      => $fig( $sum( $sales, 'fee' ) - $sum( $refunds, 'fee' ), $n, $both ),
+					'earnings'  => $fig( $sum( $sales, 'earnings' ) + $sum( $refunds, 'earnings' ), count( array_unique( array_merge( wp_list_pluck( $sales, 'order_id' ), wp_list_pluck( $refunds, 'order_id' ) ) ) ), $both ),
+				);
+			}
+		);
+	}
+
+	/**
+	 * Gross sales of a range.
 	 *
 	 * @param string $from From.
 	 * @param string $to   To.
 	 * @param string $plan Plan.
 	 */
 	public static function revenue( string $from, string $to, string $plan = '' ): float {
-		return round( self::orders( $from, $to, $plan )['gross'], 2 );
+		return self::money( $from, $to, $plan )['gross']['amount'];
 	}
 
 	/**
-	 * Revenue minus refunds created in the range.
+	 * Gross sales minus refunds created in the range.
 	 *
 	 * @param string $from From.
 	 * @param string $to   To.
 	 * @param string $plan Plan.
 	 */
 	public static function net_revenue( string $from, string $to, string $plan = '' ): float {
-		return round( self::revenue( $from, $to, $plan ) - self::refunded_amount( $from, $to, $plan ), 2 );
+		return self::money( $from, $to, $plan )['net_sales']['amount'];
+	}
+
+	/**
+	 * Paddle fees kept in a range.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	public static function fees( string $from, string $to, string $plan = '' ): float {
+		return self::money( $from, $to, $plan )['fees']['amount'];
+	}
+
+	/**
+	 * Net earnings (Paddle payout) of a range.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	public static function earnings( string $from, string $to, string $plan = '' ): float {
+		return self::money( $from, $to, $plan )['earnings']['amount'];
 	}
 
 	/**
@@ -297,8 +489,23 @@ final class SFLS_Metrics {
 	 * @param string $plan Plan.
 	 */
 	public static function refund_rate( string $from, string $to, string $plan = '' ): ?float {
+		return self::refund_stats( $from, $to, $plan )['rate'];
+	}
+
+	/**
+	 * Refund rate with its denominator.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 * @return array{rate:?float,n:int}
+	 */
+	public static function refund_stats( string $from, string $to, string $plan = '' ): array {
 		$orders = self::orders( $from, $to, $plan );
-		return $orders['paid'] > 0 ? round( $orders['refunded'] / $orders['paid'] * 100, 1 ) : null;
+		return array(
+			'rate' => $orders['paid'] > 0 ? round( $orders['refunded'] / $orders['paid'] * 100, 1 ) : null,
+			'n'    => $orders['paid'],
+		);
 	}
 
 	/**
@@ -333,8 +540,23 @@ final class SFLS_Metrics {
 	 * @param string $plan Plan.
 	 */
 	public static function churn_rate( string $from, string $to, string $plan = '' ): ?float {
+		return self::churn_stats( $from, $to, $plan )['rate'];
+	}
+
+	/**
+	 * Churn rate with its denominator (licenses active at the start).
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 * @return array{rate:?float,n:int}
+	 */
+	public static function churn_stats( string $from, string $to, string $plan = '' ): array {
 		$start = self::count( "l.status = 'active' AND l.created_at < %s AND ( l.expires_at IS NULL OR l.expires_at > %s )", array( $from, $from ), $plan );
-		return $start > 0 ? round( self::churned( $from, $to, $plan ) / $start * 100, 1 ) : null;
+		return array(
+			'rate' => $start > 0 ? round( self::churned( $from, $to, $plan ) / $start * 100, 1 ) : null,
+			'n'    => $start,
+		);
 	}
 
 	/**
@@ -345,10 +567,25 @@ final class SFLS_Metrics {
 	 * @param string $plan Plan.
 	 */
 	public static function renewal_rate( string $from, string $to, string $plan = '' ): ?float {
+		return self::renewal_stats( $from, $to, $plan )['rate'];
+	}
+
+	/**
+	 * Renewal rate with its denominator (licenses due).
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 * @return array{rate:?float,n:int}
+	 */
+	public static function renewal_stats( string $from, string $to, string $plan = '' ): array {
 		$renewed = count( self::orders( $from, $to, $plan )['renewed'] );
 		$lapsed  = self::count( "l.status = 'active' AND l.expires_at >= %s AND l.expires_at <= %s", array( $from, $to ), $plan );
 		$due     = $renewed + $lapsed;
-		return $due > 0 ? round( $renewed / $due * 100, 1 ) : null;
+		return array(
+			'rate' => $due > 0 ? round( $renewed / $due * 100, 1 ) : null,
+			'n'    => $due,
+		);
 	}
 
 	/**
@@ -393,6 +630,38 @@ final class SFLS_Metrics {
 	}
 
 	/**
+	 * Expected renewal revenue: billed amounts of active, non-canceling Paddle
+	 * subscriptions renewing within each number of days (cumulative), store currency.
+	 *
+	 * @param int[]  $days Day counts.
+	 * @param string $plan Plan.
+	 * @return array<int,array{count:int,amount:float}> Days => figures.
+	 */
+	public static function projections( array $days = array( 30, 60, 90 ), string $plan = '' ): array {
+		return self::cached(
+			'projections',
+			array( $days, $plan ),
+			static function () use ( $days, $plan ) {
+				global $wpdb;
+				$currency         = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD';
+				$divisor          = in_array( $currency, self::ZERO_DECIMAL, true ) ? 1 : 100;
+				$now              = current_time( 'mysql', true );
+				[ $psql, $pargs ] = self::plan_sql( $plan );
+				$out              = array();
+				foreach ( $days as $d ) {
+					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+					$row             = $wpdb->get_row( $wpdb->prepare( 'SELECT COUNT(*) AS n, SUM(CAST(l.billing_amount AS UNSIGNED)) AS minor FROM ' . SFLS_DB::licenses() . " l WHERE l.billing = 'paddle' AND l.status = 'active' AND l.billing_status IN ( 'active', 'trialing' ) AND l.cancels_at IS NULL AND l.billing_currency = %s AND l.renews_at > %s AND l.renews_at <= %s{$psql}", array_merge( array( $currency, $now, gmdate( 'Y-m-d H:i:s', time() + (int) $d * DAY_IN_SECONDS ) ), $pargs ) ), ARRAY_A );
+					$out[ (int) $d ] = array(
+						'count'  => (int) ( $row['n'] ?? 0 ),
+						'amount' => round( (float) ( $row['minor'] ?? 0 ) / $divisor, 2 ),
+					);
+				}
+				return $out;
+			}
+		);
+	}
+
+	/**
 	 * Sites (non-local activations) seen in the 30 days up to a moment.
 	 *
 	 * @param string $at   Datetime.
@@ -407,12 +676,14 @@ final class SFLS_Metrics {
 	}
 
 	/**
-	 * Every KPI for a range with the previous period.
+	 * Every KPI for a range with the previous period. Entries have value,
+	 * previous, format and, where they apply, `n` (rate denominator), `count`
+	 * (orders) and `estimated`.
 	 *
 	 * @param string $from From (UTC).
 	 * @param string $to   To (UTC).
 	 * @param string $plan Plan filter or ''.
-	 * @return array<string,array{value:mixed,previous:mixed,format:string}>
+	 * @return array<string,array<string,mixed>>
 	 */
 	public static function kpis( string $from, string $to, string $plan = '' ): array {
 		return self::cached(
@@ -425,17 +696,46 @@ final class SFLS_Metrics {
 					'previous' => $calc( $pfrom, $pto ),
 					'format'   => $format,
 				);
+				$money           = static function ( string $key ) use ( $from, $to, $pfrom, $pto, $plan ): array {
+					$now = self::money( $from, $to, $plan )[ $key ];
+					return array(
+						'value'     => $now['amount'],
+						'previous'  => self::money( $pfrom, $pto, $plan )[ $key ]['amount'],
+						'format'    => 'money',
+						'count'     => $now['count'],
+						'estimated' => $now['estimated'],
+					);
+				};
+				$rate            = static function ( callable $stats ) use ( $from, $to, $pfrom, $pto ): array {
+					$now = $stats( $from, $to );
+					return array(
+						'value'    => $now['rate'],
+						'previous' => $stats( $pfrom, $pto )['rate'],
+						'format'   => 'percent',
+						'n'        => $now['n'],
+					);
+				};
 				$mrr             = self::mrr( $plan );
 				$dunning         = self::dunning( $plan );
-				return array(
+				$proj            = self::projections( array( 30, 60, 90 ), $plan );
+				$out             = array(
 					'active'         => array(
 						'value'    => self::active_at( $to, $plan ),
 						'previous' => self::active_at( $pto, $plan ),
 						'format'   => 'number',
 					),
+					'paying'         => array(
+						'value'    => self::paying_customers( $plan ),
+						'previous' => null,
+						'format'   => 'number',
+					),
 					'new'            => $both( static fn( $a, $b ) => self::new_licenses( $a, $b, $plan ), 'number' ),
-					'revenue'        => $both( static fn( $a, $b ) => self::revenue( $a, $b, $plan ), 'money' ),
-					'net_revenue'    => $both( static fn( $a, $b ) => self::net_revenue( $a, $b, $plan ), 'money' ),
+					'revenue'        => $money( 'gross' ),
+					'refunds'        => $money( 'refunds' ),
+					'net_revenue'    => $money( 'net_sales' ),
+					'tax'            => $money( 'tax' ),
+					'fees'           => $money( 'fees' ),
+					'earnings'       => $money( 'earnings' ),
 					'mrr'            => array(
 						'value'    => $mrr,
 						'previous' => self::mrr( $plan, $pto ),
@@ -446,9 +746,9 @@ final class SFLS_Metrics {
 						'previous' => round( self::mrr( $plan, $pto ) * 12, 2 ),
 						'format'   => 'money',
 					),
-					'renewal_rate'   => $both( static fn( $a, $b ) => self::renewal_rate( $a, $b, $plan ), 'percent' ),
-					'churn'          => $both( static fn( $a, $b ) => self::churn_rate( $a, $b, $plan ), 'percent' ),
-					'refund_rate'    => $both( static fn( $a, $b ) => self::refund_rate( $a, $b, $plan ), 'percent' ),
+					'renewal_rate'   => $rate( static fn( $a, $b ) => self::renewal_stats( $a, $b, $plan ) ),
+					'churn'          => $rate( static fn( $a, $b ) => self::churn_stats( $a, $b, $plan ) ),
+					'refund_rate'    => $rate( static fn( $a, $b ) => self::refund_stats( $a, $b, $plan ) ),
 					'dunning_count'  => array(
 						'value'    => $dunning['count'],
 						'previous' => null,
@@ -465,6 +765,15 @@ final class SFLS_Metrics {
 						'format'   => 'number',
 					),
 				);
+				foreach ( $proj as $days => $p ) {
+					$out[ 'projected_' . $days ] = array(
+						'value'    => $p['amount'],
+						'previous' => null,
+						'format'   => 'money',
+						'count'    => $p['count'],
+					);
+				}
+				return $out;
 			}
 		);
 	}
@@ -472,31 +781,30 @@ final class SFLS_Metrics {
 	// ── Series ──────────────────────────────────────────────────────────
 
 	/**
-	 * Calendar months (UTC), oldest first, ending with the current one.
+	 * Calendar months in the site timezone, oldest first, ending with the current one.
 	 *
 	 * @param int    $months Count (ignored when a from bound is given).
 	 * @param string $from   Y-m-d first day's month, or empty.
 	 * @param string $to     Y-m-d last day's month, or empty for the current one.
-	 * @return array[] Each: label (Y-m), from, to.
+	 * @return array[] Each: label (Y-m), from, to (UTC datetimes).
 	 */
 	private static function months( int $months, string $from = '', string $to = '' ): array {
-		$out   = array();
-		$month = static fn( string $d ) => strtotime( gmdate( 'Y-m-01', (int) strtotime( $d . ' UTC' ) ) . ' 00:00:00 UTC' );
-		$last  = strtotime( gmdate( 'Y-m-01 00:00:00' ) . ' UTC' );
-		if ( $to && strtotime( $to . ' UTC' ) ) {
-			$last = $month( $to );
+		$tz    = wp_timezone();
+		$utc   = new DateTimeZone( 'UTC' );
+		$month = static fn( string $d ): ?DateTimeImmutable => preg_match( '/^\d{4}-\d{2}/', $d ) ? new DateTimeImmutable( substr( $d, 0, 7 ) . '-01 00:00:00', $tz ) : null;
+		$last  = $month( $to ) ?? ( new DateTimeImmutable( 'now', $tz ) )->modify( 'first day of this month' )->setTime( 0, 0 );
+		$first = $month( $from );
+		if ( $first ) {
+			$months = max( 1, min( 120, ( (int) $last->format( 'Y' ) - (int) $first->format( 'Y' ) ) * 12 + (int) $last->format( 'n' ) - (int) $first->format( 'n' ) + 1 ) );
 		}
-		if ( $from && strtotime( $from . ' UTC' ) ) {
-			$months = max( 1, min( 120, ( (int) gmdate( 'Y', $last ) - (int) gmdate( 'Y', $month( $from ) ) ) * 12 + (int) gmdate( 'n', $last ) - (int) gmdate( 'n', $month( $from ) ) + 1 ) );
-		}
-		$first = $last;
+		$out = array();
 		for ( $i = $months - 1; $i >= 0; $i-- ) {
-			$start = strtotime( "-{$i} months", $first );
-			$end   = strtotime( '+1 month', $start ) - 1;
+			$start = $last->modify( "-{$i} months" );
+			$end   = $start->modify( '+1 month' )->modify( '-1 second' );
 			$out[] = array(
-				'label' => gmdate( 'Y-m', $start ),
-				'from'  => gmdate( 'Y-m-d H:i:s', $start ),
-				'to'    => gmdate( 'Y-m-d H:i:s', $end ),
+				'label' => $start->format( 'Y-m' ),
+				'from'  => $start->setTimezone( $utc )->format( 'Y-m-d H:i:s' ),
+				'to'    => $end->setTimezone( $utc )->format( 'Y-m-d H:i:s' ),
 			);
 		}
 		return $out;
@@ -560,8 +868,8 @@ final class SFLS_Metrics {
 			static function () {
 				global $wpdb;
 				$now = current_time( 'mysql', true );
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-				$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT plan, COUNT(*) AS n FROM ' . SFLS_DB::licenses() . " WHERE status = 'active' AND ( expires_at IS NULL OR expires_at > %s ) GROUP BY plan ORDER BY n DESC", $now ), ARRAY_A );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+				$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT plan, COUNT(*) AS n FROM ' . SFLS_DB::licenses() . ' l WHERE ' . self::active_clause() . ' GROUP BY plan ORDER BY n DESC', $now ), ARRAY_A );
 				return array_column( array_map( static fn( $r ) => array( $r['plan'], (int) $r['n'] ), $rows ), 1, 0 );
 			}
 		);

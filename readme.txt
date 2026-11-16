@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.13.0
+Stable tag: 1.14.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,6 +25,13 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.14.0 - 2026-11-16 =
+* Fix: The dashboard headline is now Net earnings from Paddle's payout figures (gross sales − refunds − tax − Paddle fees). A refunded order no longer counts as revenue; a fee Paddle retains on a refund shows as a loss.
+* New: Paddle payout figures (fee, tax, earnings, retained fee on refunds) are stored on every order and refund. Existing orders: run "wp sfls finance backfill" or press "Sync Paddle figures" on the dashboard (read-only calls to Paddle).
+* Fix: Active licenses exclude refunded, suspended and canceled licenses; paying customers exclude manually issued licenses; MRR and ARR exclude canceling subscriptions; renewal forecast for the next 30/60/90 days from real renewal dates; rates and changes show "—" when there is nothing to measure. Revenue reports use the same figures.
+* New: Redesigned dashboard: net earnings with breakdown, KPI cards, renewal forecast, plan mix, earnings and license charts, upcoming renewals, failed payments, refunds and admin changes.
+* Fix: The current License Server menu item is highlighted again.
 
 = 1.13.0 - 2026-11-16 =
 * New: Dashboard (first item under Licenses): KPI cards with change vs the previous period (active and new licenses, revenue, net revenue, MRR, ARR, renewal rate, churn, refund rate, dunning and amount at risk, active sites), charts and lists of renewals due, dunning, refunds and admin changes. Cached for 15 minutes, with a Refresh button.

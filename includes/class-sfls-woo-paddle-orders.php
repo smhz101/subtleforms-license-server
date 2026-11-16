@@ -335,6 +335,7 @@ final class SFLS_Woo_Paddle_Orders {
 					);
 					return self::result( 'duplicate', 'Order already paid by ' . $paid . '.' );
 				}
+				SFLS_Finance::store_txn( $order, $txn ); // The completed event may follow the paid one.
 				$lic = '' !== $sub_id ? self::link_licenses( $order, $sub_id, $sub, $txn, $occurred ) : null;
 				return self::result( 'ignored', 'Order already completed.', $lic );
 			}
@@ -388,6 +389,7 @@ final class SFLS_Woo_Paddle_Orders {
 				$order->set_payment_method_title( $title );
 			}
 			$order->update_meta_data( '_sfls_paddle_paid_txn', $txn_id );
+			SFLS_Finance::store_txn( $order, $txn );
 			$order->update_meta_data( '_sfls_paddle_customer_id', (string) ( $txn['customer_id'] ?? $order->get_meta( '_sfls_paddle_customer_id' ) ) );
 			if ( '' !== $sub_id ) {
 				$order->update_meta_data( '_sfls_paddle_subscription_id', $sub_id );
@@ -606,6 +608,7 @@ final class SFLS_Woo_Paddle_Orders {
 		}
 		$existing = self::order_by_transaction( $txn_id );
 		if ( $existing ) {
+			SFLS_Finance::store_txn( $existing, $txn );
 			return $existing;
 		}
 		$currency = strtoupper( (string) ( $totals['currency_code'] ?? $txn['currency_code'] ?? $parent->get_currency() ) );
@@ -667,6 +670,7 @@ final class SFLS_Woo_Paddle_Orders {
 		$order->update_meta_data( '_sfls_paddle_paid_txn', $txn_id );
 		$order->update_meta_data( '_sfls_paddle_subscription_id', (string) ( $txn['subscription_id'] ?? '' ) );
 		$order->update_meta_data( '_sfls_issued', 'yes' ); // Never issues a new key.
+		SFLS_Finance::store_txn( $order, $txn );
 		$order->save();
 		/* translators: 1: masked key, 2: parent order number, 3: transaction ID */
 		$note = __( 'Automatic renewal of license %1$s (order #%2$s), charged by Paddle (transaction %3$s). The license was extended, no new key was issued.', 'subtleforms-license-server' );
@@ -882,6 +886,7 @@ final class SFLS_Woo_Paddle_Orders {
 			$order->set_transaction_id( (string) ( $txn['id'] ?? '' ) );
 			$order->update_meta_data( '_sfls_paddle_paid_txn', (string) ( $txn['id'] ?? '' ) );
 			$order->delete_meta_data( '_sfls_paddle_upgrade_pending' );
+			SFLS_Finance::store_txn( $order, $txn );
 			$order->save();
 			$totals = (array) ( $txn['details']['totals'] ?? array() );
 			$order->add_order_note(
@@ -1059,6 +1064,8 @@ final class SFLS_Woo_Paddle_Orders {
 				$order->update_meta_data( '_sfls_adj_occurred_' . $id, $occurred );
 				$order->save_meta_data();
 			}
+			SFLS_Finance::store_adjustment( $order, $adj );
+			$order    = wc_get_order( $order->get_id() );
 			$map      = self::adjustments_of( $order );
 			$entry    = (array) ( $map[ $id ] ?? array() );
 			$currency = strtoupper( (string) ( $adj['totals']['currency_code'] ?? $adj['currency_code'] ?? $order->get_currency() ) );
@@ -1156,7 +1163,7 @@ final class SFLS_Woo_Paddle_Orders {
 				'action'    => $action,
 				'status'    => $status,
 				'refund_id' => $refund->get_id(),
-			);
+			) + (array) ( $map[ $id ] ?? array() );
 			$order->update_meta_data( '_sfls_paddle_adjustments', $map );
 			$order->save_meta_data();
 			$order->add_order_note(
