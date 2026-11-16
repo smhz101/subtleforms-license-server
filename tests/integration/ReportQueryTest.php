@@ -246,6 +246,8 @@ class SFLS_Report_Query_Test extends SFLS_Test_Case {
 		$product = $this->make_license_product( 'pro', 12, '1234.57' );
 		$order   = $this->make_order( array( $product ) );
 		$total   = (float) $order->get_total();
+		$order->update_meta_data( '_sfls_issued', 'yes' );
+		$order->save();
 		$this->fixture( 'pro', 1, '2026-01-15 10:00:00' );
 		$lic = $this->make_license( array( 'order_id' => $order->get_id() ) );
 		SFLS_Licenses::update( (int) $lic['id'], array( 'customer_email' => 'o@' . self::MAIL ) );

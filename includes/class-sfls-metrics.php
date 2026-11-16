@@ -596,6 +596,45 @@ final class SFLS_Metrics {
 		);
 	}
 
+	/**
+	 * Purchase-month cohorts: renewed after year 1, still active, churned (percent).
+	 * Renewed = the expiry now lies past the first anniversary; shown only once
+	 * the cohort has had its full first year. Churned = not active any more.
+	 *
+	 * @param string $from From (Y-m-d, optional).
+	 * @param string $to   To (Y-m-d, optional).
+	 * @return array[] Rows: month, licenses, renewed, active, churned (percent or null).
+	 */
+	public static function cohorts( string $from = '', string $to = '' ): array {
+		global $wpdb;
+		$now   = current_time( 'mysql', true );
+		$where = array( '1=1' );
+		$args  = array( $now );
+		if ( '' !== $from ) {
+			$where[] = 'l.created_at >= %s';
+			$args[]  = $from . ' 00:00:00';
+		}
+		if ( '' !== $to ) {
+			$where[] = 'l.created_at <= %s';
+			$args[]  = $to . ' 23:59:59';
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT DATE_FORMAT(l.created_at, '%%Y-%%m') AS m, COUNT(*) AS n, SUM(l.expires_at > DATE_ADD(l.created_at, INTERVAL 1 YEAR)) AS r, SUM(l.status = 'active' AND l.billing_status <> 'canceled' AND (l.expires_at IS NULL OR l.expires_at > %s)) AS a FROM " . SFLS_DB::licenses() . ' l WHERE ' . implode( ' AND ', $where ) . ' GROUP BY m ORDER BY m ASC', $args ), ARRAY_A );
+		$out  = array();
+		foreach ( $rows as $r ) {
+			$n     = (int) $r['n'];
+			$full  = strtotime( $r['m'] . '-01 +1 month +1 year UTC' ) <= time();
+			$out[] = array(
+				'month'    => $r['m'],
+				'licenses' => $n,
+				'renewed'  => $full ? round( (int) $r['r'] / $n * 100, 1 ) : null,
+				'active'   => round( (int) $r['a'] / $n * 100, 1 ),
+				'churned'  => round( ( $n - (int) $r['a'] ) / $n * 100, 1 ),
+			);
+		}
+		return $out;
+	}
+
 	// ── Lists ───────────────────────────────────────────────────────────
 
 	/**

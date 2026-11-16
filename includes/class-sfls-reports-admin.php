@@ -23,6 +23,8 @@ final class SFLS_Reports_Admin {
 		add_action( 'admin_post_sfls_report_delete', array( $this, 'handle_delete' ) );
 		add_action( 'admin_post_sfls_report_duplicate', array( $this, 'handle_duplicate' ) );
 		add_action( 'admin_post_sfls_report_csv', array( $this, 'handle_csv' ) );
+		add_action( 'admin_post_sfls_std_csv', array( $this, 'handle_std_csv' ) );
+		add_action( 'admin_post_sfls_std_save', array( $this, 'handle_std_save' ) );
 		add_action( 'rest_api_init', array( $this, 'register_rest' ) );
 	}
 
@@ -208,14 +210,22 @@ final class SFLS_Reports_Admin {
 		if ( is_wp_error( $check ) || '' === $name ) {
 			$this->back( $this->url( array( 'action' => 'edit' ) + ( $id ? array( 'id' => $id ) : array() ) ), is_wp_error( $check ) ? $check->get_error_message() : __( 'Give the report a name.', 'subtleforms-license-server' ), 'error' );
 		}
-		$id = SFLS_Reports::save(
-			array(
-				'id'         => $id,
-				'name'       => $name,
-				'shared'     => ! empty( $in['shared'] ),
-				'definition' => $def,
-			)
+		$data = array(
+			'id'         => $id,
+			'name'       => $name,
+			'shared'     => ! empty( $in['shared'] ),
+			'definition' => $def,
 		);
+		// Only administrators set or change a schedule.
+		if ( current_user_can( 'manage_options' ) && isset( $in['schedule'] ) ) {
+			$to = SFLS_Report_Schedule::parse_recipients( (string) ( $in['recipients'] ?? '' ) );
+			if ( is_wp_error( $to ) || ( 'none' !== $in['schedule'] && ! $to ) ) {
+				$this->back( $this->url( array( 'action' => 'edit' ) + ( $id ? array( 'id' => $id ) : array() ) ), is_wp_error( $to ) ? $to->get_error_message() : __( 'Add at least one recipient to schedule the report.', 'subtleforms-license-server' ), 'error' );
+			}
+			$data['schedule']   = (string) $in['schedule'];
+			$data['recipients'] = implode( ', ', $to );
+		}
+		$id = SFLS_Reports::save( $data );
 		$this->back( $this->url( array( 'action' => 'view' ) + array( 'id' => $id ) ), __( 'Report saved.', 'subtleforms-license-server' ) );
 	}
 
@@ -270,6 +280,60 @@ final class SFLS_Reports_Admin {
 	}
 
 	/**
+	 * Stream a standard report as CSV.
+	 */
+	public function handle_std_csv(): void {
+		$this->guard();
+		$key = sanitize_key( $_GET['key'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		check_admin_referer( 'sfls_std_csv_' . $key );
+		[ $from, $to ] = $this->range();
+		$result        = SFLS_Standard_Reports::run( $key, $from, $to );
+		if ( is_wp_error( $result ) ) {
+			wp_die( esc_html( $result->get_error_message() ), '', array( 'response' => 404 ) );
+		}
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="' . sanitize_file_name( $key . '-' . gmdate( 'Ymd' ) . '.csv' ) . '"' );
+		echo self::csv( $result ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		exit;
+	}
+
+	/**
+	 * Save a standard report as a private custom report.
+	 */
+	public function handle_std_save(): void {
+		$this->guard();
+		$key = sanitize_key( $_GET['key'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		check_admin_referer( 'sfls_std_save_' . $key );
+		$report = SFLS_Standard_Reports::find( $key );
+		if ( ! $report || ! $report['def'] ) {
+			wp_die( esc_html__( 'This report cannot be saved as a custom report.', 'subtleforms-license-server' ), '', array( 'response' => 400 ) );
+		}
+		[ $from, $to ] = $this->range();
+		$id            = SFLS_Reports::save(
+			array(
+				'name'       => $report['label'],
+				'shared'     => 0,
+				'definition' => SFLS_Standard_Reports::definition( $report, $from, $to ),
+			)
+		);
+		$this->back( $this->url( array( 'action' => 'edit' ) + array( 'id' => $id ) ), __( 'Saved as a custom report.', 'subtleforms-license-server' ) );
+	}
+
+	/**
+	 * Date range from the query string (Y-m-d or empty).
+	 *
+	 * @return string[]
+	 */
+	private function range(): array {
+		$d = static function ( string $k ): string {
+			$v = sanitize_text_field( wp_unslash( $_GET[ $k ] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $v ) ? $v : '';
+		};
+		return array( $d( 'from' ), $d( 'to' ) );
+	}
+
+	/**
 	 * CSV text of a result. Text cells that start with = + - @ (or a tab or
 	 * return) get a leading quote so a spreadsheet does not run them.
 	 *
@@ -305,6 +369,8 @@ final class SFLS_Reports_Admin {
 		$id     = absint( $_GET['id'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( 'view' === $action && $id ) {
 			$this->screen_view( $this->visible( $id ) );
+		} elseif ( 'standard' === $action && SFLS_Standard_Reports::find( sanitize_key( $_GET['key'] ?? '' ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$this->screen_standard( sanitize_key( $_GET['key'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		} elseif ( 'edit' === $action ) {
 			$this->screen_builder( $id ? $this->visible( $id ) : null );
 		} else {
@@ -319,7 +385,17 @@ final class SFLS_Reports_Admin {
 		$admin   = new SFLS_Admin();
 		$reports = SFLS_Reports::visible_to( get_current_user_id() );
 		$admin->header( __( 'Reports', 'subtleforms-license-server' ), '<a class="page-title-action" href="' . esc_url( $this->url( array( 'action' => 'edit' ) ) ) . '">' . esc_html__( 'New report', 'subtleforms-license-server' ) . '</a>' );
-		echo '<div class="sfls-card">';
+		echo '<div class="sfls-card"><h2>' . esc_html__( 'Standard reports', 'subtleforms-license-server' ) . '</h2>';
+		$groups = array();
+		foreach ( SFLS_Standard_Reports::all() as $key => $std ) {
+			$groups[ $std['group'] ][] = '<a href="' . esc_url( $this->url( array( 'action' => 'standard' ) + array( 'key' => $key ) ) ) . '">' . esc_html( $std['label'] ) . '</a>';
+		}
+		echo '<table class="widefat striped sfls-table"><tbody>';
+		foreach ( $groups as $group => $links ) {
+			echo '<tr><th scope="row">' . esc_html( $group ) . '</th><td>' . implode( ' | ', $links ) . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		}
+		echo '</tbody></table></div>';
+		echo '<div class="sfls-card"><h2>' . esc_html__( 'Saved reports', 'subtleforms-license-server' ) . '</h2>';
 		if ( ! $reports ) {
 			echo '<p class="sfls-empty">' . esc_html__( 'No saved reports yet.', 'subtleforms-license-server' ) . ' <a class="button button-primary" href="' . esc_url( $this->url( array( 'action' => 'edit' ) ) ) . '">' . esc_html__( 'Build a report', 'subtleforms-license-server' ) . '</a></p></div></div>';
 			return;
@@ -446,6 +522,14 @@ final class SFLS_Reports_Admin {
 			echo '<option value="' . esc_attr( $d ) . '"' . selected( $def['display'], $d, false ) . '>' . esc_html( ucfirst( $d ) ) . '</option>';
 		}
 		echo '</select> <input type="hidden" name="limit" value="' . (int) $def['limit'] . '"><input type="hidden" name="sort" value="' . esc_attr( $def['sort'] ) . '"></td></tr>';
+		if ( current_user_can( 'manage_options' ) ) {
+			$sched = $posted ? (string) ( $input['schedule'] ?? 'none' ) : ( $report['schedule'] ?? 'none' );
+			echo '<tr><th>' . esc_html__( 'Email schedule', 'subtleforms-license-server' ) . '</th><td><select name="schedule">';
+			foreach ( SFLS_Report_Schedule::SCHEDULES as $opt ) {
+				echo '<option value="' . esc_attr( $opt ) . '"' . selected( $sched, $opt, false ) . '>' . esc_html( ucfirst( $opt ) ) . '</option>';
+			}
+			echo '</select> <input type="text" class="regular-text" name="recipients" placeholder="a@example.com, b@example.com" value="' . esc_attr( $posted ? (string) ( $input['recipients'] ?? '' ) : (string) ( $report['recipients'] ?? '' ) ) . '"><p class="description">' . esc_html__( 'Sent with the first 50 rows and a CSV attachment, once per week or month by the daily check.', 'subtleforms-license-server' ) . '</p></td></tr>';
+		}
 		echo '</table>';
 
 		echo '<input type="hidden" name="id" value="' . (int) $id . '">';
@@ -482,6 +566,32 @@ final class SFLS_Reports_Admin {
 	}
 
 	/**
+	 * Standard report page: date range, chart, table, CSV, save as custom.
+	 *
+	 * @param string $key Report key.
+	 */
+	private function screen_standard( string $key ): void {
+		$std           = (array) SFLS_Standard_Reports::find( $key );
+		[ $from, $to ] = $this->range();
+		$args          = array(
+			'key'  => $key,
+			'from' => $from,
+			'to'   => $to,
+		);
+		$links         = '<a class="page-title-action" href="' . esc_url( wp_nonce_url( add_query_arg( array( 'action' => 'sfls_std_csv' ) + $args, admin_url( 'admin-post.php' ) ), 'sfls_std_csv_' . $key ) ) . '">' . esc_html__( 'Export CSV', 'subtleforms-license-server' ) . '</a>';
+		if ( $std['def'] ) {
+			$links .= ' <a class="page-title-action" href="' . esc_url( wp_nonce_url( add_query_arg( array( 'action' => 'sfls_std_save' ) + $args, admin_url( 'admin-post.php' ) ), 'sfls_std_save_' . $key ) ) . '">' . esc_html__( 'Save as custom report', 'subtleforms-license-server' ) . '</a>';
+		}
+		$links .= ' <a class="page-title-action" href="' . esc_url( $this->url() ) . '">' . esc_html__( 'All reports', 'subtleforms-license-server' ) . '</a>';
+		( new SFLS_Admin() )->header( $std['label'], $links );
+		echo '<form method="get" class="sfls-card"><input type="hidden" name="page" value="' . esc_attr( self::PAGE ) . '"><input type="hidden" name="action" value="standard"><input type="hidden" name="key" value="' . esc_attr( $key ) . '">';
+		echo '<input type="date" name="from" value="' . esc_attr( $from ) . '"> – <input type="date" name="to" value="' . esc_attr( $to ) . '"> <button class="button" type="submit">' . esc_html__( 'Apply', 'subtleforms-license-server' ) . '</button></form>';
+		echo '<div class="sfls-card">';
+		$this->render_result( SFLS_Standard_Reports::run( $key, $from, $to ), (string) ( $std['def']['display'] ?? 'bar' ) );
+		echo '</div></div>';
+	}
+
+	/**
 	 * Chart (if asked) and table of a result.
 	 *
 	 * @param array|WP_Error $result  Query result.
@@ -497,8 +607,8 @@ final class SFLS_Reports_Admin {
 			return;
 		}
 		$cols   = $result['columns'];
-		$groups = array_values( array_filter( $cols, static fn( $c ) => ! self::is_measure( $c['key'] ) ) );
-		$vals   = array_values( array_filter( $cols, static fn( $c ) => self::is_measure( $c['key'] ) ) );
+		$groups = array_values( array_filter( $cols, static fn( $c ) => ! self::is_measure( $c ) ) );
+		$vals   = array_values( array_filter( $cols, static fn( $c ) => self::is_measure( $c ) ) );
 
 		if ( 'table' !== $display && in_array( $display, SFLS_Reports::DISPLAYS, true ) && $vals ) {
 			$labels = array();
@@ -553,9 +663,10 @@ final class SFLS_Reports_Admin {
 	/**
 	 * Whether a result column key is a measure.
 	 *
-	 * @param string $key Column key.
+	 * @param array $col Column.
 	 */
-	private static function is_measure( string $key ): bool {
-		return 'count' === $key || str_starts_with( $key, 'sum_' ) || str_starts_with( $key, 'avg_' );
+	private static function is_measure( array $col ): bool {
+		$key = (string) $col['key'];
+		return ! empty( $col['measure'] ) || 'count' === $key || str_starts_with( $key, 'sum_' ) || str_starts_with( $key, 'avg_' );
 	}
 }

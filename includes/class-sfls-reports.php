@@ -39,7 +39,11 @@ final class SFLS_Reports {
 			'definition' => wp_json_encode( $data['definition'] ?? array() ),
 			'updated_at' => $now,
 		);
-		$id  = (int) ( $data['id'] ?? 0 );
+		if ( isset( $data['schedule'] ) ) {
+			$row['schedule']   = in_array( $data['schedule'], SFLS_Report_Schedule::SCHEDULES, true ) && 'none' !== $data['schedule'] ? $data['schedule'] : '';
+			$row['recipients'] = (string) ( $data['recipients'] ?? '' );
+		}
+		$id = (int) ( $data['id'] ?? 0 );
 		if ( $id > 0 ) {
 			$wpdb->update( SFLS_DB::reports(), $row, array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			return $id;
@@ -81,6 +85,7 @@ final class SFLS_Reports {
 	public static function delete( int $id ): void {
 		global $wpdb;
 		$wpdb->delete( SFLS_DB::reports(), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		SFLS_Report_Schedule::forget( $id );
 	}
 
 	/**
