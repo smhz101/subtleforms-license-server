@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-16T00:27:32+00:00\n"
+"POT-Creation-Date: 2026-11-16T00:40:25+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: subtleforms-license-server\n"
@@ -3267,39 +3267,39 @@ msgid "%s plan"
 msgstr ""
 
 #. translators: 1: number of licenses, 2: email address
-#: includes/class-sfls-claims.php:153
+#: includes/class-sfls-claims.php:159
 #, php-format
 msgid "We found %1$d SubtleForms Pro license bought with %2$s that is not in your account yet."
 msgid_plural "We found %1$d SubtleForms Pro licenses bought with %2$s that are not in your account yet."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-claims.php:158
+#: includes/class-sfls-claims.php:164
 msgid "Confirm that this address is yours to add them to your account. Open the link while you are signed in to the same account. It works once, within 48 hours."
 msgstr ""
 
-#: includes/class-sfls-claims.php:159
+#: includes/class-sfls-claims.php:165
 msgid "Add the licenses to my account"
 msgstr ""
 
-#: includes/class-sfls-claims.php:160
+#: includes/class-sfls-claims.php:166
 msgid "If you did not sign in or ask for this, ignore this email. Nothing changes until the link is opened."
 msgstr ""
 
-#: includes/class-sfls-claims.php:164
+#: includes/class-sfls-claims.php:170
 msgid "Confirm your email to add your SubtleForms Pro licenses"
 msgstr ""
 
-#: includes/class-sfls-claims.php:165
+#: includes/class-sfls-claims.php:171
 msgid "Add your licenses to your account"
 msgstr ""
 
-#: includes/class-sfls-claims.php:196
+#: includes/class-sfls-claims.php:202
 msgid "This confirmation link is invalid or has expired. Ask for a new one on the Licenses page."
 msgstr ""
 
 #. translators: %d: number of licenses
-#: includes/class-sfls-claims.php:261
+#: includes/class-sfls-claims.php:267
 #: includes/class-sfls-guest.php:192
 #, php-format
 msgid "%d license was added to your account."
@@ -3307,33 +3307,33 @@ msgid_plural "%d licenses were added to your account."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-claims.php:263
+#: includes/class-sfls-claims.php:269
 msgid "There were no licenses left to add."
 msgstr ""
 
-#: includes/class-sfls-claims.php:271
+#: includes/class-sfls-claims.php:277
 msgid "We sent a confirmation link to your email address. Open it while signed in to add the licenses."
 msgstr ""
 
-#: includes/class-sfls-claims.php:273
+#: includes/class-sfls-claims.php:279
 msgid "A confirmation link was sent a few minutes ago. Check your inbox and spam folder, or try again later."
 msgstr ""
 
-#: includes/class-sfls-claims.php:303
+#: includes/class-sfls-claims.php:309
 msgid "A license is waiting for you"
 msgid_plural "Licenses are waiting for you"
 msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: number of licenses, 2: email address
-#: includes/class-sfls-claims.php:307
+#: includes/class-sfls-claims.php:313
 #, php-format
 msgid "%1$d license was bought with %2$s. Confirm the address to add it to this account."
 msgid_plural "%1$d licenses were bought with %2$s. Confirm the address to add them to this account."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-claims.php:313
+#: includes/class-sfls-claims.php:319
 msgid "Email me a confirmation link"
 msgstr ""
 

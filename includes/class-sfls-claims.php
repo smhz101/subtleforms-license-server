@@ -63,11 +63,17 @@ final class SFLS_Claims {
 	public static function prune_expired(): void {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT umeta_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s", self::META ) );
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT umeta_id, user_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s", self::META ) );
 		foreach ( $rows as $row ) {
 			$claim = maybe_unserialize( $row->meta_value );
 			if ( ! is_array( $claim ) || (int) ( $claim['expires'] ?? 0 ) < time() ) {
-				delete_metadata_by_mid( 'user', (int) $row->umeta_id );
+				// Delete only if the row still holds the expired value read above:
+				// a claim sent meanwhile replaces it and must survive.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->usermeta} WHERE umeta_id = %d AND meta_key = %s AND meta_value = %s", (int) $row->umeta_id, self::META, (string) $row->meta_value ) );
+				if ( $deleted ) {
+					wp_cache_delete( (int) $row->user_id, 'user_meta' );
+				}
 			}
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
