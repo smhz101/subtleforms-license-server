@@ -57,6 +57,24 @@ final class SFLS_Claims {
 	}
 
 	/**
+	 * Delete expired claims (and legacy ones without an expiry) and old
+	 * "last sent" times. Daily job.
+	 */
+	public static function prune_expired(): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT umeta_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s", self::META ) );
+		foreach ( $rows as $row ) {
+			$claim = maybe_unserialize( $row->meta_value );
+			if ( ! is_array( $claim ) || (int) ( $claim['expires'] ?? 0 ) < time() ) {
+				delete_metadata_by_mid( 'user', (int) $row->umeta_id );
+			}
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->usermeta} WHERE meta_key = %s AND CAST(meta_value AS UNSIGNED) < %d", self::SENT_META, time() - self::TTL ) );
+	}
+
+	/**
 	 * Unclaimed licenses bought with an email address.
 	 *
 	 * @param string $email Email.

@@ -26,6 +26,7 @@ final class SFLS_Reminders {
 		add_action( self::HOOK, array( self::class, 'run' ) );
 		add_action( self::HOOK, array( 'SFLS_Releases', 'purge_tokens' ) );
 		add_action( self::HOOK, array( 'SFLS_DB', 'prune' ) );
+		add_action( self::HOOK, array( 'SFLS_Claims', 'prune_expired' ) );
 		add_action( 'init', array( self::class, 'schedule' ) );
 	}
 
