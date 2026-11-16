@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '13';
+	const SCHEMA_VERSION = '14';
 
 	/**
 	 * Licence IDs whose Agency seats were already more than the plan's 25
@@ -115,6 +115,14 @@ final class SFLS_DB {
 	}
 
 	/**
+	 * Saved reports (schema 14).
+	 */
+	public static function reports(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_reports';
+	}
+
+	/**
 	 * Rate limit counters, one row per bucket (schema 8).
 	 */
 	public static function rate_limits(): string {
@@ -142,6 +150,7 @@ final class SFLS_DB {
 		$bsites   = self::branding_sites();
 		$rates    = self::rate_limits();
 		$audit    = self::audit_log();
+		$reports  = self::reports();
 
 		dbDelta(
 			"CREATE TABLE {$licenses} (
@@ -177,6 +186,8 @@ final class SFLS_DB {
   KEY order_id (order_id),
   KEY status (status),
   KEY expires_at (expires_at),
+  KEY created_at (created_at),
+  KEY plan (plan),
   KEY user_id (user_id),
   KEY paddle_subscription_id (paddle_subscription_id),
   KEY paddle_transaction_id (paddle_transaction_id)
@@ -196,7 +207,8 @@ final class SFLS_DB {
   legacy_joined_by varchar(190) NOT NULL DEFAULT '',
   PRIMARY KEY  (id),
   UNIQUE KEY license_domain (license_id,domain),
-  KEY license_id (license_id)
+  KEY license_id (license_id),
+  KEY last_seen_at (last_seen_at)
 ) {$charset};"
 		);
 
@@ -361,6 +373,24 @@ final class SFLS_DB {
   PRIMARY KEY  (id),
   KEY license_id (license_id),
   KEY created_at (created_at)
+) {$charset};"
+		);
+
+		// Schema 14 (1.13.0): saved custom reports. Additive only (the new
+		// licence and activation indexes are in their CREATE TABLE above).
+		dbDelta(
+			"CREATE TABLE {$reports} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  name varchar(190) NOT NULL DEFAULT '',
+  user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  shared tinyint(1) NOT NULL DEFAULT 0,
+  definition longtext NULL,
+  schedule varchar(20) NOT NULL DEFAULT '',
+  recipients text NULL,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY user_id (user_id)
 ) {$charset};"
 		);
 

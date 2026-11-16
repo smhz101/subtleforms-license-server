@@ -837,3 +837,87 @@ a.sfls-map-link:focus {
 		overflow-x: auto;
 	}
 }
+
+/* ── Dashboard and charts (1.13.0) ─────────────────────────────────── */
+.sfls-dash-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sfls-space-3);
+	padding-top: var(--sfls-space-3);
+}
+
+.sfls-dash-controls form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sfls-space-2);
+}
+
+.sfls-dash-kpis {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+	gap: var(--sfls-space-4);
+}
+
+.sfls-dash-kpis .sfls-kpi {
+	margin: 0;
+	padding: var(--sfls-space-3) var(--sfls-space-4);
+}
+
+.sfls-kpi__label {
+	color: var(--sfls-muted);
+	font-size: 13px;
+}
+
+.sfls-kpi__value {
+	font-size: 26px;
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+.sfls-kpi__delta {
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.sfls-kpi__delta.is-good { color: #007017; }
+.sfls-kpi__delta.is-bad { color: #b32d2e; }
+.sfls-kpi__delta.is-flat { color: var(--sfls-muted); }
+
+.sfls-dash-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+	gap: 0 var(--sfls-space-4);
+}
+
+.sfls-chart__svg {
+	display: block;
+	width: 100%;
+	height: auto;
+	max-height: 320px;
+	color: inherit;
+}
+
+.sfls-chart__svg--pie {
+	max-width: 240px;
+	margin: 0 auto;
+}
+
+.sfls-chart__legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sfls-space-1) var(--sfls-space-4);
+	margin: var(--sfls-space-2) 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sfls-chart__swatch {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	margin-right: 6px;
+	border-radius: 2px;
+}

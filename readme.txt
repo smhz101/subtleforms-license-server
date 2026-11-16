@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.12.0
+Stable tag: 1.13.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,6 +25,12 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.13.0 - 2026-11-16 =
+* New: Dashboard (first item under Licenses): KPI cards with change vs the previous period (active and new licenses, revenue, net revenue, MRR, ARR, renewal rate, churn, refund rate, dunning and amount at risk, active sites), charts and lists of renewals due, dunning, refunds and admin changes. Cached for 15 minutes, with a Refresh button.
+* New: Reports: 13 standard reports (revenue, licenses, renewal cohorts, refunds, dunning, activations, customer lifetime value) with charts and CSV export.
+* New: Custom report builder: choose a dataset, up to two group-by fields, measures and filters; save reports privately or shared; CSV export; weekly or monthly email with the CSV attached; REST endpoint sfls/v1/reports/<id>. Queries use a fixed whitelist of fields and prepared SQL.
+* Dev: Schema 14 adds report indexes and the sfls_reports table. Capability filter sfls_reports_capability.
 
 = 1.12.0 - 2026-11-16 =
 * New: Email templates (license key, welcome, renewal notice, payment succeeded, payment failed, canceled) live in templates/emails/ and can be overridden from the theme in subtleforms-license-server/emails/. Settings shows a preview of each with sample data.
