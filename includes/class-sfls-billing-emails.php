@@ -261,17 +261,14 @@ final class SFLS_Billing_Emails {
 	}
 
 	/**
-	 * An example of a template, sent to an admin. No license is touched.
+	 * A made-up license for test emails and previews.
 	 *
-	 * @param string $to       Recipient.
 	 * @param string $template Template slug.
+	 * @param string $to       Customer email.
 	 */
-	public static function send_test( string $to, string $template ): bool {
-		if ( ! is_email( $to ) || ! isset( self::templates()[ $template ] ) ) {
-			return false;
-		}
+	public static function sample_license( string $template, string $to ): array {
 		$now = time();
-		$lic = array(
+		return array(
 			'id'               => 0,
 			'license_key'      => 'SFP-EXAMPLE0-00000000-00000000-12345678',
 			'plan'             => 'pro',
@@ -289,6 +286,19 @@ final class SFLS_Billing_Emails {
 			'paddle_customer_id'     => 'ctm_example',
 			'paddle_subscription_id' => 'sub_example',
 		);
+	}
+
+	/**
+	 * An example of a template, sent to an admin. No license is touched.
+	 *
+	 * @param string $to       Recipient.
+	 * @param string $template Template slug.
+	 */
+	public static function send_test( string $to, string $template ): bool {
+		if ( ! is_email( $to ) || ! isset( self::templates()[ $template ] ) ) {
+			return false;
+		}
+		$lic   = self::sample_license( $template, $to );
 		$user  = wp_get_current_user();
 		$name  = $user->ID ? ( $user->first_name ? $user->first_name : $user->display_name ) : '';
 		$extra = array(
@@ -306,7 +316,7 @@ final class SFLS_Billing_Emails {
 	 *
 	 * @param string|null $gmt GMT datetime.
 	 */
-	private static function date( $gmt ): string {
+	public static function date( $gmt ): string {
 		return $gmt ? wp_date( get_option( 'date_format' ), strtotime( $gmt . ' UTC' ) ) : '';
 	}
 
@@ -324,7 +334,7 @@ final class SFLS_Billing_Emails {
 	 *
 	 * @param array<string,string> $rows Rows.
 	 */
-	private static function table( array $rows ): string {
+	public static function table( array $rows ): string {
 		$html = '<table cellspacing="0" cellpadding="8" style="border-collapse:collapse;width:100%;margin:16px 0;border:1px solid #e5e5e5;">';
 		foreach ( array_filter( $rows, 'strlen' ) as $label => $value ) {
 			$html .= '<tr><th style="text-align:left;border-bottom:1px solid #e5e5e5;width:35%;">' . esc_html( $label ) . '</th><td style="border-bottom:1px solid #e5e5e5;">' . esc_html( $value ) . '</td></tr>';
@@ -337,7 +347,7 @@ final class SFLS_Billing_Emails {
 	 *
 	 * @param string $text Text.
 	 */
-	private static function p( string $text ): string {
+	public static function p( string $text ): string {
 		return '<p>' . esc_html( $text ) . '</p>';
 	}
 
@@ -353,137 +363,53 @@ final class SFLS_Billing_Emails {
 	public static function build( string $template, array $lic, array $extra = array(), string $name = '' ): array {
 		$plan    = isset( $lic['plan'] ) ? SFLS_Plans::label( (string) $lic['plan'] ) : '';
 		$amount  = (string) ( $extra['amount'] ?? ( $lic ? (string) SFLS_Licenses::renewal_amount( $lic ) : '' ) );
-		$hello   = self::p( '' !== $name ? sprintf( /* translators: %s: first name */ __( 'Hi %s,', 'subtleforms-license-server' ), $name ) : __( 'Hi,', 'subtleforms-license-server' ) );
-		$support = self::p(
-			sprintf(
-				/* translators: %s: support email */
-				__( 'Questions? Reply to this email or write to %s.', 'subtleforms-license-server' ),
-				SFLS_Settings::support_email()
-			)
+		$args    = array(
+			'lic'     => $lic,
+			'extra'   => $extra,
+			'name'    => $name,
+			'plan'    => $plan,
+			'amount'  => $amount,
+			'manage'  => $lic ? self::manage_link( $lic ) : SFLS_Settings::pricing_url(),
+			'hello'   => self::p( '' !== $name ? sprintf( /* translators: %s: first name */ __( 'Hi %s,', 'subtleforms-license-server' ), $name ) : __( 'Hi,', 'subtleforms-license-server' ) ),
+			'support' => self::p(
+				sprintf(
+					/* translators: %s: support email */
+					__( 'Questions? Reply to this email or write to %s.', 'subtleforms-license-server' ),
+					SFLS_Settings::support_email()
+				)
+			),
 		);
-		$tax     = __( 'plus sales tax or VAT where it applies', 'subtleforms-license-server' );
-		$manage  = $lic ? self::manage_link( $lic ) : SFLS_Settings::pricing_url();
 
 		switch ( $template ) {
 			case 'welcome':
 				$subject = __( 'Your SubtleForms Pro license key', 'subtleforms-license-server' );
 				$heading = __( 'Welcome to SubtleForms Pro', 'subtleforms-license-server' );
-				$body    = $hello;
-				$body   .= self::p( __( 'Thanks for buying SubtleForms Pro. Here is your license key.', 'subtleforms-license-server' ) );
-				$body .= '<p style="margin:0 0 4px;"><code style="font-family:Menlo,Consolas,monospace;font-size:15px;padding:10px 12px;background:#f6f7f7;border:1px solid #dcdcde;border-radius:6px;display:inline-block;word-break:break-all;">' . esc_html( (string) $lic['license_key'] ) . '</code></p>';
-				$body .= self::table(
-					array(
-						__( 'Plan', 'subtleforms-license-server' )    => $plan,
-						__( 'Sites', 'subtleforms-license-server' )   => SFLS_Plans::sites_label( (int) $lic['sites_allowed'] ),
-						__( 'Renews', 'subtleforms-license-server' )  => self::date( $lic['renews_at'] ?? $lic['expires_at'] ?? null ),
-					)
-				);
-
-				$button = SFLS_Releases::has_package() && function_exists( 'wc_get_account_endpoint_url' );
-				if ( $button ) {
-					$body .= SFLS_Reminders::button( wc_get_account_endpoint_url( SFLS_Account::EP_DOWNLOADS ), __( 'Download Pro', 'subtleforms-license-server' ) );
-				}
-				$body .= '<h3 style="margin:24px 0 8px;">' . esc_html__( 'How to install Pro', 'subtleforms-license-server' ) . '</h3><ol style="margin:0 0 0 20px;padding:0;">';
-				foreach ( SFLS_Delivery::steps( $button ) as $step ) {
-					$body .= '<li style="margin:0 0 8px;"><strong>' . esc_html( $step[0] ) . '.</strong> ' . esc_html( $step[1] ) . '</li>';
-				}
-				$body .= '</ol>';
-				if ( ! empty( $extra['new_account'] ) ) {
-					$body .= self::p( __( 'We created an account for you with this email address. A separate email has a link to set your password, so you can sign in to download Pro and manage your license.', 'subtleforms-license-server' ) );
-				}
-				$body .= self::p( __( 'Paddle, our payment provider, sends the receipt for the payment separately.', 'subtleforms-license-server' ) );
 				break;
 
 			case 'renewal_notice':
-				$date    = self::date( $lic['renews_at'] ?? null );
 				/* translators: %s: date */
-				$subject = sprintf( __( 'SubtleForms Pro renews on %s', 'subtleforms-license-server' ), $date );
+				$subject = sprintf( __( 'SubtleForms Pro renews on %s', 'subtleforms-license-server' ), self::date( $lic['renews_at'] ?? null ) );
 				$heading = __( 'Your yearly renewal is coming up', 'subtleforms-license-server' );
-				$body    = $hello . self::p(
-					sprintf(
-						/* translators: 1: plan, 2: date, 3: amount, 4: tax note */
-						__( 'Your SubtleForms Pro %1$s license renews automatically on %2$s. We will charge %3$s (%4$s) to the card on file, and Pro keeps running with updates and support for another year.', 'subtleforms-license-server' ),
-						$plan,
-						$date,
-						'' !== $amount ? $amount : __( 'the plan price', 'subtleforms-license-server' ),
-						$tax
-					)
-				);
-				$body .= self::table(
-					array(
-						__( 'License', 'subtleforms-license-server' ) => SFLS_Licenses::mask_key( (string) $lic['license_key'] ),
-						__( 'Sites', 'subtleforms-license-server' )   => ! empty( $lic['id'] ) ? SFLS_Licenses::usage_label( $lic ) : SFLS_Plans::sites_label( (int) $lic['sites_allowed'] ),
-					)
-				);
-				$body .= self::p( __( 'To change the card, or to stop the renewal, open My Account › Licenses and use Update payment method or Cancel auto-renew.', 'subtleforms-license-server' ) );
-				$body .= SFLS_Reminders::button( $manage, __( 'Manage billing', 'subtleforms-license-server' ) );
 				break;
 
 			case 'payment_succeeded':
 				$subject = __( 'Payment received for SubtleForms Pro', 'subtleforms-license-server' );
 				$heading = __( 'Thanks, your payment went through', 'subtleforms-license-server' );
-				if ( ! empty( $extra['is_upgrade'] ) ) {
-					$intro = sprintf(
-						/* translators: 1: amount, 2: plan */
-						__( 'We received %1$s for your upgrade. Your license is now on the %2$s plan with the same key.', 'subtleforms-license-server' ),
-						$amount,
-						$plan
-					);
-				} else {
-					$intro = sprintf(
-						/* translators: 1: amount, 2: plan */
-						__( 'We received %1$s and renewed your SubtleForms Pro %2$s license for another year.', 'subtleforms-license-server' ),
-						$amount,
-						$plan
-					);
-				}
-				$body  = $hello . self::p( $intro );
-				$body .= self::table(
-					array(
-						__( 'License', 'subtleforms-license-server' )      => SFLS_Licenses::mask_key( (string) $lic['license_key'] ),
-						__( 'Next renewal', 'subtleforms-license-server' ) => empty( $lic['cancels_at'] ) ? self::date( $lic['renews_at'] ?? null ) : '',
-					)
-				);
-				$body .= self::p( __( 'Paddle, our payment provider, emails the receipt separately.', 'subtleforms-license-server' ) );
 				break;
 
 			case 'payment_failed':
 				$subject = __( 'Payment failed for SubtleForms Pro', 'subtleforms-license-server' );
 				$heading = __( 'We could not charge your card', 'subtleforms-license-server' );
-				$body    = $hello . self::p(
-					sprintf(
-						/* translators: %s: plan */
-						__( 'The payment for your SubtleForms Pro %s license did not go through. Paddle will try again over the next days.', 'subtleforms-license-server' ),
-						$plan
-					)
-				);
-				$body .= self::p(
-					sprintf(
-						/* translators: %s: date */
-						__( 'Pro keeps working until %s. Update your payment method to keep it running without a break.', 'subtleforms-license-server' ),
-						SFLS_Licenses::expiry_label( $lic )
-					)
-				);
-				$body .= SFLS_Reminders::button( $manage, __( 'Update payment method', 'subtleforms-license-server' ) );
 				break;
 
 			case 'canceled':
-				$until   = ! empty( $lic['cancels_at'] ) ? self::date( $lic['cancels_at'] ) : SFLS_Licenses::expiry_label( $lic );
 				$subject = __( 'Auto-renew is off for SubtleForms Pro', 'subtleforms-license-server' );
 				$heading = __( 'Your subscription is canceled', 'subtleforms-license-server' );
-				/* translators: %s: date */
-				$intro = sprintf( __( 'Auto-renew is off. Your license stays active until %s, the end of the period you paid for, and then Pro stops on your sites.', 'subtleforms-license-server' ), $until );
-				$body = $hello . self::p( $intro );
-				if ( ! empty( $lic['cancels_at'] ) ) {
-					$body .= self::p( __( 'Changed your mind? Click Resume in My Account › Licenses before that date and nothing changes.', 'subtleforms-license-server' ) );
-					$body .= SFLS_Reminders::button( $manage, __( 'Resume', 'subtleforms-license-server' ) );
-				}
 				break;
 
 			default:
 				return array( '', '', '' );
 		}
 
-		return array( $subject, $heading, $body . $support );
-	}
-}
+		return array( $subject, $heading, SFLS_Templates::render( $template, $args ) );
+	}}

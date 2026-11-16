@@ -329,3 +329,7 @@ On a site whose environment type is `local` or `development` (Local by Flywheel 
 - `SF-DEV-AGENCY`
 
 They are rejected on production sites. To point Pro at a staging license server, add `define( 'SUBTLEFORMS_LICENSE_API', 'https://staging.subtleforms.com/wp-json/sfls/v1/' );`.
+
+## License key storage
+
+License keys are stored in plain text, with a unique index for lookups, so customers can see their key in My account at any time. Hashing the keys would mean showing a key only once, at purchase. Protect the database accordingly (access, backups, dumps). Decision recorded 2026-11-16.

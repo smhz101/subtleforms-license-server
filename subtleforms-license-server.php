@@ -3,7 +3,7 @@
  * Plugin Name:       SubtleForms License Server
  * Plugin URI:        https://subtleforms.com
  * Description:       Issues and validates SubtleForms Pro license keys, sells them through WooCommerce, connects customer sites, runs the customer members area and serves Pro updates. Install on subtleforms.com only.
- * Version:           1.11.1
+ * Version:           1.12.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            SubtleForms
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SFLS_VERSION', '1.11.1' );
+define( 'SFLS_VERSION', '1.12.0' );
 define( 'SFLS_FILE', __FILE__ );
 define( 'SFLS_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SFLS_URL', plugin_dir_url( __FILE__ ) );
@@ -48,6 +48,7 @@ require_once SFLS_DIR . 'includes/class-sfls-delivery.php';
 require_once SFLS_DIR . 'includes/class-sfls-blocks.php';
 require_once SFLS_DIR . 'includes/class-sfls-paddle.php';
 require_once SFLS_DIR . 'includes/class-sfls-billing.php';
+require_once SFLS_DIR . 'includes/class-sfls-templates.php';
 require_once SFLS_DIR . 'includes/class-sfls-billing-emails.php';
 require_once SFLS_DIR . 'includes/class-sfls-paddle-rest.php';
 require_once SFLS_DIR . 'includes/class-sfls-checkout-paddle.php';
@@ -109,6 +110,7 @@ add_action(
 		( new SFLS_Reminders() )->register();
 		SFLS_Signing_Check::register();
 		SFLS_Billing_Emails::register();
+		SFLS_Templates::register();
 		( new SFLS_Upgrades() )->register();
 		( new SFLS_Checkout() )->register();
 		( new SFLS_Delivery() )->register();
@@ -127,6 +129,14 @@ add_action(
 			WP_CLI::add_command( 'sfls release token', 'SFLS_CLI_Tokens' );
 			WP_CLI::add_command( 'sfls token', 'SFLS_CLI_Tokens' );
 		}
+	}
+);
+
+// Translations.
+add_action(
+	'init',
+	static function () {
+		load_plugin_textdomain( 'subtleforms-license-server', false, dirname( plugin_basename( SFLS_FILE ) ) . '/languages' );
 	}
 );
 

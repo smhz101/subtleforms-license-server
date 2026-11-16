@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.11.1
+Stable tag: 1.12.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,6 +25,13 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.12.0 - 2026-11-16 =
+* New: Email templates (license key, welcome, renewal notice, payment succeeded, payment failed, canceled) live in templates/emails/ and can be overridden from the theme in subtleforms-license-server/emails/. Settings shows a preview of each with sample data.
+* New: Refreshed admin screens: consistent page headers, status badges, cards, empty states and a two-column license editor.
+* Fix: Translations load (load_plugin_textdomain on init).
+* Fix: Expired claim user meta is cleaned up by the daily job.
+* Dev: PHPCS (WordPress Coding Standards) and PHPStan level 5 run in CI against baselines; README documents why license keys are stored in plain text.
 
 = 1.11.1 - 2026-11-16 =
 * Fix: A partial refund sent to Paddle from WooCommerce that crosses the suspend threshold now waits for Paddle to approve it before suspending the license and cancelling the subscription. A rejected refund leaves the license untouched.

@@ -43,6 +43,36 @@ jobs:
           done < <(find . -name '*.php' -not -path './.git/*' -print0)
           exit $status
 
+  code-checks:
+    name: Code checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: PHPCS (new violations only)
+        run: composer lint:phpcs
+
+      - name: PHPStan (new errors only)
+        run: composer lint:phpstan
+
   phpunit:
     # The 10.2.1 run keeps the plain name "PHPUnit" because branch protection requires it.
     name: ${{ matrix.wc == '10.2.1' && 'PHPUnit' || format('PHPUnit (WooCommerce {0})', matrix.wc) }}
@@ -185,7 +215,8 @@ jobs:
           mkdir -p dist stage/subtleforms-license-server
           rsync -a --exclude='.git' --exclude='.github' --exclude='dist' --exclude='stage' \
             --exclude='tests' --exclude='docs' --exclude='bin' --exclude='phpunit.xml' \
-            --exclude='.cursor' --exclude='.gitattributes' ./ stage/subtleforms-license-server/
+            --exclude='.cursor' --exclude='.gitattributes' \
+            --exclude='vendor' --exclude='composer.*' --exclude='phpcs*' --exclude='phpstan*' ./ stage/subtleforms-license-server/
           (cd stage && zip -qr ../dist/subtleforms-license-server.zip subtleforms-license-server)
 
       - name: Check the zip
@@ -193,7 +224,7 @@ jobs:
           set -euo pipefail
           unzip -l dist/subtleforms-license-server.zip | grep -q 'subtleforms-license-server/subtleforms-license-server.php'
           unzip -l dist/subtleforms-license-server.zip | grep -q 'subtleforms-license-server/readme.txt'
-          ! unzip -l dist/subtleforms-license-server.zip | grep -qE 'subtleforms-license-server/(tests|docs|bin|\.github)/'
+          ! unzip -l dist/subtleforms-license-server.zip | grep -qE 'subtleforms-license-server/(tests|docs|bin|vendor|\.github)/'
           header=$(sed -nE 's/^ \* Version:[[:space:]]*([0-9][^[:space:]]*).*/\1/p' subtleforms-license-server.php | head -1)
           const=$(sed -nE "s/.*define\( 'SFLS_VERSION', '([^']+)' \).*/\1/p" subtleforms-license-server.php | head -1)
           stable=$(sed -nE 's/^Stable tag:[[:space:]]*([0-9][^[:space:]]*).*/\1/p' readme.txt | head -1)
