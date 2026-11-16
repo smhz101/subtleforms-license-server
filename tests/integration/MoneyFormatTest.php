@@ -49,4 +49,28 @@ class SFLS_Money_Format_Test extends SFLS_Test_Case {
 		$this->assertEqualsWithDelta( 100.0, $stats['rate'], 0.001 );
 		$this->assertSame( 1, SFLS_Metrics::money( '2003-03-01 00:00:00', '2003-03-31 23:59:59' )['gross']['count'] );
 	}
+
+	/**
+	 * A license from a $0 order counts once a paid renewal exists, not for a refunded one.
+	 */
+	public function test_paying_customers_count_paid_renewal_of_free_license(): void {
+		$product = $this->make_license_product( 'pro', 12, '49' );
+		$free    = $this->make_order( array( $product ), null, array( array() ) );
+		$free->update_meta_data( '_sfls_issued', 'yes' );
+		$free->set_total( '0' );
+		$free->set_status( 'completed' );
+		$free->save();
+		$lic = $this->make_license( array( 'order_id' => $free->get_id(), 'billing' => 'woo' ) );
+		SFLS_Metrics::flush();
+		$before = SFLS_Metrics::paying_customers();
+		foreach ( array( 'refunded', 'completed' ) as $status ) {
+			$renew = $this->make_order( array( $product ), null, array( array( '_sfls_renew_license' => $lic['id'] ) ) );
+			$renew->update_meta_data( '_sfls_issued', 'yes' );
+			$renew->set_total( '49' );
+			$renew->set_status( $status );
+			$renew->save();
+			SFLS_Metrics::flush();
+			$this->assertSame( 'refunded' === $status ? $before : $before + 1, SFLS_Metrics::paying_customers(), $status );
+		}
+	}
 }
