@@ -486,6 +486,10 @@ final class SFLS_Dashboard {
 			/* translators: %s: counts such as 3-5 */
 			echo '<div class="notice notice-success inline"><p>' . esc_html( sprintf( __( 'Paddle sync: %s (stored-checked).', 'subtleforms-license-server' ), $synced ) ) . '</p></div>';
 		}
+		$failed = isset( $_GET['sfls_sync_failed'] ) ? sanitize_text_field( wp_unslash( $_GET['sfls_sync_failed'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( $failed ) {
+			echo '<div class="notice notice-error inline"><p>' . esc_html( $failed ) . '</p></div>';
+		}
 		if ( $estimated ) {
 			echo '<p class="sfls-dash-note"><span class="dashicons dashicons-warning" aria-hidden="true"></span><span>' . esc_html__( 'Some figures are estimated (marked ~). Paddle has not reported its fees and payout for every order yet, so they are calculated from order totals. Sync Paddle figures to fetch the real amounts.', 'subtleforms-license-server' ) . '</span></p>';
 		}
@@ -507,7 +511,7 @@ final class SFLS_Dashboard {
 		$rows      = array(
 			array( 'gross', '', __( 'Gross sales', 'subtleforms-license-server' ), $figure( 'gross' ), 'orders' ),
 			array( 'refunds', '−', __( 'Refunds', 'subtleforms-license-server' ), $figure( 'refunds' ), 'refunds' ),
-			array( 'tax', '−', __( 'Tax', 'subtleforms-license-server' ), $figure( 'tax' ), 'orders' ),
+			array( 'tax', '−', __( 'Tax (net of refunds)', 'subtleforms-license-server' ), $figure( 'tax' ), 'orders' ),
 			array( 'fees', '−', __( 'Paddle fees', 'subtleforms-license-server' ), $figure( 'fees' ), 'orders' ),
 			array( 'earnings', '=', __( 'Net earnings', 'subtleforms-license-server' ), $figure( 'earnings' ), 'orders' ),
 		);

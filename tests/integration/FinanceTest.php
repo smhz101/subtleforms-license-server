@@ -103,7 +103,7 @@ class SFLS_Finance_Test extends SFLS_Test_Case {
 	 * @param int    $fee      Fee returned.
 	 * @param int    $earnings Earnings (negative).
 	 */
-	private function refund_adjustment( string $id, string $txn, int $total, int $fee, int $earnings, int $retained = 0 ): array {
+	private function refund_adjustment( string $id, string $txn, int $total, int $fee, int $earnings, int $retained = 0, int $tax = 0 ): array {
 		$cur = $this->cur();
 		return array(
 			'id'             => $id,
@@ -117,8 +117,8 @@ class SFLS_Finance_Test extends SFLS_Test_Case {
 				'currency_code' => $cur,
 			),
 			'payout_totals'  => array(
-				'subtotal'      => (string) $total,
-				'tax'           => '0',
+				'subtotal'      => (string) ( $total - $tax ),
+				'tax'           => (string) $tax,
 				'total'         => (string) $total,
 				'fee'           => (string) $fee,
 				'retained_fee'  => (string) $retained,
@@ -367,6 +367,111 @@ class SFLS_Finance_Test extends SFLS_Test_Case {
 		$again   = array_filter( SFLS_Finance::backfill(), static fn( $r ) => in_array( $r['order'], $ids, true ) );
 		$this->assertCount( 0, $again, 'Orders with figures are skipped.' );
 		$this->assertCount( $fetched, $this->calls( 'GET', '#^/transactions/txn_fin_bf_\w$#' ), 'No second fetch.' );
+	}
+
+	/**
+	 * Transaction OK but adjustments failing: nothing stored, still missing, error reported.
+	 */
+	public function test_backfill_adjustments_failure(): void {
+		$this->paddle();
+		$o = $this->sale( 49, '2001-10-10', 'txn_fin_adjfail' );
+		$this->paddle_routes['GET /transactions/txn_fin_adjfail'] = fn() => $this->payout_txn( 'txn_fin_adjfail', 4900, 0, 295, 4605 );
+		$this->paddle_routes['GET /adjustments']                  = fn() => array(
+			500,
+			array( 'error' => array( 'code' => 'internal', 'detail' => 'boom' ) ),
+		);
+		$rows = array_values( array_filter( SFLS_Finance::backfill(), static fn( $r ) => $r['order'] === $o->get_id() ) );
+		$this->assertStringStartsWith( 'error', $rows[0]['result'] );
+		$this->assertSame( '', (string) wc_get_order( $o->get_id() )->get_meta( '_sfls_paddle_totals' ) );
+		$this->assertContains( $o->get_id(), array_map( static fn( $x ) => $x->get_id(), SFLS_Finance::missing() ) );
+		$this->assertStringContainsString( 'could not be fully synced', SFLS_Finance::failure_message( $rows ) );
+		$this->assertStringContainsString( '#' . $o->get_id(), SFLS_Finance::failure_message( $rows ) );
+
+		$this->paddle_routes['GET /adjustments'] = fn() => array();
+		$rows = array_values( array_filter( SFLS_Finance::backfill(), static fn( $r ) => $r['order'] === $o->get_id() ) );
+		$this->assertSame( 'stored', $rows[0]['result'] );
+		$this->assertSame( 295, wc_get_order( $o->get_id() )->get_meta( '_sfls_paddle_totals' )['fee'] );
+		$this->assertSame( '', SFLS_Finance::failure_message( $rows ) );
+	}
+
+	/**
+	 * Assert gross - refunds - net tax - fees = earnings.
+	 *
+	 * @param array $m Money figures.
+	 */
+	private function assertReconciles( array $m ): void {
+		$this->assertEqualsWithDelta( $m['gross']['amount'] - $m['refunds']['amount'] - $m['tax']['amount'] - $m['fees']['amount'], $m['earnings']['amount'], 0.011 );
+	}
+
+	/**
+	 * Taxed sale, full refund: tax nets to zero and the breakdown reconciles.
+	 */
+	public function test_tax_full_refund_reconciles(): void {
+		$txn   = 'txn_fin_taxfull';
+		$order = $this->sale( 110, '2001-11-10', $txn, $this->payout_txn( $txn, 11000, 1000, 200, 9800 ) );
+		SFLS_Woo_Paddle_Orders::adjustment( $this->refund_adjustment( 'adj_fin_taxfull', $txn, 11000, 200, 9800, 200, 1000 ) );
+		$this->date_refunds( $order, '2001-11-12' );
+		$m = SFLS_Metrics::money( '2001-11-01 00:00:00', '2001-11-30 23:59:59' );
+		$this->assertEqualsWithDelta( 110.0, $m['gross']['amount'], 0.001 );
+		$this->assertEqualsWithDelta( 110.0, $m['refunds']['amount'], 0.001 );
+		$this->assertEqualsWithDelta( 0.0, $m['tax']['amount'], 0.001 );
+		$this->assertEqualsWithDelta( 2.0, $m['fees']['amount'], 0.001 );
+		$this->assertEqualsWithDelta( -2.0, $m['earnings']['amount'], 0.001 );
+		$this->assertReconciles( $m );
+	}
+
+	/**
+	 * Taxed sale, partial refund (55 of 110, tax 5, fee 1 returned).
+	 */
+	public function test_tax_partial_refund_reconciles(): void {
+		$txn   = 'txn_fin_taxpart';
+		$order = $this->sale( 110, '2001-12-10', $txn, $this->payout_txn( $txn, 11000, 1000, 200, 9800 ) );
+		SFLS_Woo_Paddle_Orders::adjustment( $this->refund_adjustment( 'adj_fin_taxpart', $txn, 5500, 100, 4900, 0, 500 ) );
+		$this->date_refunds( $order, '2001-12-12' );
+		$m = SFLS_Metrics::money( '2001-12-01 00:00:00', '2001-12-31 23:59:59' );
+		$this->assertEqualsWithDelta( 5.0, $m['tax']['amount'], 0.001 );
+		$this->assertEqualsWithDelta( 1.0, $m['fees']['amount'], 0.001 );
+		$this->assertEqualsWithDelta( 49.0, $m['earnings']['amount'], 0.001 );
+		$this->assertFalse( $m['tax']['estimated'] );
+		$this->assertReconciles( $m );
+	}
+
+	/**
+	 * Estimated refund (no adjustment data) returns tax proportionally.
+	 */
+	public function test_tax_estimated_refund_proportional(): void {
+		$order = $this->sale( 110, '2002-01-10' );
+		$order->set_cart_tax( '10' );
+		$order->save();
+		wc_create_refund(
+			array(
+				'order_id' => $order->get_id(),
+				'amount'   => 55,
+			)
+		);
+		$this->date_refunds( $order, '2002-01-12' );
+		$m = SFLS_Metrics::money( '2002-01-01 00:00:00', '2002-01-31 23:59:59' );
+		$this->assertEqualsWithDelta( 5.0, $m['tax']['amount'], 0.001 );
+		$this->assertTrue( $m['tax']['estimated'] );
+	}
+
+	/**
+	 * Invariant over a mixed Paddle-sourced fixture (plain, taxed, refunded).
+	 */
+	public function test_breakdown_invariant_mixed(): void {
+		$a = 'txn_fin_inv_a';
+		$b = 'txn_fin_inv_b';
+		$c = 'txn_fin_inv_c';
+		$this->sale( 49, '2002-02-05', $a, $this->payout_txn( $a, 4900, 0, 295, 4605 ) );
+		$ob = $this->sale( 110, '2002-02-06', $b, $this->payout_txn( $b, 11000, 1000, 200, 9800 ) );
+		$oc = $this->sale( 49, '2002-02-07', $c, $this->payout_txn( $c, 4900, 0, 295, 4605 ) );
+		SFLS_Woo_Paddle_Orders::adjustment( $this->refund_adjustment( 'adj_fin_inv_b', $b, 5500, 100, 4900, 0, 500 ) );
+		SFLS_Woo_Paddle_Orders::adjustment( $this->refund_adjustment( 'adj_fin_inv_c', $c, 4900, 295, 4605, 295 ) );
+		$this->date_refunds( $ob, '2002-02-10' );
+		$this->date_refunds( $oc, '2002-02-11' );
+		$m = SFLS_Metrics::money( '2002-02-01 00:00:00', '2002-02-28 23:59:59' );
+		$this->assertFalse( $m['earnings']['estimated'] );
+		$this->assertReconciles( $m );
 	}
 
 	/**

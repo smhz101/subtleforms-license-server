@@ -36,6 +36,7 @@ final class SFLS_CLI_Finance {
 		}
 		WP_CLI\Utils\format_items( 'table', $rows, array( 'order', 'txn', 'result', 'fee', 'earnings', 'refunds' ) );
 		SFLS_Metrics::flush();
-		WP_CLI::success( sprintf( '%d order(s) %s.', count( $rows ), $dry ? 'checked (dry run)' : 'processed' ) );
+		$bad = SFLS_Finance::failure_message( $rows );
+		WP_CLI::success( trim( sprintf( '%d order(s) %s. %s', count( $rows ), $dry ? 'checked (dry run)' : 'processed', $bad ) ) );
 	}
 }

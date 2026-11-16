@@ -19,7 +19,8 @@ defined( 'ABSPATH' ) || exit;
  *   `_sfls_issued` flag. Sales are counted by paid date, refunds by refund date.
  * - Gross sales: order totals paid in the range, tax included. Refunds: refund
  *   amounts created in the range. Net sales: gross minus refunds.
- * - Tax: tax collected by Paddle. Fees: Paddle fees on the sales minus fees
+ * - Tax: tax collected on the sales minus tax refunded (net tax; an estimated
+ *   refund returns the order's tax in proportion). Fees: Paddle fees on the sales minus fees
  *   returned on refunds (a fee kept on a refunded order stays a cost).
  * - Net earnings: Paddle's earnings (payout) of the sales plus the earnings of
  *   the refunds (negative). Without Paddle totals: total - tax, and refunds
@@ -369,6 +370,7 @@ final class SFLS_Metrics {
 						'order_id'  => $parent->get_id(),
 						'plan'      => self::plan_of( $parent ),
 						'country'   => (string) $parent->get_billing_country(),
+						'tax'       => $known ? self::major( (int) ( $payout['tax'] ?? 0 ), $cur ) : ( (float) $parent->get_total() > 0 ? min( 1.0, $amount / (float) $parent->get_total() ) * (float) $parent->get_total_tax() : 0.0 ),
 						'fee'       => $known ? self::major( (int) $payout['fee'] - (int) ( $payout['retained_fee'] ?? 0 ), $cur ) : 0.0,
 						'earnings'  => $known ? -self::major( (int) $payout['earnings'] + (int) ( $payout['retained_fee'] ?? 0 ), $cur ) : -$amount,
 						'estimated' => ! $known,
@@ -427,7 +429,7 @@ final class SFLS_Metrics {
 					'gross'     => $fig( $sum( $sales, 'gross' ), $n, false ),
 					'refunds'   => $fig( $sum( $refunds, 'amount' ), $refunded, false ),
 					'net_sales' => $fig( $sum( $sales, 'gross' ) - $sum( $refunds, 'amount' ), $n, false ),
-					'tax'       => $fig( $sum( $sales, 'tax' ), $n, $est( $sales ) ),
+					'tax'       => $fig( $sum( $sales, 'tax' ) - $sum( $refunds, 'tax' ), $n, $both ),
 					'fees'      => $fig( $sum( $sales, 'fee' ) - $sum( $refunds, 'fee' ), $n, $both ),
 					'earnings'  => $fig( $sum( $sales, 'earnings' ) + $sum( $refunds, 'earnings' ), count( array_unique( array_merge( wp_list_pluck( $sales, 'order_id' ), wp_list_pluck( $refunds, 'order_id' ) ) ) ), $both ),
 				);

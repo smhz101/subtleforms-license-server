@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-16T02:57:11+00:00\n"
+"POT-Creation-Date: 2026-11-16T03:10:09+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: subtleforms-license-server\n"
@@ -43,11 +43,11 @@ msgstr ""
 #: includes/class-sfls-admin.php:844
 #: includes/class-sfls-admin.php:860
 #: includes/class-sfls-admin.php:866
-#: includes/class-sfls-dashboard.php:717
+#: includes/class-sfls-dashboard.php:721
 #: includes/class-sfls-report-query.php:146
 #: includes/class-sfls-standard-reports.php:54
 #: includes/class-sfls-standard-reports.php:56
-#: includes/class-sfls-standard-reports.php:410
+#: includes/class-sfls-standard-reports.php:414
 msgid "Licenses"
 msgstr ""
 
@@ -491,7 +491,7 @@ msgstr ""
 #: includes/class-sfls-account.php:965
 #: includes/class-sfls-admin.php:1380
 #: includes/class-sfls-connect.php:539
-#: includes/class-sfls-dashboard.php:762
+#: includes/class-sfls-dashboard.php:766
 #: includes/class-sfls-reminders.php:284
 #: templates/emails/payment_succeeded.php:43
 #: templates/emails/renewal_notice.php:37
@@ -766,8 +766,8 @@ msgstr ""
 #: includes/class-sfls-account.php:1311
 #: includes/class-sfls-admin.php:306
 #: includes/class-sfls-admin.php:861
-#: includes/class-sfls-dashboard.php:597
-#: includes/class-sfls-dashboard.php:674
+#: includes/class-sfls-dashboard.php:601
+#: includes/class-sfls-dashboard.php:678
 msgid "Active licenses"
 msgstr ""
 
@@ -1032,7 +1032,7 @@ msgid "Beta versions are offered only to sites that ask for the beta channel, an
 msgstr ""
 
 #: includes/class-sfls-admin-releases.php:387
-#: includes/class-sfls-dashboard.php:762
+#: includes/class-sfls-dashboard.php:766
 msgid "When"
 msgstr ""
 
@@ -1593,10 +1593,10 @@ msgstr ""
 #: includes/class-sfls-admin.php:670
 #: includes/class-sfls-admin.php:673
 #: includes/class-sfls-admin.php:842
-#: includes/class-sfls-dashboard.php:740
-#: includes/class-sfls-dashboard.php:756
+#: includes/class-sfls-dashboard.php:744
+#: includes/class-sfls-dashboard.php:760
 #: includes/class-sfls-report-query.php:161
-#: includes/class-sfls-standard-reports.php:437
+#: includes/class-sfls-standard-reports.php:441
 msgid "Customer"
 msgstr ""
 
@@ -1610,7 +1610,7 @@ msgstr ""
 
 #: includes/class-sfls-admin.php:228
 #: includes/class-sfls-admin.php:641
-#: includes/class-sfls-dashboard.php:751
+#: includes/class-sfls-dashboard.php:755
 msgid "Past due"
 msgstr ""
 
@@ -1736,13 +1736,13 @@ msgstr ""
 #: includes/class-sfls-admin.php:1025
 #: includes/class-sfls-admin.php:1341
 #: includes/class-sfls-dashboard.php:432
-#: includes/class-sfls-dashboard.php:740
+#: includes/class-sfls-dashboard.php:744
 #: includes/class-sfls-reminders.php:283
 #: includes/class-sfls-report-query.php:80
 #: includes/class-sfls-report-query.php:160
 #: includes/class-sfls-report-query.php:199
 #: includes/class-sfls-standard-reports.php:273
-#: includes/class-sfls-standard-reports.php:438
+#: includes/class-sfls-standard-reports.php:442
 #: includes/class-sfls-woo.php:337
 #: templates/emails/welcome.php:32
 msgid "Plan"
@@ -1751,14 +1751,14 @@ msgstr ""
 #: includes/class-sfls-admin.php:377
 #: includes/class-sfls-admin.php:560
 #: includes/class-sfls-reminders.php:285
-#: includes/class-sfls-standard-reports.php:439
+#: includes/class-sfls-standard-reports.php:443
 msgid "Expires"
 msgstr ""
 
 #: includes/class-sfls-admin.php:378
 #: includes/class-sfls-admin.php:621
 #: includes/class-sfls-admin.php:868
-#: includes/class-sfls-dashboard.php:756
+#: includes/class-sfls-dashboard.php:760
 msgid "Order"
 msgstr ""
 
@@ -1965,8 +1965,8 @@ msgid "Billing"
 msgstr ""
 
 #: includes/class-sfls-admin.php:669
-#: includes/class-sfls-dashboard.php:740
-#: includes/class-sfls-dashboard.php:756
+#: includes/class-sfls-dashboard.php:744
+#: includes/class-sfls-dashboard.php:760
 msgid "Amount"
 msgstr ""
 
@@ -2070,8 +2070,8 @@ msgid "Old"
 msgstr ""
 
 #: includes/class-sfls-admin.php:786
-#: includes/class-sfls-dashboard.php:723
-#: includes/class-sfls-standard-reports.php:382
+#: includes/class-sfls-dashboard.php:727
+#: includes/class-sfls-standard-reports.php:386
 msgid "New"
 msgstr ""
 
@@ -2297,7 +2297,7 @@ msgstr ""
 #: includes/class-sfls-admin.php:1040
 #: includes/class-sfls-report-query.php:162
 #: includes/class-sfls-report-query.php:178
-#: includes/class-sfls-standard-reports.php:441
+#: includes/class-sfls-standard-reports.php:445
 msgid "Currency"
 msgstr ""
 
@@ -3527,7 +3527,7 @@ msgstr ""
 
 #: includes/class-sfls-dashboard.php:66
 #: includes/class-sfls-dashboard.php:456
-#: includes/class-sfls-finance.php:229
+#: includes/class-sfls-finance.php:248
 msgid "Sorry, you are not allowed to view this page."
 msgstr ""
 
@@ -3619,63 +3619,63 @@ msgstr ""
 msgid "Paddle sync: %s (stored-checked)."
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:490
+#: includes/class-sfls-dashboard.php:494
 msgid "Some figures are estimated (marked ~). Paddle has not reported its fees and payout for every order yet, so they are calculated from order totals. Sync Paddle figures to fetch the real amounts."
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:508
-#: includes/class-sfls-dashboard.php:701
-#: includes/class-sfls-standard-reports.php:352
+#: includes/class-sfls-dashboard.php:512
+#: includes/class-sfls-dashboard.php:705
+#: includes/class-sfls-standard-reports.php:355
 msgid "Gross sales"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:509
+#: includes/class-sfls-dashboard.php:513
 #: includes/class-sfls-report-query.php:171
-#: includes/class-sfls-standard-reports.php:353
+#: includes/class-sfls-standard-reports.php:356
 msgid "Refunds"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:510
-#: includes/class-sfls-woo-paddle.php:359
-msgid "Tax"
+#: includes/class-sfls-dashboard.php:514
+#: includes/class-sfls-standard-reports.php:358
+msgid "Tax (net of refunds)"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:511
-#: includes/class-sfls-standard-reports.php:355
+#: includes/class-sfls-dashboard.php:515
+#: includes/class-sfls-standard-reports.php:359
 msgid "Paddle fees"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:512
-#: includes/class-sfls-dashboard.php:518
-#: includes/class-sfls-dashboard.php:535
+#: includes/class-sfls-dashboard.php:516
+#: includes/class-sfls-dashboard.php:522
 #: includes/class-sfls-dashboard.php:539
-#: includes/class-sfls-dashboard.php:696
-#: includes/class-sfls-standard-reports.php:356
+#: includes/class-sfls-dashboard.php:543
+#: includes/class-sfls-dashboard.php:700
+#: includes/class-sfls-standard-reports.php:360
 msgid "Net earnings"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:518
+#: includes/class-sfls-dashboard.php:522
 msgid "Estimated"
 msgstr ""
 
 #. translators: 1: from date, 2: to date (site time)
-#: includes/class-sfls-dashboard.php:525
+#: includes/class-sfls-dashboard.php:529
 #, php-format
 msgid "vs previous period · %1$s – %2$s"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:549
+#: includes/class-sfls-dashboard.php:553
 msgid "No earnings in this period."
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:551
+#: includes/class-sfls-dashboard.php:555
 msgid "Earnings breakdown"
 msgstr ""
 
 #. translators: %d: number of refunded orders
 #. translators: %d: number of refunds
-#: includes/class-sfls-dashboard.php:571
-#: includes/class-sfls-dashboard.php:582
+#: includes/class-sfls-dashboard.php:575
+#: includes/class-sfls-dashboard.php:586
 #, php-format
 msgid "%d refund"
 msgid_plural "%d refunds"
@@ -3683,62 +3683,62 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of orders
-#: includes/class-sfls-dashboard.php:573
-#: includes/class-sfls-dashboard.php:579
-#: includes/class-sfls-dashboard.php:633
+#: includes/class-sfls-dashboard.php:577
+#: includes/class-sfls-dashboard.php:583
+#: includes/class-sfls-dashboard.php:637
 #, php-format
 msgid "%d order"
 msgid_plural "%d orders"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-dashboard.php:594
-#: includes/class-sfls-standard-reports.php:354
+#: includes/class-sfls-dashboard.php:598
+#: includes/class-sfls-standard-reports.php:357
 msgid "Net sales"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:595
+#: includes/class-sfls-dashboard.php:599
 msgid "MRR"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:595
+#: includes/class-sfls-dashboard.php:599
 msgid "excl. canceling subscriptions"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:596
+#: includes/class-sfls-dashboard.php:600
 msgid "ARR"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:596
+#: includes/class-sfls-dashboard.php:600
 msgid "MRR × 12"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:598
+#: includes/class-sfls-dashboard.php:602
 msgid "Paying customers"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:598
+#: includes/class-sfls-dashboard.php:602
 msgid "bought, not issued manually"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:599
+#: includes/class-sfls-dashboard.php:603
 msgid "Renewal rate"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:600
+#: includes/class-sfls-dashboard.php:604
 msgid "Churn"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:601
+#: includes/class-sfls-dashboard.php:605
 msgid "Refund rate"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:624
+#: includes/class-sfls-dashboard.php:628
 msgid "Not enough data yet"
 msgstr ""
 
 #. translators: %d: number of renewals, licenses or orders
-#: includes/class-sfls-dashboard.php:628
+#: includes/class-sfls-dashboard.php:632
 #, php-format
 msgid "based on %d renewal due"
 msgid_plural "based on %d renewals due"
@@ -3746,7 +3746,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of renewals, licenses or orders
-#: includes/class-sfls-dashboard.php:628
+#: includes/class-sfls-dashboard.php:632
 #, php-format
 msgid "based on %d order"
 msgid_plural "based on %d orders"
@@ -3754,142 +3754,142 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of renewals, licenses or orders
-#: includes/class-sfls-dashboard.php:628
+#: includes/class-sfls-dashboard.php:632
 #, php-format
 msgid "based on %d license"
 msgid_plural "based on %d licenses"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-dashboard.php:649
+#: includes/class-sfls-dashboard.php:653
 msgid "Renewal forecast"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:649
+#: includes/class-sfls-dashboard.php:653
 msgid "non-canceling subscriptions"
 msgstr ""
 
 #. translators: %d: days
-#: includes/class-sfls-dashboard.php:654
+#: includes/class-sfls-dashboard.php:658
 #, php-format
 msgid "Next %d days"
 msgstr ""
 
 #. translators: %d: days
-#: includes/class-sfls-dashboard.php:654
+#: includes/class-sfls-dashboard.php:658
 #, php-format
 msgid "%d renewal"
 msgid_plural "%d renewals"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-dashboard.php:658
+#: includes/class-sfls-dashboard.php:662
 msgid "No renewals are scheduled in the next 90 days."
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:658
-#: includes/class-sfls-dashboard.php:682
-#: includes/class-sfls-dashboard.php:710
-#: includes/class-sfls-dashboard.php:735
-#: includes/class-sfls-dashboard.php:746
+#: includes/class-sfls-dashboard.php:662
+#: includes/class-sfls-dashboard.php:686
+#: includes/class-sfls-dashboard.php:714
+#: includes/class-sfls-dashboard.php:739
+#: includes/class-sfls-dashboard.php:750
 msgid "View licenses"
 msgstr ""
 
 #. translators: %d: number of subscriptions
-#: includes/class-sfls-dashboard.php:662
+#: includes/class-sfls-dashboard.php:666
 msgid "At risk (failed payments)"
 msgstr ""
 
 #. translators: %d: number of subscriptions
-#: includes/class-sfls-dashboard.php:662
+#: includes/class-sfls-dashboard.php:666
 #, php-format
 msgid "%d subscription"
 msgid_plural "%d subscriptions"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-sfls-dashboard.php:668
+#: includes/class-sfls-dashboard.php:672
 msgid "Plan mix"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:679
+#: includes/class-sfls-dashboard.php:683
 msgid "licenses"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:682
+#: includes/class-sfls-dashboard.php:686
 msgid "No active licenses yet."
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:683
+#: includes/class-sfls-dashboard.php:687
 msgid "active licenses"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:690
+#: includes/class-sfls-dashboard.php:694
 msgid "Earnings by month"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:710
+#: includes/class-sfls-dashboard.php:714
 msgid "No sales or refunds in the last 12 months."
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:711
+#: includes/class-sfls-dashboard.php:715
 msgid "last 12 months"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:727
+#: includes/class-sfls-dashboard.php:731
 msgid "Churned"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:735
+#: includes/class-sfls-dashboard.php:739
 msgid "No new or churned licenses in the last 12 months."
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:736
+#: includes/class-sfls-dashboard.php:740
 msgid "new vs churned, last 12 months"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:740
-#: includes/class-sfls-dashboard.php:756
+#: includes/class-sfls-dashboard.php:744
+#: includes/class-sfls-dashboard.php:760
 msgid "Date"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:743
+#: includes/class-sfls-dashboard.php:747
 msgid "Upcoming renewals"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:746
+#: includes/class-sfls-dashboard.php:750
 msgid "Nothing is due in the next 30 days."
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:749
+#: includes/class-sfls-dashboard.php:753
 msgid "Failed payments"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:752
+#: includes/class-sfls-dashboard.php:756
 msgid "No payments are failing."
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:755
+#: includes/class-sfls-dashboard.php:759
 msgid "Recent refunds"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:758
+#: includes/class-sfls-dashboard.php:762
 msgid "No refunds yet."
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:761
+#: includes/class-sfls-dashboard.php:765
 msgid "Recent admin changes"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:762
+#: includes/class-sfls-dashboard.php:766
 msgid "Who"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:762
+#: includes/class-sfls-dashboard.php:766
 msgid "Change"
 msgstr ""
 
-#: includes/class-sfls-dashboard.php:772
+#: includes/class-sfls-dashboard.php:776
 msgid "No changes logged yet."
 msgstr ""
 
@@ -4662,7 +4662,7 @@ msgstr ""
 
 #: includes/class-sfls-report-query.php:86
 #: includes/class-sfls-report-query.php:163
-#: includes/class-sfls-standard-reports.php:409
+#: includes/class-sfls-standard-reports.php:413
 msgid "Purchase month"
 msgstr ""
 
@@ -4683,7 +4683,7 @@ msgid "Billing amount"
 msgstr ""
 
 #: includes/class-sfls-report-query.php:153
-#: includes/class-sfls-standard-reports.php:351
+#: includes/class-sfls-standard-reports.php:354
 msgid "Orders"
 msgstr ""
 
@@ -5303,31 +5303,31 @@ msgid "Unknown report."
 msgstr ""
 
 #: includes/class-sfls-standard-reports.php:263
-#: includes/class-sfls-standard-reports.php:381
+#: includes/class-sfls-standard-reports.php:385
 msgid "Month"
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:383
+#: includes/class-sfls-standard-reports.php:387
 msgid "Renewed"
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:384
+#: includes/class-sfls-standard-reports.php:388
 msgid "Expired or canceled"
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:411
+#: includes/class-sfls-standard-reports.php:415
 msgid "Renewed after year 1 %"
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:412
+#: includes/class-sfls-standard-reports.php:416
 msgid "Still active %"
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:413
+#: includes/class-sfls-standard-reports.php:417
 msgid "Churned %"
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:440
+#: includes/class-sfls-standard-reports.php:444
 msgid "Amount at risk"
 msgstr ""
 
@@ -5607,6 +5607,10 @@ msgstr ""
 #: includes/class-sfls-woo-paddle.php:281
 #: includes/class-sfls-woo-paddle.php:285
 msgid "Pay with Paddle is for one SubtleForms license at a time."
+msgstr ""
+
+#: includes/class-sfls-woo-paddle.php:359
+msgid "Tax"
 msgstr ""
 
 #: includes/class-sfls-woo-paddle.php:438

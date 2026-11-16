@@ -204,7 +204,12 @@ final class SFLS_Finance {
 			$row['fee']      = SFLS_Paddle::to_decimal( (string) $totals['fee'], $totals['currency'] );
 			$row['earnings'] = SFLS_Paddle::to_decimal( (string) $totals['earnings'], $totals['currency'] );
 			$adjustments     = SFLS_Paddle::request( 'GET', '/adjustments', null, array( 'transaction_id' => $txn_id ) );
-			$adjustments     = is_wp_error( $adjustments ) ? array() : array_filter( $adjustments, static fn( $a, $k ) => '_meta' !== $k && is_array( $a ) && isset( $a['id'] ), ARRAY_FILTER_USE_BOTH );
+			if ( is_wp_error( $adjustments ) ) {
+				$row['result'] = 'error: adjustments: ' . $adjustments->get_error_message();
+				$rows[]        = $row;
+				continue;
+			}
+			$adjustments = array_filter( $adjustments, static fn( $a, $k ) => '_meta' !== $k && is_array( $a ) && isset( $a['id'] ), ARRAY_FILTER_USE_BOTH );
 			if ( ! $dry_run ) {
 				self::store_txn( $order, $txn );
 				foreach ( $adjustments as $adj ) {
@@ -221,6 +226,20 @@ final class SFLS_Finance {
 	}
 
 	/**
+	 * "N orders could not be fully synced: ..." for failed backfill rows.
+	 *
+	 * @param array[] $rows Backfill rows.
+	 */
+	public static function failure_message( array $rows ): string {
+		$bad = array_filter( $rows, static fn( $r ) => str_starts_with( (string) $r['result'], 'error' ) );
+		if ( ! $bad ) {
+			return '';
+		}
+		$list = array_map( static fn( $r ) => '#' . $r['order'] . ' (' . $r['result'] . ')', array_values( $bad ) );
+		return sprintf( '%d orders could not be fully synced: %s', count( $bad ), implode( '; ', $list ) );
+	}
+
+	/**
 	 * Admin button: backfill up to 50 orders.
 	 */
 	public static function handle_sync(): void {
@@ -230,10 +249,17 @@ final class SFLS_Finance {
 		}
 		$rows = self::backfill( 50 );
 		SFLS_Metrics::flush();
+		$bad  = self::failure_message( $rows );
 		$ok   = count( array_filter( $rows, static fn( $r ) => 'stored' === $r['result'] ) );
 		$back = wp_get_referer();
 		$back = $back ? $back : admin_url( 'admin.php?page=' . SFLS_Dashboard::SLUG );
-		wp_safe_redirect( add_query_arg( array( 'sfls_synced' => $ok . '-' . count( $rows ) ), $back ) );
+		$args = array_filter(
+			array(
+				'sfls_synced'      => $ok . '-' . count( $rows ),
+				'sfls_sync_failed' => $bad,
+			)
+		);
+		wp_safe_redirect( add_query_arg( $args, $back ) );
 		exit;
 	}
 }

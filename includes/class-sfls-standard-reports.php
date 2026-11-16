@@ -313,6 +313,7 @@ final class SFLS_Standard_Reports {
 					'sum_revenue'     => 0.0,
 					'sum_refunded'    => 0.0,
 					'sum_net_revenue' => 0.0,
+					'sum_tax'         => 0.0,
 					'sum_fees'        => 0.0,
 					'sum_earnings'    => 0.0,
 				);
@@ -322,10 +323,12 @@ final class SFLS_Standard_Reports {
 				++$g['count'];
 				$g['sum_revenue']     += $r['gross'];
 				$g['sum_net_revenue'] += $r['gross'];
+				$g['sum_tax']         += (float) $r['tax'];
 				$g['sum_fees']        += (float) $r['fee'];
 			} else {
 				$g['sum_refunded']    += $r['amount'];
 				$g['sum_net_revenue'] -= $r['amount'];
+				$g['sum_tax']         -= $r['tax'];
 				$g['sum_fees']        -= $r['fee'];
 			}
 			$g['sum_earnings'] += $r['earnings'];
@@ -352,6 +355,7 @@ final class SFLS_Standard_Reports {
 				'sum_revenue'     => array( __( 'Gross sales', 'subtleforms-license-server' ), 'money', true ),
 				'sum_refunded'    => array( __( 'Refunds', 'subtleforms-license-server' ), 'money', true ),
 				'sum_net_revenue' => array( __( 'Net sales', 'subtleforms-license-server' ), 'money', true ),
+				'sum_tax'         => array( __( 'Tax (net of refunds)', 'subtleforms-license-server' ), 'money', true ),
 				'sum_fees'        => array( __( 'Paddle fees', 'subtleforms-license-server' ), 'money', true ),
 				'sum_earnings'    => array( __( 'Net earnings', 'subtleforms-license-server' ), 'money', true ),
 			),
