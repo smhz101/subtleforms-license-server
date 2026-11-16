@@ -4,7 +4,7 @@ Tags: license, woocommerce, updates
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.14.0
+Stable tag: 1.14.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,6 +25,10 @@ Private plugin for subtleforms.com. See README.md for setup.
 * Pay with Paddle: a WooCommerce payment gateway for license products. WooCommerce runs the cart and checkout, Paddle Billing takes the payment as merchant of record, with yearly subscriptions that renew automatically, renewal orders, refunds and billing emails.
 
 == Changelog ==
+
+= 1.14.1 - 2026-11-16 =
+* Fix: Dashboard and report amounts show their real cents (−$2.95, not −$3) even when WooCommerce displays prices without decimals.
+* Fix: $0 orders (old free trial checkouts) no longer count as paid orders in order counts, refund rate or paying customers.
 
 = 1.14.0 - 2026-11-16 =
 * Fix: The dashboard headline is now Net earnings from Paddle's payout figures (gross sales − refunds − tax − Paddle fees). A refunded order no longer counts as revenue; a fee Paddle retains on a refund shows as a loss.
