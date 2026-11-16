@@ -1114,7 +1114,11 @@ final class SFLS_Admin {
 		}
 		echo '</optgroup></select> ';
 		submit_button( __( 'Send test reminder', 'subtleforms-license-server' ), 'secondary', 'submit', false );
-		echo '</form></div>';
+		echo '</form><p>' . esc_html__( 'Preview with sample data:', 'subtleforms-license-server' );
+		foreach ( SFLS_Templates::previews() as $slug => $label ) {
+			echo ' <a href="' . esc_url( SFLS_Templates::preview_url( $slug ) ) . '" target="_blank" rel="noopener">' . esc_html( $label ) . '</a>';
+		}
+		echo '</p></div>';
 		echo '</div>';
 	}
 

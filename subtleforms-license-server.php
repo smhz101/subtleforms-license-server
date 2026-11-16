@@ -48,6 +48,7 @@ require_once SFLS_DIR . 'includes/class-sfls-delivery.php';
 require_once SFLS_DIR . 'includes/class-sfls-blocks.php';
 require_once SFLS_DIR . 'includes/class-sfls-paddle.php';
 require_once SFLS_DIR . 'includes/class-sfls-billing.php';
+require_once SFLS_DIR . 'includes/class-sfls-templates.php';
 require_once SFLS_DIR . 'includes/class-sfls-billing-emails.php';
 require_once SFLS_DIR . 'includes/class-sfls-paddle-rest.php';
 require_once SFLS_DIR . 'includes/class-sfls-checkout-paddle.php';
@@ -109,6 +110,7 @@ add_action(
 		( new SFLS_Reminders() )->register();
 		SFLS_Signing_Check::register();
 		SFLS_Billing_Emails::register();
+		SFLS_Templates::register();
 		( new SFLS_Upgrades() )->register();
 		( new SFLS_Checkout() )->register();
 		( new SFLS_Delivery() )->register();

@@ -187,27 +187,15 @@ final class SFLS_Delivery {
 		}
 		$many    = count( $licenses ) > 1;
 		$subject = $many ? __( 'Your SubtleForms Pro license keys', 'subtleforms-license-server' ) : __( 'Your SubtleForms Pro license key', 'subtleforms-license-server' );
-		$body    = '<p>' . esc_html__( 'Hi,', 'subtleforms-license-server' ) . '</p>';
-		$body   .= '<p>' . esc_html( $many ? __( 'Here are your SubtleForms Pro license keys.', 'subtleforms-license-server' ) : __( 'Here is your SubtleForms Pro license key.', 'subtleforms-license-server' ) ) . '</p>';
-		$body   .= '<table cellspacing="0" cellpadding="8" style="border-collapse:collapse;width:100%;margin:16px 0;border:1px solid #e5e5e5;">';
-		foreach ( $licenses as $lic ) {
-			$body .= '<tr><td style="border-bottom:1px solid #e5e5e5;"><code style="font-size:15px;">' . esc_html( $lic['license_key'] ) . '</code><br><span style="color:#757575;">' . esc_html( self::license_line( $lic ) ) . '</span></td></tr>';
-		}
-		$body .= '</table>';
-		$body .= SFLS_Reminders::button( SFLS_Guest::url( $licenses[0] ), __( 'Open your license page', 'subtleforms-license-server' ) );
-		$body .= '<p>' . esc_html__( 'The link opens your license page and the Pro download for 30 days, no account needed.', 'subtleforms-license-server' ) . '</p>';
-		$body .= '<h3>' . esc_html__( 'How to install Pro', 'subtleforms-license-server' ) . '</h3><ol>';
-		foreach ( self::steps( false ) as $step ) {
-			$body .= '<li><strong>' . esc_html( $step[0] ) . '</strong> ' . esc_html( $step[1] ) . '</li>';
-		}
-		$body .= '</ol>';
-		$body .= '<p>' . esc_html(
-			sprintf(
-				/* translators: %s: support email */
-				__( 'Questions? Reply to this email or write to %s.', 'subtleforms-license-server' ),
-				SFLS_Settings::support_email()
+		$body    = SFLS_Templates::render(
+			'issued',
+			array(
+				'licenses' => $licenses,
+				'many'     => $many,
+				'url'      => SFLS_Guest::url( $licenses[0] ),
+				'support'  => SFLS_Settings::support_email(),
 			)
-		) . '</p>';
+		);
 		return SFLS_Reminders::deliver( $to, $subject, $subject, $body );
 	}
 
