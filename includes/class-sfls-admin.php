@@ -242,13 +242,14 @@ final class SFLS_Admin {
 	 * @param string $title  Title.
 	 * @param string $action Optional page-title-action HTML (escaped).
 	 * @param string $meta   Optional muted subtitle.
+	 * @param string $controls Optional controls HTML (forms), escaped by the caller.
 	 */
-	public function header( string $title, string $action = '', string $meta = '' ): void {
+	public function header( string $title, string $action = '', string $meta = '', string $controls = '' ): void {
 		echo '<div class="wrap sfls-admin"><div class="sfls-page-header"><div class="sfls-page-header__main"><h1 class="wp-heading-inline">' . esc_html( $title ) . '</h1>';
 		if ( '' !== $meta ) {
 			echo '<p class="sfls-page-header__meta">' . esc_html( $meta ) . '</p>';
 		}
-		echo '</div><div class="sfls-page-header__actions">' . wp_kses_post( $action ) . '</div></div>';
+		echo '</div><div class="sfls-page-header__actions">' . wp_kses_post( $action ) . $controls . '</div></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Controls are escaped by the caller.
 		echo '<hr class="wp-header-end">';
 		$this->notice();
 		$this->no_release_notice();
