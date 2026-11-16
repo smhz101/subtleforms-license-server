@@ -186,4 +186,67 @@ class SFLS_Reports_Admin_Test extends SFLS_Test_Case {
 		$this->assertCount( 1, $def['filters'] );
 		$this->assertSame( 'table', $def['display'] );
 	}
+
+	/**
+	 * The builder renders every saved measure plus one empty row.
+	 */
+	public function test_builder_renders_all_measures(): void {
+		wp_set_current_user( $this->admin()->ID );
+		$id = SFLS_Reports::save(
+			array(
+				'name'       => 'rpt-test four',
+				'user_id'    => get_current_user_id(),
+				'definition' => array(
+					'dataset'  => 'orders',
+					'group_by' => array( 'plan' ),
+					'measures' => array(
+						array( 'fn' => 'count' ),
+						array( 'fn' => 'sum', 'field' => 'revenue' ),
+						array( 'fn' => 'sum', 'field' => 'refunded' ),
+						array( 'fn' => 'sum', 'field' => 'net_revenue' ),
+					),
+					'sort'     => 'sum_net_revenue:desc',
+				),
+			)
+		);
+		$this->reports[] = $id;
+		$method          = new ReflectionMethod( SFLS_Reports_Admin::class, 'screen_builder' );
+		ob_start();
+		$method->invoke( new SFLS_Reports_Admin(), SFLS_Reports::find( $id ) );
+		$html = ob_get_clean();
+		$this->assertStringContainsString( 'name="measures[3][field]"', $html );
+		$this->assertStringContainsString( 'name="measures[4][fn]"', $html );
+		$this->assertStringNotContainsString( 'name="measures[5][fn]"', $html );
+	}
+
+	/**
+	 * Saving with a sort on a removed column drops the sort instead of failing.
+	 */
+	public function test_save_drops_stale_sort(): void {
+		wp_set_current_user( $this->admin()->ID );
+		$this->filter( 'wp_redirect', static function ( $location ) {
+			throw new RuntimeException( $location );
+		} );
+		$_POST    = array(
+			'_wpnonce' => wp_create_nonce( 'sfls_report_save' ),
+			'name'     => 'rpt-test stale sort',
+			'dataset'  => 'licenses',
+			'group_by' => array( 'plan' ),
+			'measures' => array( array( 'fn' => 'count' ) ),
+			'sort'     => 'sum_net_revenue:desc',
+		);
+		$_REQUEST = $_POST;
+		try {
+			( new SFLS_Reports_Admin() )->handle_save();
+			$this->fail( 'Expected redirect.' );
+		} catch ( RuntimeException $e ) {
+			$this->assertStringContainsString( 'action=view', $e->getMessage() );
+			preg_match( '/id=(\d+)/', $e->getMessage(), $m );
+			$this->reports[] = (int) $m[1];
+			$this->assertSame( '', SFLS_Reports::find( (int) $m[1] )['definition']['sort'] );
+		} finally {
+			$_POST    = array();
+			$_REQUEST = array();
+		}
+	}
 }

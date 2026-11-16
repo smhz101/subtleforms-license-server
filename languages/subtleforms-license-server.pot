@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-16T01:16:24+00:00\n"
+"POT-Creation-Date: 2026-11-16T01:29:25+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: subtleforms-license-server\n"
@@ -45,10 +45,10 @@ msgstr ""
 #: includes/class-sfls-admin.php:826
 #: includes/class-sfls-dashboard.php:352
 #: includes/class-sfls-dashboard.php:371
-#: includes/class-sfls-report-query.php:142
+#: includes/class-sfls-report-query.php:146
 #: includes/class-sfls-standard-reports.php:83
 #: includes/class-sfls-standard-reports.php:85
-#: includes/class-sfls-standard-reports.php:330
+#: includes/class-sfls-standard-reports.php:333
 msgid "Licenses"
 msgstr ""
 
@@ -506,8 +506,8 @@ msgid "A calm, fast form builder for WordPress."
 msgstr ""
 
 #: includes/class-sfls-account.php:1001
-#: includes/class-sfls-reports-admin.php:536
-#: includes/class-sfls-reports-admin.php:544
+#: includes/class-sfls-reports-admin.php:543
+#: includes/class-sfls-reports-admin.php:551
 msgid "Preview"
 msgstr ""
 
@@ -913,7 +913,7 @@ msgstr ""
 #: includes/class-sfls-admin.php:626
 #: includes/class-sfls-admin.php:828
 #: includes/class-sfls-admin.php:950
-#: includes/class-sfls-report-query.php:77
+#: includes/class-sfls-report-query.php:81
 msgid "Status"
 msgstr ""
 
@@ -948,8 +948,8 @@ msgstr ""
 
 #: includes/class-sfls-admin-releases.php:334
 #: includes/class-sfls-admin.php:367
-#: includes/class-sfls-reports-admin.php:413
-#: includes/class-sfls-reports-admin.php:561
+#: includes/class-sfls-reports-admin.php:418
+#: includes/class-sfls-reports-admin.php:568
 msgid "Edit"
 msgstr ""
 
@@ -996,7 +996,7 @@ msgstr ""
 #: includes/class-sfls-admin-releases.php:513
 #: includes/class-sfls-admin.php:378
 #: includes/class-sfls-admin.php:585
-#: includes/class-sfls-reports-admin.php:420
+#: includes/class-sfls-reports-admin.php:425
 msgid "Delete"
 msgstr ""
 
@@ -1294,8 +1294,8 @@ msgstr ""
 #: includes/class-sfls-admin-releases.php:717
 #: includes/class-sfls-admin-releases.php:735
 #: includes/class-sfls-admin.php:688
-#: includes/class-sfls-reports-admin.php:403
-#: includes/class-sfls-reports-admin.php:456
+#: includes/class-sfls-reports-admin.php:408
+#: includes/class-sfls-reports-admin.php:461
 msgid "Name"
 msgstr ""
 
@@ -1314,7 +1314,7 @@ msgstr ""
 
 #: includes/class-sfls-admin-releases.php:717
 #: includes/class-sfls-admin-releases.php:827
-#: includes/class-sfls-reports-admin.php:403
+#: includes/class-sfls-reports-admin.php:408
 msgid "Actions"
 msgstr ""
 
@@ -1597,8 +1597,8 @@ msgstr ""
 #: includes/class-sfls-dashboard.php:401
 #: includes/class-sfls-dashboard.php:407
 #: includes/class-sfls-dashboard.php:413
-#: includes/class-sfls-report-query.php:157
-#: includes/class-sfls-standard-reports.php:357
+#: includes/class-sfls-report-query.php:161
+#: includes/class-sfls-standard-reports.php:360
 msgid "Customer"
 msgstr ""
 
@@ -1656,8 +1656,8 @@ msgid "Expiring in 30 days"
 msgstr ""
 
 #: includes/class-sfls-admin.php:273
-#: includes/class-sfls-reports-admin.php:407
-#: includes/class-sfls-reports-admin.php:426
+#: includes/class-sfls-reports-admin.php:412
+#: includes/class-sfls-reports-admin.php:431
 msgid "View"
 msgstr ""
 
@@ -1720,7 +1720,7 @@ msgstr ""
 
 #: includes/class-sfls-admin.php:329
 #: includes/class-sfls-dashboard.php:276
-#: includes/class-sfls-reports-admin.php:588
+#: includes/class-sfls-reports-admin.php:595
 msgid "Apply"
 msgstr ""
 
@@ -1741,10 +1741,10 @@ msgstr ""
 #: includes/class-sfls-dashboard.php:401
 #: includes/class-sfls-dashboard.php:407
 #: includes/class-sfls-reminders.php:283
-#: includes/class-sfls-report-query.php:76
-#: includes/class-sfls-report-query.php:156
-#: includes/class-sfls-report-query.php:195
-#: includes/class-sfls-standard-reports.php:358
+#: includes/class-sfls-report-query.php:80
+#: includes/class-sfls-report-query.php:160
+#: includes/class-sfls-report-query.php:199
+#: includes/class-sfls-standard-reports.php:361
 #: includes/class-sfls-woo.php:337
 #: templates/emails/welcome.php:32
 msgid "Plan"
@@ -1755,7 +1755,7 @@ msgstr ""
 #: includes/class-sfls-dashboard.php:401
 #: includes/class-sfls-dashboard.php:407
 #: includes/class-sfls-reminders.php:285
-#: includes/class-sfls-standard-reports.php:359
+#: includes/class-sfls-standard-reports.php:362
 msgid "Expires"
 msgstr ""
 
@@ -1826,7 +1826,7 @@ msgid "Back to licenses"
 msgstr ""
 
 #: includes/class-sfls-admin.php:518
-#: includes/class-sfls-report-query.php:84
+#: includes/class-sfls-report-query.php:88
 msgid "Sites allowed"
 msgstr ""
 
@@ -1868,7 +1868,7 @@ msgid "Save license"
 msgstr ""
 
 #: includes/class-sfls-admin.php:540
-#: includes/class-sfls-report-query.php:190
+#: includes/class-sfls-report-query.php:194
 #: includes/class-sfls-standard-reports.php:135
 #: includes/class-sfls-standard-reports.php:147
 #: includes/class-sfls-standard-reports.php:168
@@ -1886,7 +1886,7 @@ msgid "Site"
 msgstr ""
 
 #: includes/class-sfls-admin.php:544
-#: includes/class-sfls-report-query.php:198
+#: includes/class-sfls-report-query.php:202
 msgid "Pro version"
 msgstr ""
 
@@ -2076,7 +2076,7 @@ msgstr ""
 
 #: includes/class-sfls-admin.php:746
 #: includes/class-sfls-dashboard.php:328
-#: includes/class-sfls-standard-reports.php:302
+#: includes/class-sfls-standard-reports.php:305
 msgid "New"
 msgstr ""
 
@@ -2097,7 +2097,7 @@ msgid "No licenses for this email."
 msgstr ""
 
 #: includes/class-sfls-admin.php:828
-#: includes/class-sfls-report-query.php:79
+#: includes/class-sfls-report-query.php:83
 msgid "Billing status"
 msgstr ""
 
@@ -2238,7 +2238,7 @@ msgid "Renewal"
 msgstr ""
 
 #: includes/class-sfls-admin.php:950
-#: includes/class-sfls-report-query.php:81
+#: includes/class-sfls-report-query.php:85
 msgid "Product"
 msgstr ""
 
@@ -2300,9 +2300,9 @@ msgid "Not created"
 msgstr ""
 
 #: includes/class-sfls-admin.php:1000
-#: includes/class-sfls-report-query.php:158
-#: includes/class-sfls-report-query.php:174
-#: includes/class-sfls-standard-reports.php:361
+#: includes/class-sfls-report-query.php:162
+#: includes/class-sfls-report-query.php:178
+#: includes/class-sfls-standard-reports.php:364
 msgid "Currency"
 msgstr ""
 
@@ -2315,7 +2315,7 @@ msgid "Create in Paddle"
 msgstr ""
 
 #: includes/class-sfls-admin.php:1015
-#: includes/class-sfls-reports-admin.php:428
+#: includes/class-sfls-reports-admin.php:433
 msgid "Private"
 msgstr ""
 
@@ -3556,7 +3556,7 @@ msgid "New licenses"
 msgstr ""
 
 #: includes/class-sfls-dashboard.php:177
-#: includes/class-sfls-report-query.php:160
+#: includes/class-sfls-report-query.php:164
 #: includes/class-sfls-standard-reports.php:80
 #: includes/class-sfls-standard-reports.php:81
 #: includes/class-sfls-standard-reports.php:82
@@ -3564,7 +3564,7 @@ msgid "Revenue"
 msgstr ""
 
 #: includes/class-sfls-dashboard.php:178
-#: includes/class-sfls-report-query.php:162
+#: includes/class-sfls-report-query.php:166
 msgid "Net revenue"
 msgstr ""
 
@@ -3589,7 +3589,7 @@ msgid "Refund rate"
 msgstr ""
 
 #: includes/class-sfls-dashboard.php:185
-#: includes/class-sfls-standard-reports.php:360
+#: includes/class-sfls-standard-reports.php:363
 msgid "Amount at risk"
 msgstr ""
 
@@ -3665,7 +3665,7 @@ msgid "New, renewed and churned licenses"
 msgstr ""
 
 #: includes/class-sfls-dashboard.php:332
-#: includes/class-sfls-standard-reports.php:303
+#: includes/class-sfls-standard-reports.php:306
 msgid "Renewed"
 msgstr ""
 
@@ -4493,159 +4493,159 @@ msgstr ""
 msgid "[Test] %s"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:78
+#: includes/class-sfls-report-query.php:82
 msgid "Billing source"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:80
-#: includes/class-sfls-report-query.php:155
-#: includes/class-sfls-report-query.php:173
+#: includes/class-sfls-report-query.php:84
+#: includes/class-sfls-report-query.php:159
+#: includes/class-sfls-report-query.php:177
 msgid "Country"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:82
-#: includes/class-sfls-report-query.php:159
-#: includes/class-sfls-standard-reports.php:329
+#: includes/class-sfls-report-query.php:86
+#: includes/class-sfls-report-query.php:163
+#: includes/class-sfls-standard-reports.php:332
 msgid "Purchase month"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:83
+#: includes/class-sfls-report-query.php:87
 msgid "Expiry month"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:85
+#: includes/class-sfls-report-query.php:89
 msgid "Sites used"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:86
+#: includes/class-sfls-report-query.php:90
 msgid "Days to expiry"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:87
+#: includes/class-sfls-report-query.php:91
 msgid "Billing amount"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:149
+#: includes/class-sfls-report-query.php:153
 msgid "Orders"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:154
-#: includes/class-sfls-report-query.php:172
+#: includes/class-sfls-report-query.php:158
+#: includes/class-sfls-report-query.php:176
 msgid "Order status"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:161
-#: includes/class-sfls-report-query.php:176
+#: includes/class-sfls-report-query.php:165
+#: includes/class-sfls-report-query.php:180
 msgid "Refunded amount"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:163
+#: includes/class-sfls-report-query.php:167
 msgid "Licenses issued"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:167
+#: includes/class-sfls-report-query.php:171
 msgid "Refunds"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:175
+#: includes/class-sfls-report-query.php:179
 msgid "Refund month"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:180
+#: includes/class-sfls-report-query.php:184
 msgid "Subscriptions"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:185
+#: includes/class-sfls-report-query.php:189
 msgid "Renewal month"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:186
+#: includes/class-sfls-report-query.php:190
 msgid "Billing currency"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:196
+#: includes/class-sfls-report-query.php:200
 msgid "License status"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:197
+#: includes/class-sfls-report-query.php:201
 msgid "Domain"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:199
+#: includes/class-sfls-report-query.php:203
 msgid "Staging site"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:200
+#: includes/class-sfls-report-query.php:204
 msgid "Activated month"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:201
+#: includes/class-sfls-report-query.php:205
 msgid "Last seen month"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:233
+#: includes/class-sfls-report-query.php:237
 msgid "Unknown filter operator."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:238
+#: includes/class-sfls-report-query.php:242
 msgid "That operator does not fit this field."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:262
-#: includes/class-sfls-report-query.php:267
-#: includes/class-sfls-report-query.php:280
-#: includes/class-sfls-report-query.php:290
+#: includes/class-sfls-report-query.php:266
+#: includes/class-sfls-report-query.php:271
+#: includes/class-sfls-report-query.php:284
+#: includes/class-sfls-report-query.php:294
 msgid "Invalid filter value."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:344
+#: includes/class-sfls-report-query.php:348
 msgid "Unknown dataset."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:351
+#: includes/class-sfls-report-query.php:355
 msgid "Group by at most two fields."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:360
+#: includes/class-sfls-report-query.php:364
 msgid "Unknown or not groupable field."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:379
+#: includes/class-sfls-report-query.php:383
 msgid "Too many measures."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:384
+#: includes/class-sfls-report-query.php:388
 msgid "Unknown measure."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:389
-#: includes/class-sfls-reports-admin.php:482
+#: includes/class-sfls-report-query.php:393
+#: includes/class-sfls-reports-admin.php:487
 msgid "Count"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:394
+#: includes/class-sfls-report-query.php:398
 msgid "Unknown or not measurable field."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:400
-#: includes/class-sfls-reports-admin.php:620
+#: includes/class-sfls-report-query.php:404
+#: includes/class-sfls-reports-admin.php:627
 msgid "Total"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:400
-#: includes/class-sfls-reports-admin.php:484
+#: includes/class-sfls-report-query.php:404
+#: includes/class-sfls-reports-admin.php:489
 msgid "Average"
 msgstr ""
 
-#: includes/class-sfls-report-query.php:415
+#: includes/class-sfls-report-query.php:419
 msgid "Unknown or not filterable field."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:432
+#: includes/class-sfls-report-query.php:436
 msgid "Invalid date."
 msgstr ""
 
-#: includes/class-sfls-report-query.php:443
+#: includes/class-sfls-report-query.php:447
 msgid "Cannot sort on that column."
 msgstr ""
 
@@ -4670,7 +4670,7 @@ msgid "Scheduled report: %s"
 msgstr ""
 
 #: includes/class-sfls-reports-admin.php:35
-#: includes/class-sfls-reports-admin.php:387
+#: includes/class-sfls-reports-admin.php:392
 msgid "Reports"
 msgstr ""
 
@@ -4688,190 +4688,190 @@ msgstr ""
 msgid "Sorry, you are not allowed to view reports."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:211
+#: includes/class-sfls-reports-admin.php:216
 msgid "Give the report a name."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:223
+#: includes/class-sfls-reports-admin.php:228
 msgid "Add at least one recipient to schedule the report."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:229
+#: includes/class-sfls-reports-admin.php:234
 msgid "Report saved."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:241
+#: includes/class-sfls-reports-admin.php:246
 msgid "Report deleted."
 msgstr ""
 
 #. translators: %s: report name
-#: includes/class-sfls-reports-admin.php:255
+#: includes/class-sfls-reports-admin.php:260
 #, php-format
 msgid "Copy of %s"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:260
+#: includes/class-sfls-reports-admin.php:265
 msgid "Report duplicated."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:310
+#: includes/class-sfls-reports-admin.php:315
 msgid "This report cannot be saved as a custom report."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:320
+#: includes/class-sfls-reports-admin.php:325
 msgid "Saved as a custom report."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:387
-#: includes/class-sfls-reports-admin.php:450
+#: includes/class-sfls-reports-admin.php:392
+#: includes/class-sfls-reports-admin.php:455
 msgid "New report"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:388
+#: includes/class-sfls-reports-admin.php:393
 msgid "Standard reports"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:398
+#: includes/class-sfls-reports-admin.php:403
 msgid "Saved reports"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:400
+#: includes/class-sfls-reports-admin.php:405
 msgid "No saved reports yet."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:400
+#: includes/class-sfls-reports-admin.php:405
 msgid "Build a report"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:403
+#: includes/class-sfls-reports-admin.php:408
 msgid "Owner"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:403
+#: includes/class-sfls-reports-admin.php:408
 msgid "Visibility"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:403
+#: includes/class-sfls-reports-admin.php:408
 msgid "Last updated"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:419
+#: includes/class-sfls-reports-admin.php:424
 msgid "Duplicate"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:428
+#: includes/class-sfls-reports-admin.php:433
 msgid "Shared"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:450
+#: includes/class-sfls-reports-admin.php:455
 msgid "Edit report"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:450
-#: includes/class-sfls-reports-admin.php:561
-#: includes/class-sfls-reports-admin.php:585
+#: includes/class-sfls-reports-admin.php:455
+#: includes/class-sfls-reports-admin.php:568
+#: includes/class-sfls-reports-admin.php:592
 msgid "All reports"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:456
+#: includes/class-sfls-reports-admin.php:461
 msgid "Shared with everyone who can view reports"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:458
+#: includes/class-sfls-reports-admin.php:463
 msgid "Dataset"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:462
+#: includes/class-sfls-reports-admin.php:467
 msgid "Update fields"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:474
+#: includes/class-sfls-reports-admin.php:479
 msgid "Group by"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:478
+#: includes/class-sfls-reports-admin.php:483
 msgid "Dates group by month."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:480
+#: includes/class-sfls-reports-admin.php:485
 msgid "Measures"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:483
+#: includes/class-sfls-reports-admin.php:488
 msgid "Sum"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:497
+#: includes/class-sfls-reports-admin.php:502
 msgid "Filters"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:499
+#: includes/class-sfls-reports-admin.php:504
 msgid "is"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:500
+#: includes/class-sfls-reports-admin.php:505
 msgid "is one of (comma separated)"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:501
+#: includes/class-sfls-reports-admin.php:506
 msgid "greater than"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:502
+#: includes/class-sfls-reports-admin.php:507
 msgid "less than"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:503
+#: includes/class-sfls-reports-admin.php:508
 msgid "before (YYYY-MM-DD)"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:504
+#: includes/class-sfls-reports-admin.php:509
 msgid "after (YYYY-MM-DD)"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:505
+#: includes/class-sfls-reports-admin.php:510
 msgid "between (two values, comma separated)"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:516
+#: includes/class-sfls-reports-admin.php:523
 msgid "Clear the value to remove a filter. Save or preview to get another empty row."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:518
+#: includes/class-sfls-reports-admin.php:525
 msgid "Date range"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:520
+#: includes/class-sfls-reports-admin.php:527
 msgid "Show as"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:527
+#: includes/class-sfls-reports-admin.php:534
 msgid "Email schedule"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:531
+#: includes/class-sfls-reports-admin.php:538
 msgid "Sent with the first 50 rows and a CSV attachment, once per week or month by the daily check."
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:537
+#: includes/class-sfls-reports-admin.php:544
 msgid "Save report"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:561
-#: includes/class-sfls-reports-admin.php:581
+#: includes/class-sfls-reports-admin.php:568
+#: includes/class-sfls-reports-admin.php:588
 msgid "Export CSV"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:583
+#: includes/class-sfls-reports-admin.php:590
 msgid "Save as custom report"
 msgstr ""
 
-#: includes/class-sfls-reports-admin.php:606
+#: includes/class-sfls-reports-admin.php:613
 msgid "No data for this report."
 msgstr ""
 
 #. translators: 1: rows shown, 2: total rows
-#: includes/class-sfls-reports-admin.php:659
+#: includes/class-sfls-reports-admin.php:666
 #, php-format
 msgid "Showing %1$d of %2$d rows."
 msgstr ""
@@ -5133,23 +5133,23 @@ msgstr ""
 msgid "Unknown report."
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:301
+#: includes/class-sfls-standard-reports.php:304
 msgid "Month"
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:304
+#: includes/class-sfls-standard-reports.php:307
 msgid "Expired or canceled"
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:331
+#: includes/class-sfls-standard-reports.php:334
 msgid "Renewed after year 1 %"
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:332
+#: includes/class-sfls-standard-reports.php:335
 msgid "Still active %"
 msgstr ""
 
-#: includes/class-sfls-standard-reports.php:333
+#: includes/class-sfls-standard-reports.php:336
 msgid "Churned %"
 msgstr ""
 

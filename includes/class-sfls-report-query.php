@@ -72,6 +72,10 @@ final class SFLS_Report_Query {
 		$lic_country      = $hpos ? 'ad.country' : 'bc.meta_value';
 		$lic_country      = "COALESCE(NULLIF({$lic_country}, ''), '')";
 
+		// Paddle amounts are stored in minor units (cents); zero-decimal currencies are not.
+		$zero_dec       = "'" . implode( "','", SFLS_Metrics::ZERO_DECIMAL ) . "'";
+		$billing_amount = "CAST(NULLIF(l.billing_amount, '') AS DECIMAL(18,2)) / IF( UPPER(l.billing_currency) IN ({$zero_dec}), 1, 100 )";
+
 		$license_fields = array(
 			'plan'           => self::f( __( 'Plan', 'subtleforms-license-server' ), 'l.plan', 'string', 'gf' ),
 			'status'         => self::f( __( 'Status', 'subtleforms-license-server' ), 'l.status', 'string', 'gf' ),
@@ -84,7 +88,7 @@ final class SFLS_Report_Query {
 			'sites_allowed'  => self::f( __( 'Sites allowed', 'subtleforms-license-server' ), 'l.sites_allowed', 'number', 'fm' ),
 			'sites_used'     => self::f( __( 'Sites used', 'subtleforms-license-server' ), "(SELECT COUNT(*) FROM {$acts} sa WHERE sa.license_id = l.id)", 'number', 'gfm' ),
 			'days_to_expiry' => self::f( __( 'Days to expiry', 'subtleforms-license-server' ), 'DATEDIFF(l.expires_at, UTC_TIMESTAMP())', 'number', 'fm' ),
-			'billing_amount' => self::f( __( 'Billing amount', 'subtleforms-license-server' ), 'CAST(NULLIF(l.billing_amount, \'\') AS DECIMAL(18,2))', 'money', 'fm' ),
+			'billing_amount' => self::f( __( 'Billing amount', 'subtleforms-license-server' ), $billing_amount, 'money', 'fm' ),
 		);
 
 		$license_from = "{$lic} l {$lic_country_join} LEFT JOIN {$posts} pr ON pr.ID = l.product_id";

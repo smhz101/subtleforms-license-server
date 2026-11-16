@@ -283,10 +283,13 @@ final class SFLS_Standard_Reports {
 	}
 
 	/**
-	 * New, renewed and expired licenses per month (last 12 months).
+	 * New, renewed and expired licenses per month (last 12 months by default).
+	 *
+	 * @param string $from Y-m-d.
+	 * @param string $to   Y-m-d.
 	 */
-	public static function licenses_month(): array {
-		$m    = SFLS_Metrics::licenses_by_month( 12 );
+	public static function licenses_month( string $from = '', string $to = '' ): array {
+		$m    = SFLS_Metrics::licenses_by_month( 12, '', $from, $to );
 		$rows = array();
 		foreach ( $m['labels'] as $i => $label ) {
 			$rows[] = array(

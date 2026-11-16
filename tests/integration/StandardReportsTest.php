@@ -95,6 +95,16 @@ class SFLS_Standard_Reports_Test extends SFLS_Test_Case {
 	}
 
 	/**
+	 * The licenses-by-month report follows the selected range.
+	 */
+	public function test_licenses_month_honours_range(): void {
+		$res = SFLS_Standard_Reports::run( 'licenses-month', '2001-01-15', '2001-04-02' );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( array( '2001-01', '2001-02', '2001-03', '2001-04' ), array_column( $res['rows'], 'month' ) );
+		$this->assertCount( 12, SFLS_Standard_Reports::run( 'licenses-month' )['rows'] );
+	}
+
+	/**
 	 * A Paddle renewal order counts in revenue with the renewed license's plan, and the KPI matches the report.
 	 */
 	public function test_renewal_order_in_revenue(): void {

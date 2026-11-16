@@ -206,7 +206,12 @@ final class SFLS_Reports_Admin {
 			$this->visible( $id );
 		}
 		$check = SFLS_Report_Query::run( $def );
-		$name  = sanitize_text_field( (string) ( $in['name'] ?? '' ) );
+		if ( is_wp_error( $check ) && 'sfls_report_sort' === $check->get_error_code() ) {
+			// The sorted column was removed from the report: fall back to the default order.
+			$def['sort'] = '';
+			$check       = SFLS_Report_Query::run( $def );
+		}
+		$name = sanitize_text_field( (string) ( $in['name'] ?? '' ) );
 		if ( is_wp_error( $check ) || '' === $name ) {
 			$this->back( $this->url( array( 'action' => 'edit' ) + ( $id ? array( 'id' => $id ) : array() ) ), is_wp_error( $check ) ? $check->get_error_message() : __( 'Give the report a name.', 'subtleforms-license-server' ), 'error' );
 		}
@@ -472,7 +477,7 @@ final class SFLS_Reports_Admin {
 		};
 
 		echo '<tr><th>' . esc_html__( 'Group by', 'subtleforms-license-server' ) . '</th><td>';
-		for ( $i = 0; $i < 2; $i++ ) {
+		for ( $i = 0, $n = min( 2, count( $def['group_by'] ) + 1 ); $i < $n; $i++ ) {
 			echo '<select name="group_by[]">' . $options( $fields, $def['group_by'][ $i ] ?? '', 'groupable' ) . '</select> '; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		}
 		echo '<p class="description">' . esc_html__( 'Dates group by month.', 'subtleforms-license-server' ) . '</p></td></tr>';
@@ -484,7 +489,7 @@ final class SFLS_Reports_Admin {
 			'avg'   => __( 'Average', 'subtleforms-license-server' ),
 		);
 		$measures = empty( $def['measures'] ) ? array( array( 'fn' => 'count' ) ) : $def['measures'];
-		for ( $i = 0; $i < 3; $i++ ) {
+		for ( $i = 0, $n = min( 6, count( $measures ) + 1 ); $i < $n; $i++ ) {
 			$m = $measures[ $i ] ?? array();
 			echo '<p><select name="measures[' . (int) $i . '][fn]"><option value="">—</option>';
 			foreach ( $fns as $fn => $label ) {
@@ -495,7 +500,7 @@ final class SFLS_Reports_Admin {
 		echo '</td></tr>';
 
 		echo '<tr><th>' . esc_html__( 'Filters', 'subtleforms-license-server' ) . '</th><td>';
-		$ops       = array(
+		$ops     = array(
 			'eq'      => __( 'is', 'subtleforms-license-server' ),
 			'in'      => __( 'is one of (comma separated)', 'subtleforms-license-server' ),
 			'gt'      => __( 'greater than', 'subtleforms-license-server' ),
@@ -504,8 +509,10 @@ final class SFLS_Reports_Admin {
 			'after'   => __( 'after (YYYY-MM-DD)', 'subtleforms-license-server' ),
 			'between' => __( 'between (two values, comma separated)', 'subtleforms-license-server' ),
 		);
-		$filters   = $def['filters'];
-		$filters[] = array();
+		$filters = array_slice( $def['filters'], 0, 20 );
+		if ( count( $filters ) < 20 ) {
+			$filters[] = array();
+		}
 		foreach ( $filters as $i => $f ) {
 			echo '<p><select name="filters[' . (int) $i . '][field]">' . $options( $fields, $f['field'] ?? '', 'filterable' ) . '</select> <select name="filters[' . (int) $i . '][op]">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			foreach ( $ops as $op => $label ) {

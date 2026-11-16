@@ -288,6 +288,42 @@ class SFLS_Report_Query_Test extends SFLS_Test_Case {
 	}
 
 	/**
+	 * Billing amount is stored in minor units: divided by 100 except zero-decimal currencies.
+	 */
+	public function test_billing_amount_minor_units(): void {
+		foreach ( array( 'USD', 'JPY' ) as $cur ) {
+			$lic = $this->fixture( 'pro', 1, '2026-01-15 10:00:00' );
+			SFLS_Licenses::update( (int) $lic['id'], array( 'billing_amount' => '24000', 'billing_currency' => $cur ) );
+		}
+		$res = SFLS_Report_Query::run(
+			$this->def(
+				array(
+					'group_by' => array( 'plan' ),
+					'measures' => array( array( 'fn' => 'sum', 'field' => 'billing_amount' ) ),
+					'filters'  => array(
+						array( 'field' => 'billing_status', 'op' => 'eq', 'value' => 'rpt-test' ),
+						array( 'field' => 'billing_amount', 'op' => 'lt', 'value' => '1000' ),
+					),
+				)
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertEquals( 240, $res['rows'][0]['sum_billing_amount'] );
+		$jpy = SFLS_Report_Query::run(
+			$this->def(
+				array(
+					'measures' => array( array( 'fn' => 'sum', 'field' => 'billing_amount' ) ),
+					'filters'  => array(
+						array( 'field' => 'billing_status', 'op' => 'eq', 'value' => 'rpt-test' ),
+						array( 'field' => 'billing_amount', 'op' => 'gt', 'value' => '1000' ),
+					),
+				)
+			)
+		);
+		$this->assertEquals( 24000, $jpy['rows'][0]['sum_billing_amount'] );
+	}
+
+	/**
 	 * Schema 14: reports table and the new indexes.
 	 */
 	public function test_schema_14(): void {

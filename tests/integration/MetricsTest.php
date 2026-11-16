@@ -233,8 +233,10 @@ class SFLS_Metrics_Test extends SFLS_Test_Case {
 		$rev = SFLS_Metrics::revenue_by_month( 3 );
 		$this->assertCount( 3, $rev['labels'] );
 		$this->assertCount( 3, $rev['net'] );
-		$mix = SFLS_Metrics::plan_mix();
-		$this->assertGreaterThanOrEqual( 3, $mix['pro'] ?? 0 );
+		$pro0 = SFLS_Metrics::plan_mix()['pro'] ?? 0;
+		$this->lic( 'A12', 'pro', '2001-03-21', gmdate( 'Y-m-d', time() + YEAR_IN_SECONDS ) );
+		SFLS_Metrics::flush();
+		$this->assertSame( $pro0 + 1, SFLS_Metrics::plan_mix()['pro'] ?? 0 );
 		$this->assertSame( array( 30, 60, 90 ), array_keys( SFLS_Metrics::renewals_due( array( 30, 60, 90 ) ) ) );
 		$this->assertIsArray( SFLS_Metrics::version_adoption() );
 		$this->assertIsArray( SFLS_Metrics::latest_refunds( 10 ) );

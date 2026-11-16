@@ -474,12 +474,22 @@ final class SFLS_Metrics {
 	/**
 	 * Calendar months (UTC), oldest first, ending with the current one.
 	 *
-	 * @param int $months Count.
+	 * @param int    $months Count (ignored when a from bound is given).
+	 * @param string $from   Y-m-d first day's month, or empty.
+	 * @param string $to     Y-m-d last day's month, or empty for the current one.
 	 * @return array[] Each: label (Y-m), from, to.
 	 */
-	private static function months( int $months ): array {
+	private static function months( int $months, string $from = '', string $to = '' ): array {
 		$out   = array();
-		$first = strtotime( gmdate( 'Y-m-01 00:00:00' ) . ' UTC' );
+		$month = static fn( string $d ) => strtotime( gmdate( 'Y-m-01', (int) strtotime( $d . ' UTC' ) ) . ' 00:00:00 UTC' );
+		$last  = strtotime( gmdate( 'Y-m-01 00:00:00' ) . ' UTC' );
+		if ( $to && strtotime( $to . ' UTC' ) ) {
+			$last = $month( $to );
+		}
+		if ( $from && strtotime( $from . ' UTC' ) ) {
+			$months = max( 1, min( 120, ( (int) gmdate( 'Y', $last ) - (int) gmdate( 'Y', $month( $from ) ) ) * 12 + (int) gmdate( 'n', $last ) - (int) gmdate( 'n', $month( $from ) ) + 1 ) );
+		}
+		$first = $last;
 		for ( $i = $months - 1; $i >= 0; $i-- ) {
 			$start = strtotime( "-{$i} months", $first );
 			$end   = strtotime( '+1 month', $start ) - 1;
@@ -518,16 +528,18 @@ final class SFLS_Metrics {
 	 *
 	 * @param int    $months Months.
 	 * @param string $plan   Plan.
+	 * @param string $from   Y-m-d, start of the series (overrides $months).
+	 * @param string $to     Y-m-d, end of the series.
 	 * @return array{labels:string[],new:int[],renewed:int[],churned:int[]}
 	 */
-	public static function licenses_by_month( int $months = 12, string $plan = '' ): array {
+	public static function licenses_by_month( int $months = 12, string $plan = '', string $from = '', string $to = '' ): array {
 		$out = array(
 			'labels'  => array(),
 			'new'     => array(),
 			'renewed' => array(),
 			'churned' => array(),
 		);
-		foreach ( self::months( $months ) as $m ) {
+		foreach ( self::months( $months, $from, $to ) as $m ) {
 			$out['labels'][]  = $m['label'];
 			$out['new'][]     = self::new_licenses( $m['from'], $m['to'], $plan );
 			$out['renewed'][] = count( self::orders( $m['from'], $m['to'], $plan )['renewed'] );
