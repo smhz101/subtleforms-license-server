@@ -56,6 +56,11 @@ require_once SFLS_DIR . 'includes/class-sfls-woo-paddle.php';
 require_once SFLS_DIR . 'includes/class-sfls-woo-paddle-orders.php';
 require_once SFLS_DIR . 'includes/class-sfls-admin.php';
 require_once SFLS_DIR . 'includes/class-sfls-admin-releases.php';
+require_once SFLS_DIR . 'includes/class-sfls-metrics.php';
+require_once SFLS_DIR . 'includes/class-sfls-dashboard.php';
+require_once SFLS_DIR . 'includes/class-sfls-report-query.php';
+require_once SFLS_DIR . 'includes/class-sfls-reports.php';
+require_once SFLS_DIR . 'includes/class-sfls-reports-admin.php';
 
 register_activation_hook(
 	__FILE__,
@@ -119,8 +124,10 @@ add_action(
 		( new SFLS_Checkout_Paddle() )->register();
 		( new SFLS_Woo_Paddle() )->register();
 		( new SFLS_Woo_Paddle_Orders() )->register();
+		( new SFLS_Reports_Admin() )->register();
 		if ( is_admin() ) {
 			( new SFLS_Admin() )->register();
+			( new SFLS_Dashboard() )->register();
 		}
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			require_once SFLS_DIR . 'includes/class-sfls-cli.php';

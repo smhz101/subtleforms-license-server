@@ -1,0 +1,680 @@
+<?php
+/**
+ * Business metrics for the dashboard and reports.
+ *
+ * @package SFLS
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Read-only queries over licenses, activations, WooCommerce orders and the
+ * audit log. Ranges are UTC 'Y-m-d H:i:s' (both ends inclusive); results are
+ * cached for 15 minutes.
+ *
+ * Definitions:
+ * - A license order is a paid order (processing, completed, refunded) with the
+ *   `_sfls_issued` flag. Revenue is the order total in the store currency, by
+ *   paid date; net revenue subtracts the refunds created in the range.
+ * - Renewed: licenses named by `_sfls_renew_license` on paid orders in the
+ *   range. Due: renewed plus active licenses whose expiry still lies in the
+ *   range. Churned: licenses whose Paddle subscription was canceled in the
+ *   range (by last update), plus active licenses that expired in the range.
+ * - MRR: renewal amount / 12 of Paddle subscriptions that are active, trialing
+ *   or past due and not canceling, in the store currency (all plans are yearly).
+ * - Active sites: non-local activations seen in the 30 days up to the end.
+ */
+final class SFLS_Metrics {
+
+	const TTL = 900;
+
+	/**
+	 * Currencies without minor units (as in SFLS_Paddle).
+	 */
+	const ZERO_DECIMAL = array( 'JPY', 'KRW', 'VND', 'CLP', 'HUF', 'TWD' );
+
+	/**
+	 * Bust the cache.
+	 */
+	public static function flush(): void {
+		global $wpdb;
+		update_option( 'sfls_metrics_v', (int) get_option( 'sfls_metrics_v', 0 ) + 1, false );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfls\\_m\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfls\\_m\\_%'" );
+	}
+
+	/**
+	 * Cache a computation.
+	 *
+	 * @param string   $name Name.
+	 * @param array    $args Arguments the result depends on.
+	 * @param callable $compute Computation.
+	 * @return mixed
+	 */
+	private static function cached( string $name, array $args, callable $compute ) {
+		$key = 'sfls_m_' . md5( $name . wp_json_encode( $args ) . (int) get_option( 'sfls_metrics_v', 0 ) );
+		$hit = get_transient( $key );
+		if ( false !== $hit ) {
+			return $hit;
+		}
+		$value = $compute();
+		set_transient( $key, $value, self::TTL );
+		return $value;
+	}
+
+	/**
+	 * The previous period of the same length, ending one second before $from.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @return string[] Two datetimes.
+	 */
+	public static function previous_range( string $from, string $to ): array {
+		$start = strtotime( $from . ' UTC' );
+		$len   = strtotime( $to . ' UTC' ) - $start;
+		$end   = $start - 1;
+		return array( gmdate( 'Y-m-d H:i:s', $end - $len ), gmdate( 'Y-m-d H:i:s', $end ) );
+	}
+
+	/**
+	 * Plan clause for a licenses query.
+	 *
+	 * @param string $plan  Plan slug or ''.
+	 * @param string $alias Table alias.
+	 * @return array{0:string,1:array} SQL and arguments.
+	 */
+	private static function plan_sql( string $plan, string $alias = 'l' ): array {
+		return '' === $plan ? array( '', array() ) : array( " AND {$alias}.plan = %s", array( $plan ) );
+	}
+
+	/**
+	 * Count licenses.
+	 *
+	 * @param string $where Condition (uses alias l and %s placeholders).
+	 * @param array  $args  Arguments.
+	 * @param string $plan  Plan.
+	 */
+	private static function count( string $where, array $args, string $plan ): int {
+		global $wpdb;
+		[ $psql, $pargs ] = self::plan_sql( $plan );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . SFLS_DB::licenses() . " l WHERE {$where}{$psql}", array_merge( $args, $pargs ) ) );
+	}
+
+	/**
+	 * Licenses that were active at a moment.
+	 *
+	 * @param string $at   Datetime.
+	 * @param string $plan Plan.
+	 */
+	public static function active_at( string $at, string $plan = '' ): int {
+		return self::count( "l.status = 'active' AND l.created_at <= %s AND ( l.expires_at IS NULL OR l.expires_at > %s )", array( $at, $at ), $plan );
+	}
+
+	/**
+	 * Licenses created in a range.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	public static function new_licenses( string $from, string $to, string $plan = '' ): int {
+		return self::count( 'l.created_at >= %s AND l.created_at <= %s', array( $from, $to ), $plan );
+	}
+
+	/**
+	 * Whether an order item sells the plan.
+	 *
+	 * @param WC_Order_Item_Product $item Item.
+	 * @param string                $plan Plan or ''.
+	 */
+	private static function item_matches( $item, string $plan ): bool {
+		return '' === $plan || 0 === strcmp( $plan, (string) get_post_meta( (int) $item->get_product_id(), '_sfls_plan', true ) );
+	}
+
+	/**
+	 * Whether a license order (any item) sells the plan.
+	 *
+	 * @param WC_Order $order Order.
+	 * @param string   $plan  Plan.
+	 */
+	private static function order_matches( $order, string $plan ): bool {
+		if ( '' === $plan ) {
+			return true;
+		}
+		foreach ( $order->get_items() as $item ) {
+			if ( $item instanceof WC_Order_Item_Product && self::item_matches( $item, $plan ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Paid license orders of a range.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 * @return array{paid:int,gross:float,refunded:int,renewed:int[]}
+	 */
+	public static function orders( string $from, string $to, string $plan = '' ): array {
+		return self::cached(
+			'orders',
+			array( $from, $to, $plan ),
+			static function () use ( $from, $to, $plan ) {
+				$out    = array(
+					'paid'     => 0,
+					'gross'    => 0.0,
+					'refunded' => 0,
+					'renewed'  => array(),
+				);
+				$orders = function_exists( 'wc_get_orders' ) ? wc_get_orders(
+					array(
+						'type'       => 'shop_order',
+						'status'     => array( 'processing', 'completed', 'refunded' ),
+						'date_paid'  => strtotime( $from . ' UTC' ) . '...' . strtotime( $to . ' UTC' ),
+						'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+							array(
+								'key'   => '_sfls_issued',
+								'value' => 'yes',
+							),
+						),
+						'limit'      => -1,
+					)
+				) : array();
+				foreach ( $orders as $order ) {
+					if ( ! $order instanceof WC_Order || 'yes' !== $order->get_meta( '_sfls_issued' ) || ! self::order_matches( $order, $plan ) ) {
+						continue;
+					}
+					++$out['paid'];
+					$out['gross'] += (float) $order->get_total();
+					if ( (float) $order->get_total_refunded() > 0 ) {
+						++$out['refunded'];
+					}
+					foreach ( $order->get_items() as $item ) {
+						$id = (int) $item->get_meta( '_sfls_renew_license' );
+						if ( $id > 0 ) {
+							$out['renewed'][ $id ] = $id;
+						}
+					}
+				}
+				$out['renewed'] = array_values( $out['renewed'] );
+				return $out;
+			}
+		);
+	}
+
+	/**
+	 * Refunds of license orders created in a range, newest first.
+	 *
+	 * @param string $from  From.
+	 * @param string $to    To.
+	 * @param string $plan  Plan.
+	 * @param int    $limit Max rows (0 = all).
+	 * @return array[] Rows: order_id, amount, date, email, reason.
+	 */
+	public static function refunds( string $from, string $to, string $plan = '', int $limit = 0 ): array {
+		return self::cached(
+			'refunds',
+			array( $from, $to, $plan, $limit ),
+			static function () use ( $from, $to, $plan, $limit ) {
+				$rows = array();
+				/**
+				 * Typed loosely: the stubs promise orders only.
+				 *
+				 * @var array<int,mixed> $refunds
+				 */
+				$refunds = function_exists( 'wc_get_orders' ) ? wc_get_orders(
+					array(
+						'type'         => 'shop_order_refund',
+						'date_created' => strtotime( $from . ' UTC' ) . '...' . strtotime( $to . ' UTC' ),
+						'orderby'      => 'date',
+						'order'        => 'DESC',
+						'limit'        => -1,
+					)
+				) : array();
+				foreach ( $refunds as $refund ) {
+					$parent = $refund instanceof WC_Order_Refund ? wc_get_order( $refund->get_parent_id() ) : false;
+					if ( ! $parent instanceof WC_Order || 'yes' !== $parent->get_meta( '_sfls_issued' ) || ! self::order_matches( $parent, $plan ) ) {
+						continue;
+					}
+					$created = $refund->get_date_created();
+					$rows[]  = array(
+						'order_id' => $parent->get_id(),
+						'amount'   => abs( (float) $refund->get_amount() ),
+						'date'     => $created ? gmdate( 'Y-m-d H:i:s', $created->getTimestamp() ) : '',
+						'email'    => (string) $parent->get_billing_email(),
+						'reason'   => (string) $refund->get_reason(),
+					);
+					if ( $limit > 0 && count( $rows ) >= $limit ) {
+						break;
+					}
+				}
+				return $rows;
+			}
+		);
+	}
+
+	/**
+	 * Refunded amount in a range.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	public static function refunded_amount( string $from, string $to, string $plan = '' ): float {
+		return (float) array_sum( wp_list_pluck( self::refunds( $from, $to, $plan ), 'amount' ) );
+	}
+
+	/**
+	 * Gross revenue of a range.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	public static function revenue( string $from, string $to, string $plan = '' ): float {
+		return round( self::orders( $from, $to, $plan )['gross'], 2 );
+	}
+
+	/**
+	 * Revenue minus refunds created in the range.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	public static function net_revenue( string $from, string $to, string $plan = '' ): float {
+		return round( self::revenue( $from, $to, $plan ) - self::refunded_amount( $from, $to, $plan ), 2 );
+	}
+
+	/**
+	 * Refunded orders / paid orders, percent (null without paid orders).
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	public static function refund_rate( string $from, string $to, string $plan = '' ): ?float {
+		$orders = self::orders( $from, $to, $plan );
+		return $orders['paid'] > 0 ? round( $orders['refunded'] / $orders['paid'] * 100, 1 ) : null;
+	}
+
+	/**
+	 * Active licenses that expired in a range (ended by the clock, not canceled).
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	private static function expired( string $from, string $to, string $plan ): int {
+		$to = min( $to, current_time( 'mysql', true ) );
+		return self::count( "l.status = 'active' AND l.billing_status <> 'canceled' AND l.expires_at >= %s AND l.expires_at <= %s", array( $from, $to ), $plan );
+	}
+
+	/**
+	 * Licenses lost in a range: canceled subscriptions plus expired licenses.
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	public static function churned( string $from, string $to, string $plan = '' ): int {
+		return self::count( "l.status = 'active' AND l.billing_status = 'canceled' AND l.updated_at >= %s AND l.updated_at <= %s", array( $from, $to ), $plan )
+			+ self::expired( $from, $to, $plan );
+	}
+
+	/**
+	 * Churned / active at the start, percent (null when nothing was active).
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	public static function churn_rate( string $from, string $to, string $plan = '' ): ?float {
+		$start = self::count( "l.status = 'active' AND l.created_at < %s AND ( l.expires_at IS NULL OR l.expires_at > %s )", array( $from, $from ), $plan );
+		return $start > 0 ? round( self::churned( $from, $to, $plan ) / $start * 100, 1 ) : null;
+	}
+
+	/**
+	 * Renewed / due, percent (null when nothing was due).
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $plan Plan.
+	 */
+	public static function renewal_rate( string $from, string $to, string $plan = '' ): ?float {
+		$renewed = count( self::orders( $from, $to, $plan )['renewed'] );
+		$lapsed  = self::count( "l.status = 'active' AND l.expires_at >= %s AND l.expires_at <= %s", array( $from, $to ), $plan );
+		$due     = $renewed + $lapsed;
+		return $due > 0 ? round( $renewed / $due * 100, 1 ) : null;
+	}
+
+	/**
+	 * Monthly recurring revenue of Paddle subscriptions in the store currency.
+	 *
+	 * @param string $plan   Plan.
+	 * @param string $before Only licenses created up to this time ('' = all).
+	 */
+	public static function mrr( string $plan = '', string $before = '' ): float {
+		global $wpdb;
+		$currency = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD';
+		$where    = "l.billing = 'paddle' AND l.paddle_subscription_id <> '' AND l.billing_status IN ( 'active', 'trialing', 'past_due' ) AND l.cancels_at IS NULL AND l.status = 'active' AND l.billing_currency = %s";
+		$args     = array( $currency );
+		if ( '' !== $before ) {
+			$where .= ' AND l.created_at <= %s';
+			$args[] = $before;
+		}
+		[ $psql, $pargs ] = self::plan_sql( $plan );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		$minor   = (float) $wpdb->get_var( $wpdb->prepare( 'SELECT SUM(CAST(l.billing_amount AS UNSIGNED)) FROM ' . SFLS_DB::licenses() . " l WHERE {$where}{$psql}", array_merge( $args, $pargs ) ) );
+		$divisor = in_array( $currency, self::ZERO_DECIMAL, true ) ? 1 : 100;
+		return round( $minor / $divisor / 12, 2 );
+	}
+
+	/**
+	 * Past-due licenses: count and amount at risk (store currency).
+	 *
+	 * @param string $plan Plan.
+	 * @return array{count:int,amount:float}
+	 */
+	public static function dunning( string $plan = '' ): array {
+		global $wpdb;
+		$currency         = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD';
+		[ $psql, $pargs ] = self::plan_sql( $plan );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		$row     = $wpdb->get_row( $wpdb->prepare( 'SELECT COUNT(*) AS n, SUM( IF( l.billing_currency = %s, CAST(l.billing_amount AS UNSIGNED), 0 ) ) AS minor FROM ' . SFLS_DB::licenses() . " l WHERE l.billing_status = 'past_due'{$psql}", array_merge( array( $currency ), $pargs ) ), ARRAY_A );
+		$divisor = in_array( $currency, self::ZERO_DECIMAL, true ) ? 1 : 100;
+		return array(
+			'count'  => (int) ( $row['n'] ?? 0 ),
+			'amount' => round( (float) ( $row['minor'] ?? 0 ) / $divisor, 2 ),
+		);
+	}
+
+	/**
+	 * Sites (non-local activations) seen in the 30 days up to a moment.
+	 *
+	 * @param string $at   Datetime.
+	 * @param string $plan Plan.
+	 */
+	public static function active_sites( string $at, string $plan = '' ): int {
+		global $wpdb;
+		[ $psql, $pargs ] = self::plan_sql( $plan );
+		$since            = gmdate( 'Y-m-d H:i:s', strtotime( $at . ' UTC' ) - 30 * DAY_IN_SECONDS );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . SFLS_DB::activations() . ' a INNER JOIN ' . SFLS_DB::licenses() . " l ON l.id = a.license_id WHERE a.is_local = 0 AND a.last_seen_at > %s AND a.last_seen_at <= %s{$psql}", array_merge( array( $since, $at ), $pargs ) ) );
+	}
+
+	/**
+	 * Every KPI for a range with the previous period.
+	 *
+	 * @param string $from From (UTC).
+	 * @param string $to   To (UTC).
+	 * @param string $plan Plan filter or ''.
+	 * @return array<string,array{value:mixed,previous:mixed,format:string}>
+	 */
+	public static function kpis( string $from, string $to, string $plan = '' ): array {
+		return self::cached(
+			'kpis',
+			array( $from, $to, $plan ),
+			static function () use ( $from, $to, $plan ) {
+				[ $pfrom, $pto ] = self::previous_range( $from, $to );
+				$both            = static fn( callable $calc, string $format ): array => array(
+					'value'    => $calc( $from, $to ),
+					'previous' => $calc( $pfrom, $pto ),
+					'format'   => $format,
+				);
+				$mrr             = self::mrr( $plan );
+				$dunning         = self::dunning( $plan );
+				return array(
+					'active'         => array(
+						'value'    => self::active_at( $to, $plan ),
+						'previous' => self::active_at( $pto, $plan ),
+						'format'   => 'number',
+					),
+					'new'            => $both( static fn( $a, $b ) => self::new_licenses( $a, $b, $plan ), 'number' ),
+					'revenue'        => $both( static fn( $a, $b ) => self::revenue( $a, $b, $plan ), 'money' ),
+					'net_revenue'    => $both( static fn( $a, $b ) => self::net_revenue( $a, $b, $plan ), 'money' ),
+					'mrr'            => array(
+						'value'    => $mrr,
+						'previous' => self::mrr( $plan, $pto ),
+						'format'   => 'money',
+					),
+					'arr'            => array(
+						'value'    => round( $mrr * 12, 2 ),
+						'previous' => round( self::mrr( $plan, $pto ) * 12, 2 ),
+						'format'   => 'money',
+					),
+					'renewal_rate'   => $both( static fn( $a, $b ) => self::renewal_rate( $a, $b, $plan ), 'percent' ),
+					'churn'          => $both( static fn( $a, $b ) => self::churn_rate( $a, $b, $plan ), 'percent' ),
+					'refund_rate'    => $both( static fn( $a, $b ) => self::refund_rate( $a, $b, $plan ), 'percent' ),
+					'dunning_count'  => array(
+						'value'    => $dunning['count'],
+						'previous' => null,
+						'format'   => 'number',
+					),
+					'dunning_amount' => array(
+						'value'    => $dunning['amount'],
+						'previous' => null,
+						'format'   => 'money',
+					),
+					'active_sites'   => array(
+						'value'    => self::active_sites( $to, $plan ),
+						'previous' => self::active_sites( $pto, $plan ),
+						'format'   => 'number',
+					),
+				);
+			}
+		);
+	}
+
+	// ── Series ──────────────────────────────────────────────────────────
+
+	/**
+	 * Calendar months (UTC), oldest first, ending with the current one.
+	 *
+	 * @param int $months Count.
+	 * @return array[] Each: label (Y-m), from, to.
+	 */
+	private static function months( int $months ): array {
+		$out   = array();
+		$first = strtotime( gmdate( 'Y-m-01 00:00:00' ) . ' UTC' );
+		for ( $i = $months - 1; $i >= 0; $i-- ) {
+			$start = strtotime( "-{$i} months", $first );
+			$end   = strtotime( '+1 month', $start ) - 1;
+			$out[] = array(
+				'label' => gmdate( 'Y-m', $start ),
+				'from'  => gmdate( 'Y-m-d H:i:s', $start ),
+				'to'    => gmdate( 'Y-m-d H:i:s', $end ),
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Gross and net revenue per month.
+	 *
+	 * @param int    $months Months.
+	 * @param string $plan   Plan.
+	 * @return array{labels:string[],gross:float[],net:float[]}
+	 */
+	public static function revenue_by_month( int $months = 12, string $plan = '' ): array {
+		$out = array(
+			'labels' => array(),
+			'gross'  => array(),
+			'net'    => array(),
+		);
+		foreach ( self::months( $months ) as $m ) {
+			$out['labels'][] = $m['label'];
+			$out['gross'][]  = self::revenue( $m['from'], $m['to'], $plan );
+			$out['net'][]    = self::net_revenue( $m['from'], $m['to'], $plan );
+		}
+		return $out;
+	}
+
+	/**
+	 * New, renewed and churned licenses per month.
+	 *
+	 * @param int    $months Months.
+	 * @param string $plan   Plan.
+	 * @return array{labels:string[],new:int[],renewed:int[],churned:int[]}
+	 */
+	public static function licenses_by_month( int $months = 12, string $plan = '' ): array {
+		$out = array(
+			'labels'  => array(),
+			'new'     => array(),
+			'renewed' => array(),
+			'churned' => array(),
+		);
+		foreach ( self::months( $months ) as $m ) {
+			$out['labels'][]  = $m['label'];
+			$out['new'][]     = self::new_licenses( $m['from'], $m['to'], $plan );
+			$out['renewed'][] = count( self::orders( $m['from'], $m['to'], $plan )['renewed'] );
+			$out['churned'][] = self::churned( $m['from'], $m['to'], $plan );
+		}
+		return $out;
+	}
+
+	/**
+	 * Active licenses per plan.
+	 *
+	 * @return array<string,int> Plan slug => count.
+	 */
+	public static function plan_mix(): array {
+		return self::cached(
+			'plan_mix',
+			array(),
+			static function () {
+				global $wpdb;
+				$now = current_time( 'mysql', true );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+				$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT plan, COUNT(*) AS n FROM ' . SFLS_DB::licenses() . " WHERE status = 'active' AND ( expires_at IS NULL OR expires_at > %s ) GROUP BY plan ORDER BY n DESC", $now ), ARRAY_A );
+				return array_column( array_map( static fn( $r ) => array( $r['plan'], (int) $r['n'] ), $rows ), 1, 0 );
+			}
+		);
+	}
+
+	/**
+	 * Active licenses expiring within each number of days (cumulative).
+	 *
+	 * @param int[]  $days Day counts.
+	 * @param string $plan Plan.
+	 * @return array<int,int> Days => count.
+	 */
+	public static function renewals_due( array $days = array( 30, 60, 90 ), string $plan = '' ): array {
+		return self::cached(
+			'renewals_due',
+			array( $days, $plan ),
+			static function () use ( $days, $plan ) {
+				$now = current_time( 'mysql', true );
+				$out = array();
+				foreach ( $days as $d ) {
+					$out[ (int) $d ] = self::count( "l.status = 'active' AND l.expires_at > %s AND l.expires_at <= %s", array( $now, gmdate( 'Y-m-d H:i:s', time() + (int) $d * DAY_IN_SECONDS ) ), $plan );
+				}
+				return $out;
+			}
+		);
+	}
+
+	/**
+	 * Plugin versions reported by recently seen sites (empty when none).
+	 *
+	 * @return array<string,int> Version => sites, most used first.
+	 */
+	public static function version_adoption(): array {
+		return self::cached(
+			'versions',
+			array(),
+			static function () {
+				global $wpdb;
+				$since = gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+				$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT plugin_version AS v, COUNT(*) AS n FROM ' . SFLS_DB::activations() . " WHERE is_local = 0 AND plugin_version <> '' AND last_seen_at > %s GROUP BY plugin_version ORDER BY n DESC LIMIT 8", $since ), ARRAY_A );
+				return array_column( array_map( static fn( $r ) => array( $r['v'], (int) $r['n'] ), $rows ), 1, 0 );
+			}
+		);
+	}
+
+	// ── Lists ───────────────────────────────────────────────────────────
+
+	/**
+	 * Licenses with a given condition, as list rows.
+	 *
+	 * @param string $where Condition.
+	 * @param array  $args  Arguments.
+	 * @param string $order Order by.
+	 * @param string $plan  Plan.
+	 * @return array[]
+	 */
+	private static function license_rows( string $where, array $args, string $order, string $plan ): array {
+		global $wpdb;
+		[ $psql, $pargs ] = self::plan_sql( $plan );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		$sql = 'SELECT l.id, l.plan, l.customer_email, l.expires_at, l.billing_status, l.billing_amount, l.billing_currency, l.renews_at FROM ' . SFLS_DB::licenses() . " l WHERE {$where}{$psql} ORDER BY {$order} LIMIT 50";
+		$all = array_merge( $args, $pargs );
+		return (array) $wpdb->get_results( $all ? $wpdb->prepare( $sql, $all ) : $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	}
+
+	/**
+	 * Active licenses expiring within the next days, soonest first.
+	 *
+	 * @param int    $days Days.
+	 * @param string $plan Plan.
+	 * @return array[]
+	 */
+	public static function renewals_due_list( int $days = 7, string $plan = '' ): array {
+		return self::cached(
+			'due_list',
+			array( $days, $plan ),
+			static fn() => self::license_rows( "l.status = 'active' AND l.expires_at > %s AND l.expires_at <= %s", array( current_time( 'mysql', true ), gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ) ), 'l.expires_at ASC', $plan )
+		);
+	}
+
+	/**
+	 * Past-due licenses, oldest expiry first.
+	 *
+	 * @param string $plan Plan.
+	 * @return array[]
+	 */
+	public static function dunning_list( string $plan = '' ): array {
+		return self::cached(
+			'dunning_list',
+			array( $plan ),
+			static fn() => self::license_rows( "l.billing_status = 'past_due'", array(), 'l.expires_at ASC', $plan )
+		);
+	}
+
+	/**
+	 * Latest refunds of license orders.
+	 *
+	 * @param int $limit Rows.
+	 * @return array[]
+	 */
+	public static function latest_refunds( int $limit = 10 ): array {
+		return self::refunds( '1970-01-02 00:00:00', gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ), '', $limit );
+	}
+
+	/**
+	 * Latest audit log entries.
+	 *
+	 * @param int $limit Rows.
+	 * @return array[]
+	 */
+	public static function latest_audit( int $limit = 10 ): array {
+		return self::cached(
+			'audit',
+			array( $limit ),
+			static function () use ( $limit ) {
+				global $wpdb;
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+				$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . SFLS_DB::audit_log() . ' ORDER BY id DESC LIMIT %d', $limit ), ARRAY_A );
+				foreach ( $rows as &$row ) {
+					$user        = get_userdata( (int) $row['user_id'] );
+					$row['user'] = $user ? $user->display_name : '';
+				}
+				return $rows;
+			}
+		);
+	}
+}
