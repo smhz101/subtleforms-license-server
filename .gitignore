@@ -28,3 +28,6 @@ coverage/
 *.zip
 dist/
 build/
+
+# Code check caches
+.phpcs-cache

@@ -56,6 +56,11 @@ Local inspection, tests on disposable WordPress, and drafting PRs are allowed.
 
 - Integration suite: `SFLS_WP_PATH=/path/to/wordpress phpunit -c phpunit.xml` (WooCommerce required)
 
+## Code checks
+
+- `composer install`, then `composer lint:phpcs` (WordPress standard) and `composer lint:phpstan` (level 5). CI job "Code checks" runs both.
+- Existing findings are baselined in `phpcs.baseline.xml` and `phpstan-baseline.neon`; only new ones fail. Fix new findings, do not regenerate the baselines to hide them.
+
 ## Running tests
 
 - One command: `composer install && bin/test-env` (extra args go to phpunit, e.g. `bin/test-env --filter ReleaseApi`).

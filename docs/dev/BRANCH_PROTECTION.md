@@ -42,3 +42,7 @@ All four come from `.github/workflows/checks.yml`:
   by a paths filter never reports and would block the merge forever.
 - Plugin Check on the release zip is not run in CI yet. It stays part of the
   release gate in `docs/dev/MERGING.md`.
+
+## Code checks (1.12.0)
+
+The "Code checks" job (PHPCS with WordPress Coding Standards, PHPStan level 5) fails only on findings that are not in `phpcs.baseline.xml` / `phpstan-baseline.neon`. It is not a required check yet; make it required once it has been green on a few pull requests.
