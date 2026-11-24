@@ -148,6 +148,80 @@ final class SFLS_Metrics {
 	}
 
 	/**
+	 * Ids of $0 orders (free trial checkouts), which are not paying customers.
+	 *
+	 * @return int[]
+	 */
+	private static function free_order_ids(): array {
+		$ids = array();
+		$all = function_exists( 'wc_get_orders' ) ? (array) wc_get_orders(
+			array(
+				'type'   => 'shop_order',
+				'status' => array( 'processing', 'completed' ),
+				'limit'  => -1,
+			)
+		) : array();
+		foreach ( $all as $order ) {
+			if ( $order instanceof WC_Order && (float) $order->get_total() <= 0 ) {
+				$ids[] = $order->get_id();
+			}
+		}
+		return $ids;
+	}
+
+	/**
+	 * Minor-unit precision of a currency (not the WooCommerce display setting).
+	 *
+	 * @param string $currency ISO code, empty for the store currency.
+	 */
+	public static function decimals( string $currency = '' ): int {
+		$currency = strtoupper( '' !== $currency ? $currency : ( function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD' ) );
+		return in_array( $currency, self::ZERO_DECIMAL, true ) ? 0 : 2;
+	}
+
+	/**
+	 * Money as plain text with a true minus sign.
+	 *
+	 * @param float  $amount   Amount.
+	 * @param string $currency ISO code, empty for the store currency.
+	 * @param bool   $compact  Shorten thousands (12.4k); small amounts stay exact.
+	 */
+	public static function format_money( float $amount, string $currency = '', bool $compact = false ): string {
+		$dec    = self::decimals( $currency );
+		$symbol = html_entity_decode( function_exists( 'get_woocommerce_currency_symbol' ) ? (string) get_woocommerce_currency_symbol( '' !== $currency ? $currency : '' ) : '$', ENT_QUOTES, 'UTF-8' );
+		$amount = round( $amount, $dec );
+		$sign   = $amount < 0 ? '−' : '';
+		$abs    = abs( $amount );
+		if ( $compact && $abs >= 1000 ) {
+			foreach ( array(
+				'B' => 1e9,
+				'M' => 1e6,
+				'k' => 1e3,
+			) as $suffix => $div ) {
+				if ( $abs >= $div ) {
+					$short = number_format_i18n( round( $abs / $div, 1 ), 1 );
+					return $sign . $symbol . preg_replace( '/[.,]0$/', '', $short ) . $suffix;
+				}
+			}
+		}
+		return $sign . $symbol . number_format_i18n( $abs, $dec );
+	}
+
+	/**
+	 * SQL selecting license ids renewed or upgraded by a paid, issued order.
+	 */
+	private static function paid_renewals_sql(): string {
+		global $wpdb;
+		$p     = $wpdb->prefix;
+		$hpos  = class_exists( '\\Automattic\\WooCommerce\\Utilities\\OrderUtil' ) && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+		$where = "oim.meta_key IN ('_sfls_renew_license', '_sfls_upgrade_license')";
+		if ( $hpos ) {
+			return "SELECT CAST(oim.meta_value AS UNSIGNED) FROM {$p}woocommerce_order_itemmeta oim JOIN {$p}woocommerce_order_items oi ON oi.order_item_id = oim.order_item_id JOIN {$p}wc_orders po ON po.id = oi.order_id AND po.type = 'shop_order' AND po.status IN ('wc-processing', 'wc-completed') AND po.total_amount > 0 JOIN {$p}wc_orders_meta pm ON pm.order_id = po.id AND pm.meta_key = '_sfls_issued' AND pm.meta_value = 'yes' WHERE {$where}";
+		}
+		return "SELECT CAST(oim.meta_value AS UNSIGNED) FROM {$p}woocommerce_order_itemmeta oim JOIN {$p}woocommerce_order_items oi ON oi.order_item_id = oim.order_item_id JOIN {$p}posts po ON po.ID = oi.order_id AND po.post_type = 'shop_order' AND po.post_status IN ('wc-processing', 'wc-completed') JOIN {$p}postmeta pt ON pt.post_id = po.ID AND pt.meta_key = '_order_total' AND CAST(pt.meta_value AS DECIMAL(20,6)) > 0 JOIN {$p}postmeta pm ON pm.post_id = po.ID AND pm.meta_key = '_sfls_issued' AND pm.meta_value = 'yes' WHERE {$where}";
+	}
+
+	/**
 	 * Distinct customers with an active, bought (not issued by hand) license.
 	 *
 	 * @param string $plan Plan.
@@ -155,6 +229,8 @@ final class SFLS_Metrics {
 	public static function paying_customers( string $plan = '' ): int {
 		global $wpdb;
 		[ $psql, $pargs ] = self::plan_sql( $plan );
+		$free             = self::free_order_ids();
+		$psql            .= $free ? ' AND ( l.order_id NOT IN ( ' . implode( ',', $free ) . ' ) OR l.id IN ( ' . self::paid_renewals_sql() . ' ) )' : '';
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
 		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(DISTINCT LOWER(l.customer_email)) FROM ' . SFLS_DB::licenses() . ' l WHERE l.billing <> \'manual\' AND ( l.billing = \'paddle\' OR l.order_id > 0 ) AND ' . self::active_clause() . $psql, array_merge( array( current_time( 'mysql', true ) ), $pargs ) ) );
 	}
@@ -301,7 +377,7 @@ final class SFLS_Metrics {
 					)
 				) : array();
 				foreach ( $orders as $order ) {
-					if ( ! $order instanceof WC_Order || 'yes' !== $order->get_meta( '_sfls_issued' ) || ! self::order_matches( $order, $plan ) || apply_filters( 'sfls_metrics_exclude_order', false, $order ) ) {
+					if ( ! $order instanceof WC_Order || (float) $order->get_total() <= 0 || 'yes' !== $order->get_meta( '_sfls_issued' ) || ! self::order_matches( $order, $plan ) || apply_filters( 'sfls_metrics_exclude_order', false, $order ) ) {
 						continue;
 					}
 					++$out['paid'];

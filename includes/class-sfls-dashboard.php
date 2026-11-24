@@ -118,7 +118,7 @@ final class SFLS_Dashboard {
 			return '—';
 		}
 		if ( 'money' === $format ) {
-			return html_entity_decode( wp_strip_all_tags( wc_price( (float) $value ) ), ENT_QUOTES, 'UTF-8' );
+			return self::money_text( (float) $value );
 		}
 		if ( 'percent' === $format ) {
 			return number_format_i18n( (float) $value, 1 ) . '%';
@@ -173,24 +173,7 @@ final class SFLS_Dashboard {
 	 * @param bool  $compact Shorten thousands (12.4k).
 	 */
 	public static function money_text( float $value, bool $compact = false ): string {
-		$dec    = function_exists( 'wc_get_price_decimals' ) ? (int) wc_get_price_decimals() : 2;
-		$symbol = html_entity_decode( function_exists( 'get_woocommerce_currency_symbol' ) ? (string) get_woocommerce_currency_symbol() : '$', ENT_QUOTES, 'UTF-8' );
-		$value  = round( $value, $dec );
-		$sign   = $value < 0 ? '−' : '';
-		$abs    = abs( $value );
-		if ( $compact && $abs >= 1000 ) {
-			foreach ( array(
-				'B' => 1e9,
-				'M' => 1e6,
-				'k' => 1e3,
-			) as $suffix => $div ) {
-				if ( $abs >= $div ) {
-					$short = number_format_i18n( round( $abs / $div, 1 ), 1 );
-					return $sign . $symbol . preg_replace( '/[.,]0$/', '', $short ) . $suffix;
-				}
-			}
-		}
-		return $sign . $symbol . number_format_i18n( $abs, $dec );
+		return SFLS_Metrics::format_money( $value, '', $compact );
 	}
 
 	/**

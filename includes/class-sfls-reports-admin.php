@@ -655,7 +655,7 @@ final class SFLS_Reports_Admin {
 			echo '<tr>';
 			foreach ( $cols as $c ) {
 				$v   = $row[ $c['key'] ];
-				$dec = ( 'money' === $c['type'] || fmod( (float) $v, 1.0 ) > 0.0 ) ? 2 : 0;
+				$dec = 'money' === $c['type'] ? SFLS_Metrics::decimals() : ( fmod( (float) $v, 1.0 ) > 0.0 ? 2 : 0 );
 				echo '<td>' . esc_html( is_numeric( $v ) && in_array( $c['type'], array( 'number', 'money' ), true ) ? number_format_i18n( (float) $v, $dec ) : (string) $v ) . '</td>';
 			}
 			echo '</tr>';
