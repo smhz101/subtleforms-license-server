@@ -1544,7 +1544,7 @@ final class SFLS_Releases {
 			return new WP_Error( 'no_version', __( 'The plugin file in this zip has no valid Version header.', 'subtleforms-license-server' ) );
 		}
 		foreach ( array( 'requires_free', 'requires_pro' ) as $min ) {
-			if ( isset( $headers[ $min ] ) && '' !== $headers[ $min ] && ! preg_match( '/^\d+(\.\d+){0,3}([-.+][0-9A-Za-z.]+)?$/', $headers[ $min ] ) ) {
+			if ( isset( $headers[ $min ] ) && '' !== $headers[ $min ] && ! preg_match( '/^\d+(\.\d+){0,3}(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$/', $headers[ $min ] ) ) {
 				return new WP_Error( 'bad_requires_header', __( 'The SubtleForms Requires and SubtleForms Pro Requires headers must be version numbers such as 1.4.0.', 'subtleforms-license-server' ) );
 			}
 		}
