@@ -496,7 +496,7 @@ final class SFLS_Releases {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$wpdb->insert( SFLS_DB::releases(), $data );
 		self::flush();
-		return (array) self::get( (string) $data['version'] );
+		return (array) self::get( (string) $data['version'], false, (string) ( $data['product'] ?? self::PRO ) );
 	}
 
 	/**
