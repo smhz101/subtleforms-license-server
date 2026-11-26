@@ -147,6 +147,8 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 		$this->temp_files = array();
 		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfls\\_rl\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfls\\_rl\\_%'" );
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}sfls_rate_limits" );
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}sfls_extensions WHERE slug LIKE 'sfltest-%'" );
+		SFLS_Extensions::forget_catalog_cache();
 		SFLS_Products::flush();
 		wp_set_current_user( 0 );
 		unset( $_SERVER['HTTP_CF_CONNECTING_IP'], $_SERVER['HTTP_X_FORWARDED_FOR'] );
@@ -374,7 +376,7 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 			$keep[] = (string) $row['file'];
 		}
 		SFLS_Releases::flush();
-		foreach ( SFLS_Releases::rows() as $row ) {
+		foreach ( SFLS_Releases::rows( SFLS_Releases::ALL_PRODUCTS ) as $row ) {
 			if ( in_array( $row['file'], $keep, true ) ) {
 				$wpdb->delete( $wpdb->prefix . 'sfls_releases', array( 'id' => $row['id'] ) ); // Never delete the site's own zips.
 			} else {
@@ -430,5 +432,67 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 			SFLS_Releases::update( $result['release']['id'], array( 'released_at' => $released ) );
 		}
 		return (array) SFLS_Releases::get( $version, true );
+	}
+
+	// ── Extensions (1.15.0) ─────────────────────────────────────────────
+
+	/**
+	 * A catalog extension made for the test. Slugs start with sfltest- so
+	 * tearDown removes them.
+	 *
+	 * @param string $name   Part of the slug after sfltest-.
+	 * @param string $plan   min_plan.
+	 * @param bool   $publish Publish it.
+	 * @return string The slug.
+	 */
+	protected function make_extension( string $name, string $plan = 'pro', bool $publish = true ): string {
+		$slug  = 'sfltest-' . $name;
+		$entry = SFLS_Extensions::create(
+			$slug,
+			array(
+				'title'       => 'Test ' . $name,
+				'description' => 'Test extension ' . $name . '.',
+				'category'    => 'integrations',
+				'min_plan'    => $plan,
+				'sort'        => 5,
+			)
+		);
+		$this->assertIsArray( $entry, is_wp_error( $entry ) ? $entry->get_error_message() : '' );
+		if ( $publish ) {
+			SFLS_Extensions::update( $slug, array( 'status' => 'published' ) );
+		}
+		return $slug;
+	}
+
+	/**
+	 * An extension release zip in a temp file (folder subtleforms-<slug>).
+	 *
+	 * @param string $slug    Extension slug.
+	 * @param string $version Version header.
+	 */
+	protected function extension_zip( string $slug, string $version ): string {
+		$path               = wp_tempnam( 'sfls-test-' . $slug . '-' . $version . '.zip' );
+		$this->temp_files[] = $path;
+		$folder             = 'subtleforms-' . $slug;
+		$zip                = new ZipArchive();
+		$zip->open( $path, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+		$zip->addFromString( $folder . '/' . $folder . '.php', "<?php\n/**\n * Plugin Name: SubtleForms Test\n * Version: {$version}\n * Requires at least: 6.5\n * Requires PHP: 8.1\n */\n" );
+		$zip->addFromString( $folder . '/readme.txt', "=== Test ===\nTested up to: 7.1\nStable tag: {$version}\n" );
+		$zip->close();
+		return $path;
+	}
+
+	/**
+	 * Store a published extension release through the real ingest path.
+	 *
+	 * @param string $slug    Extension slug (already in the catalog).
+	 * @param string $version Version.
+	 * @param array  $args    SFLS_Releases::ingest() args.
+	 */
+	protected function add_extension_release( string $slug, string $version, array $args = array() ): array {
+		$this->isolate_releases();
+		$result = SFLS_Releases::ingest( $this->extension_zip( $slug, $version ), array_merge( array( 'publish' => true ), $args, array( 'product' => $slug ) ) );
+		$this->assertIsArray( $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
+		return (array) SFLS_Releases::get( $version, true, $slug );
 	}
 }
