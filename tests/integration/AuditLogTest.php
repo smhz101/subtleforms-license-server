@@ -63,7 +63,7 @@ class SFLS_Audit_Log_Test extends SFLS_Test_Case {
 	public function test_schema_13_creates_table(): void {
 		wp_set_current_user( 1 );
 		global $wpdb;
-		$this->assertSame( '14', SFLS_DB::SCHEMA_VERSION );
+		$this->assertSame( '15', SFLS_DB::SCHEMA_VERSION );
 		SFLS_DB::install();
 		$this->assertSame( SFLS_DB::audit_log(), $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', SFLS_DB::audit_log() ) ) );
 	}

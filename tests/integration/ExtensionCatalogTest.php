@@ -117,11 +117,11 @@ class SFLS_Extension_Catalog_Test extends SFLS_Test_Case {
 		$this->assertSame( 0, $code, $out );
 		$this->assertStringContainsString( 'sfltest-cli added as a draft', $out );
 
-		[ $code, $out ] = $this->wp( 'sfls extension add sfltest-cli --title="Again" --category=fields --min-plan=pro' );
+		[ $code, $out ] = $this->wp( 'sfls extension add sfltest-cli --title="Again" --description="X." --category=fields --min-plan=pro' );
 		$this->assertNotSame( 0, $code );
 		$this->assertStringContainsString( 'already exists', $out );
 
-		[ $code, $out ] = $this->wp( 'sfls extension add sfltest-bad --title=Bad --category=nope --min-plan=pro' );
+		[ $code, $out ] = $this->wp( 'sfls extension add sfltest-bad --title=Bad --description="X." --category=nope --min-plan=pro' );
 		$this->assertNotSame( 0, $code );
 		$this->assertStringContainsString( 'category must be one of', $out );
 
