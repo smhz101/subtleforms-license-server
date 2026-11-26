@@ -30,6 +30,7 @@ require_once SFLS_DIR . 'includes/class-sfls-branding.php';
 require_once SFLS_DIR . 'includes/class-sfls-claims.php';
 require_once SFLS_DIR . 'includes/class-sfls-guest.php';
 require_once SFLS_DIR . 'includes/class-sfls-releases.php';
+require_once SFLS_DIR . 'includes/class-sfls-extensions.php';
 require_once SFLS_DIR . 'includes/class-sfls-deploy-tokens.php';
 require_once SFLS_DIR . 'includes/class-sfls-release-api.php';
 require_once SFLS_DIR . 'includes/class-sfls-github.php';
@@ -139,6 +140,7 @@ add_action(
 			WP_CLI::add_command( 'sfls', 'SFLS_CLI' );
 			WP_CLI::add_command( 'sfls release', 'SFLS_CLI_Releases' );
 			WP_CLI::add_command( 'sfls release token', 'SFLS_CLI_Tokens' );
+			require_once SFLS_DIR . 'includes/class-sfls-cli-extensions.php';
 			require_once SFLS_DIR . 'includes/class-sfls-cli-finance.php';
 			WP_CLI::add_command( 'sfls finance', 'SFLS_CLI_Finance' );
 			WP_CLI::add_command( 'sfls token', 'SFLS_CLI_Tokens' );

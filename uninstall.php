@@ -24,6 +24,7 @@ $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_download_tokens" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_trial_claims" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_paddle_events" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_releases" );
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_extensions" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_github_deliveries" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding" );
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}sfls_branding_revisions" );
