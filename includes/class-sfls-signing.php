@@ -52,13 +52,13 @@ final class SFLS_Signing {
 	/**
 	 * Routes whose answers are signed.
 	 */
-	const SIGNED_ROUTES = '#^/sfls/v1/(license/(activate|validate|deactivate|status)|update/(check|versions)|connect/exchange|branding)$#';
+	const SIGNED_ROUTES = '#^/sfls/v1/(license/(activate|validate|deactivate|status)|update/(check|versions)|connect/exchange|branding|extensions)$#';
 
 	/**
 	 * Routes that answer 503 while signing is unavailable: the signed ones,
 	 * plus the package and download links (Pro rejects unsigned packages).
 	 */
-	const GUARDED_ROUTES = '#^/sfls/v1/(license/(activate|validate|deactivate|status)|update/(check|versions|package|download)|connect/exchange|branding)$#';
+	const GUARDED_ROUTES = '#^/sfls/v1/(license/(activate|validate|deactivate|status)|update/(check|versions|package|download)|connect/exchange|branding|extensions)$#';
 
 	/**
 	 * Secret key used by the test suite instead of the constant (base64).
@@ -227,9 +227,10 @@ final class SFLS_Signing {
 	 *
 	 * @param string $version Version.
 	 * @param string $sha256  Lowercase hex sha256 of the zip.
+	 * @param string $product Product slug (an extension is signed under its own slug, Pro as before).
 	 */
-	public static function package_message( string $version, string $sha256 ): string {
-		return self::PACKAGE_CONTEXT . "\n" . self::SLUG . "\n" . $version . "\n" . strtolower( $sha256 );
+	public static function package_message( string $version, string $sha256, string $product = self::SLUG ): string {
+		return self::PACKAGE_CONTEXT . "\n" . $product . "\n" . $version . "\n" . strtolower( $sha256 );
 	}
 
 	/**
@@ -297,7 +298,7 @@ final class SFLS_Signing {
 		if ( ! self::enabled() || $id <= 0 || ! preg_match( '/^[a-f0-9]{64}$/', $sha ) ) {
 			return false;
 		}
-		SFLS_Releases::update( $id, array( 'package_sig' => self::sign( self::package_message( (string) $release['version'], $sha ) ) ) );
+		SFLS_Releases::update( $id, array( 'package_sig' => self::sign( self::package_message( (string) $release['version'], $sha, (string) ( $release['product'] ?? self::SLUG ) ) ) ) );
 		// A stale entry in the old option must not outlive a new signature.
 		self::forget( $id );
 		return true;
@@ -318,7 +319,7 @@ final class SFLS_Signing {
 			return '';
 		}
 		$public  = defined( 'SFLS_SIGNING_PUBLIC_KEY' ) && null === self::$test_secret ? (string) SFLS_SIGNING_PUBLIC_KEY : self::public_key();
-		$message = self::package_message( (string) $release['version'], $sha );
+		$message = self::package_message( (string) $release['version'], $sha, (string) ( $release['product'] ?? self::SLUG ) );
 		$sig     = (string) ( $release['package_sig'] ?? '' );
 		if ( '' !== $public && '' !== $sig && self::verify( $message, $sig, $public ) ) {
 			return $sig;
@@ -396,7 +397,7 @@ final class SFLS_Signing {
 			'skipped'  => array(),
 			'mismatch' => array(),
 		);
-		foreach ( SFLS_Releases::rows() as $release ) {
+		foreach ( SFLS_Releases::rows( SFLS_Releases::ALL_PRODUCTS ) as $release ) {
 			if ( ! $resign && '' !== self::release_signature( $release ) ) {
 				$out['skipped'][] = $release['version'];
 				continue;

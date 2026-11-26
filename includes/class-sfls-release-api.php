@@ -10,6 +10,9 @@
  *   POST   /wp-json/sfls/v1/releases/<version>/yank      { reason }
  *   DELETE /wp-json/sfls/v1/releases/<version>
  *
+ * Every route takes `product` (subtleforms-pro by default, or the slug of
+ * a catalog extension) and then works on the releases of that product.
+ *
  * Plain http is refused unless the site is local (WP_ENVIRONMENT_TYPE
  * local). Failed token checks are limited per IP (10 per 15 minutes by
  * default, sfls_token_auth_limit filter), then the API answers 429.
@@ -224,17 +227,19 @@ final class SFLS_Release_API {
 	 * @param array $release Release.
 	 */
 	public static function payload( array $release ): array {
-		$latest = SFLS_Releases::latest( 'stable' );
-		$beta   = SFLS_Releases::latest( 'beta' );
-		$iso    = static fn( $v ) => $v ? gmdate( 'c', (int) strtotime( $v . ' UTC' ) ) : null;
+		$product = (string) $release['product'];
+		$latest  = SFLS_Releases::latest( 'stable', true, $product );
+		$beta    = SFLS_Releases::latest( 'beta', true, $product );
+		$iso     = static fn( $v ) => $v ? gmdate( 'c', (int) strtotime( $v . ' UTC' ) ) : null;
 		return array(
 			'id'           => (int) $release['id'],
+			'product'      => $product,
 			'version'      => $release['version'],
 			'channel'      => $release['channel'],
 			'status'       => $release['status'],
 			'latest'       => $latest && $latest['version'] === $release['version'],
 			'latest_beta'  => $beta && $beta['version'] === $release['version'],
-			'pinned'       => SFLS_Releases::pinned() === $release['version'],
+			'pinned'       => SFLS_Releases::PRO === $product && SFLS_Releases::pinned() === $release['version'],
 			'size'         => (int) $release['size'],
 			'sha256'       => $release['sha256'],
 			'requires'     => $release['requires'],
@@ -255,13 +260,23 @@ final class SFLS_Release_API {
 	}
 
 	/**
+	 * The product of a request: Pro unless `product` names another.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 */
+	private static function product( WP_REST_Request $req ): string {
+		$product = substr( sanitize_key( (string) $req->get_param( 'product' ) ), 0, 64 );
+		return '' === $product ? SFLS_Releases::PRO : $product;
+	}
+
+	/**
 	 * Release from the route, or an error response.
 	 *
 	 * @param WP_REST_Request $req Request.
 	 * @return array|WP_REST_Response
 	 */
 	private function release_of( WP_REST_Request $req ) {
-		$release = SFLS_Releases::get( (string) $req->get_param( 'version' ), true );
+		$release = SFLS_Releases::get( (string) $req->get_param( 'version' ), true, self::product( $req ) );
 		return $release ? $release : self::error( 404, 'not_found', __( 'That release was not found.', 'subtleforms-license-server' ) );
 	}
 
@@ -278,14 +293,16 @@ final class SFLS_Release_API {
 			return $denied;
 		}
 		SFLS_Releases::flush();
-		$latest = SFLS_Releases::latest( 'stable' );
-		$beta   = SFLS_Releases::latest( 'beta' );
+		$product = self::product( $req );
+		$latest  = SFLS_Releases::latest( 'stable', true, $product );
+		$beta    = SFLS_Releases::latest( 'beta', true, $product );
+		$pinned  = SFLS_Releases::PRO === $product ? SFLS_Releases::pinned() : '';
 		return new WP_REST_Response(
 			array(
 				'latest'      => $latest ? $latest['version'] : null,
 				'latest_beta' => $beta ? $beta['version'] : null,
-				'pinned'      => '' !== SFLS_Releases::pinned() ? SFLS_Releases::pinned() : null,
-				'releases'    => array_map( array( self::class, 'payload' ), SFLS_Releases::rows() ),
+				'pinned'      => '' !== $pinned ? $pinned : null,
+				'releases'    => array_map( array( self::class, 'payload' ), SFLS_Releases::rows( $product ) ),
 			)
 		);
 	}
@@ -360,6 +377,7 @@ final class SFLS_Release_API {
 			$tmp,
 			array(
 				'source'          => 'api',
+				'product'         => self::product( $req ),
 				'channel'         => in_array( $channel, SFLS_Releases::CHANNELS, true ) ? $channel : '',
 				'publish'         => $publish,
 				'changelog'       => (string) $req->get_param( 'changelog' ),

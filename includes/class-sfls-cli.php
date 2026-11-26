@@ -160,9 +160,10 @@ final class SFLS_CLI_Releases {
 	 * Release by version or stop.
 	 *
 	 * @param string $version Version.
+	 * @param string $product Product slug.
 	 */
-	private static function release( string $version ): array {
-		$release = SFLS_Releases::get( $version, true );
+	private static function release( string $version, string $product = SFLS_Releases::PRO ): array {
+		$release = SFLS_Releases::get( $version, true, $product );
 		if ( ! $release ) {
 			WP_CLI::error( sprintf( 'Release %s not found.', $version ) );
 		}
@@ -170,7 +171,20 @@ final class SFLS_CLI_Releases {
 	}
 
 	/**
-	 * List every release.
+	 * The --product flag: subtleforms-pro unless named.
+	 *
+	 * @param array $assoc_args Flags.
+	 */
+	private static function product( array $assoc_args ): string {
+		$product = sanitize_key( (string) ( $assoc_args['product'] ?? '' ) );
+		return '' === $product ? SFLS_Releases::PRO : $product;
+	}
+
+	/**
+	 * List every release of a product.
+	 *
+	 * [--product=<slug>]
+	 * : Product: subtleforms-pro (default) or an extension slug.
 	 *
 	 * [--format=<format>]
 	 * : table, csv, json, yaml.
@@ -184,11 +198,12 @@ final class SFLS_CLI_Releases {
 	 * @param array $assoc_args Flags.
 	 */
 	public function list_( $args, $assoc_args ): void {
-		$latest = SFLS_Releases::latest( 'stable' );
-		$beta   = SFLS_Releases::latest( 'beta' );
-		$pinned = SFLS_Releases::pinned();
-		$rows   = array();
-		foreach ( SFLS_Releases::rows() as $r ) {
+		$product = self::product( $assoc_args );
+		$latest  = SFLS_Releases::latest( 'stable', true, $product );
+		$beta    = SFLS_Releases::latest( 'beta', true, $product );
+		$pinned  = SFLS_Releases::PRO === $product ? SFLS_Releases::pinned() : '';
+		$rows    = array();
+		foreach ( SFLS_Releases::rows( $product ) as $r ) {
 			$flags  = array_filter(
 				array(
 					$latest && $latest['version'] === $r['version'] ? 'latest' : '',
@@ -216,7 +231,10 @@ final class SFLS_CLI_Releases {
 	 * Add a release from a zip.
 	 *
 	 * <zip>
-	 * : Path to subtleforms-pro-x.y.z.zip.
+	 * : Path to subtleforms-pro-x.y.z.zip (or the extension zip with --product).
+	 *
+	 * [--product=<slug>]
+	 * : Product: subtleforms-pro (default) or the slug of a catalog extension.
 	 *
 	 * [--channel=<channel>]
 	 * : stable or beta (default: beta when the version has a hyphen).
@@ -256,6 +274,7 @@ final class SFLS_CLI_Releases {
 			$path,
 			array(
 				'source'          => 'cli',
+				'product'         => self::product( $assoc_args ),
 				'channel'         => (string) ( $assoc_args['channel'] ?? '' ),
 				'publish'         => ! empty( $assoc_args['publish'] ),
 				'changelog'       => $changelog,
@@ -280,10 +299,14 @@ final class SFLS_CLI_Releases {
 	 * <version>
 	 * : Version.
 	 *
-	 * @param array $args Positional args.
+	 * [--product=<slug>]
+	 * : Product: subtleforms-pro (default) or an extension slug.
+	 *
+	 * @param array $args       Positional args.
+	 * @param array $assoc_args Flags.
 	 */
-	public function publish( $args ): void {
-		$rel    = self::release( (string) $args[0] );
+	public function publish( $args, $assoc_args = array() ): void {
+		$rel    = self::release( (string) $args[0], self::product( $assoc_args ) );
 		$result = SFLS_Releases::publish( $rel['id'] );
 		if ( is_wp_error( $result ) ) {
 			WP_CLI::error( $result->get_error_message() );
@@ -300,13 +323,17 @@ final class SFLS_CLI_Releases {
 	 * [--reason=<reason>]
 	 * : Why (shown to admins).
 	 *
+	 * [--product=<slug>]
+	 * : Product: subtleforms-pro (default) or an extension slug.
+	 *
 	 * @param array $args       Positional args.
 	 * @param array $assoc_args Flags.
 	 */
 	public function yank( $args, $assoc_args ): void {
-		$rel = self::release( (string) $args[0] );
+		$product = self::product( $assoc_args );
+		$rel     = self::release( (string) $args[0], $product );
 		SFLS_Releases::yank( $rel['id'], (string) ( $assoc_args['reason'] ?? '' ) );
-		$latest = SFLS_Releases::latest( 'stable' );
+		$latest = SFLS_Releases::latest( 'stable', true, $product );
 		WP_CLI::success( sprintf( '%s yanked. Latest stable: %s.', $rel['version'], $latest ? $latest['version'] : 'none' ) );
 	}
 
@@ -319,22 +346,27 @@ final class SFLS_CLI_Releases {
 	 * [--unpin]
 	 * : Remove the pin.
 	 *
+	 * [--product=<slug>]
+	 * : Product: subtleforms-pro (default) or an extension slug. Only Pro can be pinned.
+	 *
 	 * @param array $args       Positional args.
 	 * @param array $assoc_args Flags.
 	 */
 	public function latest( $args, $assoc_args ): void {
+		$product = self::product( $assoc_args );
+		if ( empty( $args[0] ) && ( empty( $assoc_args['unpin'] ) || SFLS_Releases::PRO !== $product ) ) {
+			$latest = SFLS_Releases::latest( 'stable', true, $product );
+			WP_CLI::line( $latest ? $latest['version'] : '' );
+			return;
+		}
 		if ( ! empty( $assoc_args['unpin'] ) ) {
 			SFLS_Releases::unpin();
 			$latest = SFLS_Releases::latest( 'stable' );
 			WP_CLI::success( sprintf( 'Unpinned. Latest stable: %s.', $latest ? $latest['version'] : 'none' ) );
 			return;
 		}
-		if ( empty( $args[0] ) ) {
-			$latest = SFLS_Releases::latest( 'stable' );
-			WP_CLI::line( $latest ? $latest['version'] : '' );
-			return;
-		}
-		$result = SFLS_Releases::pin( (string) $args[0] );
+		// Only Pro has a pin: an extension always offers its highest published stable version.
+		$result = SFLS_Releases::PRO === $product ? SFLS_Releases::pin( (string) $args[0] ) : new WP_Error( 'cannot_pin', 'Only SubtleForms Pro can be pinned.' );
 		if ( is_wp_error( $result ) ) {
 			WP_CLI::error( $result->get_error_message() );
 		}
@@ -347,6 +379,9 @@ final class SFLS_CLI_Releases {
 	 * <version>
 	 * : Version.
 	 *
+	 * [--product=<slug>]
+	 * : Product: subtleforms-pro (default) or an extension slug.
+	 *
 	 * [--yes]
 	 * : Confirm.
 	 *
@@ -354,7 +389,7 @@ final class SFLS_CLI_Releases {
 	 * @param array $assoc_args Flags.
 	 */
 	public function delete( $args, $assoc_args ): void {
-		$rel = self::release( (string) $args[0] );
+		$rel = self::release( (string) $args[0], self::product( $assoc_args ) );
 		WP_CLI::confirm( sprintf( 'Delete %s and its zip permanently?', $rel['version'] ), $assoc_args );
 		SFLS_Releases::delete( $rel['id'] );
 		WP_CLI::success( sprintf( '%s deleted.', $rel['version'] ) );
@@ -493,7 +528,7 @@ final class SFLS_CLI_Signing {
 			WP_CLI::warning( 'SFLS_SIGNING_PUBLIC_KEY does not belong to SFLS_SIGNING_SECRET_KEY.' );
 		}
 		$unsigned = array();
-		foreach ( SFLS_Releases::rows() as $release ) {
+		foreach ( SFLS_Releases::rows( SFLS_Releases::ALL_PRODUCTS ) as $release ) {
 			if ( SFLS_Releases::has_package( $release ) && '' === SFLS_Signing::release_signature( $release ) ) {
 				$unsigned[] = $release['version'];
 			}
