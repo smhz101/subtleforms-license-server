@@ -175,7 +175,8 @@ class SFLS_Extension_Update_Check_Test extends SFLS_Test_Case {
 		$rel  = $this->add_extension_release( $slug, '1.2.0', array( 'changelog' => "* Fixed a thing\n* Added a thing" ) );
 		$lic  = $this->licence();
 
-		$entry = (array) $this->check( $lic, array( 'products' => wp_json_encode( array( $slug => '1.0.0' ) ) ) )->get_data()['products'][ $slug ];
+		$products = (array) $this->check( $lic, array( 'products' => wp_json_encode( array( $slug => '1.0.0' ) ) ) )->get_data()['products'];
+		$entry    = (array) $products[ $slug ];
 
 		foreach ( array( 'version', 'package', 'requires', 'requires_php', 'tested', 'changelog', 'sha256', 'package_sig' ) as $field ) {
 			$this->assertArrayHasKey( $field, $entry, $field );

@@ -120,12 +120,25 @@ final class SFLS_CLI_Extensions {
 	 * : Extension slug.
 	 *
 	 * [--title=<title>]
+	 * : Name shown to customers.
+	 *
 	 * [--description=<description>]
+	 * : One or two plain sentences.
+	 *
 	 * [--category=<category>]
+	 * : payments, integrations, fields, entries or site.
+	 *
 	 * [--min-plan=<plan>]
+	 * : Smallest plan that includes it: starter, pro or agency.
+	 *
 	 * [--icon=<icon>]
+	 * : Dashicon name.
+	 *
 	 * [--docs-url=<url>]
+	 * : Documentation link.
+	 *
 	 * [--sort=<n>]
+	 * : Order in the catalog (lowest first).
 	 *
 	 * @param array $args       Positional args.
 	 * @param array $assoc_args Flags.
