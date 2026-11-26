@@ -123,6 +123,8 @@ final class SFLS_Releases {
 			'requires'       => '6.4',
 			'tested'         => '',
 			'requires_php'   => '8.1',
+			'requires_free'  => null,
+			'requires_pro'   => null,
 			'changelog'      => '',
 			'source'         => 'upload',
 			'git_ref'        => '',
@@ -460,7 +462,7 @@ final class SFLS_Releases {
 	 */
 	public static function update( int $id, array $data ): void {
 		global $wpdb;
-		$allowed = array_flip( array( 'channel', 'status', 'file', 'size', 'sha256', 'requires', 'tested', 'requires_php', 'changelog', 'source', 'git_ref', 'git_commit', 'notes', 'yank_reason', 'package_sig', 'replaced_files', 'downloads', 'released_at' ) );
+		$allowed = array_flip( array( 'channel', 'status', 'file', 'size', 'sha256', 'requires', 'tested', 'requires_php', 'requires_free', 'requires_pro', 'changelog', 'source', 'git_ref', 'git_commit', 'notes', 'yank_reason', 'package_sig', 'replaced_files', 'downloads', 'released_at' ) );
 		$data    = array_intersect_key( $data, $allowed );
 		if ( isset( $data['channel'] ) && ! in_array( $data['channel'], self::CHANNELS, true ) ) {
 			unset( $data['channel'] );
@@ -789,6 +791,11 @@ final class SFLS_Releases {
 			'requires_php' => $headers['requires_php'],
 			'source'       => $source,
 		);
+		if ( self::PRO !== $product ) {
+			// Minimum Free and Pro versions an extension declares in its plugin headers (null when it declares none).
+			$fields['requires_free'] = '' !== $headers['requires_free'] ? $headers['requires_free'] : null;
+			$fields['requires_pro']  = '' !== $headers['requires_pro'] ? $headers['requires_pro'] : null;
+		}
 		foreach ( array( 'git_ref', 'git_commit' ) as $git ) {
 			if ( '' !== (string) $args[ $git ] ) {
 				$fields[ $git ] = substr( sanitize_text_field( (string) $args[ $git ] ), 0, 'git_ref' === $git ? 190 : 64 );
@@ -1472,7 +1479,7 @@ final class SFLS_Releases {
 	 *
 	 * @param string $zip_path Path to the zip.
 	 * @param string $product  Product slug: an extension zip has subtleforms-<slug>/subtleforms-<slug>.php.
-	 * @return array{version:string,requires:string,tested:string,requires_php:string}|WP_Error
+	 * @return array{version:string,requires:string,tested:string,requires_php:string,requires_free?:string,requires_pro?:string}|WP_Error
 	 */
 	public static function inspect_zip( string $zip_path, string $product = self::PRO ) {
 		if ( ! class_exists( 'ZipArchive' ) ) {
@@ -1513,6 +1520,10 @@ final class SFLS_Releases {
 				'tested'       => 'Tested up to',
 				'requires_php' => 'Requires PHP',
 			)
+			+ ( self::PRO === $product ? array() : array(
+				'requires_free' => 'SubtleForms Requires',
+				'requires_pro'  => 'SubtleForms Pro Requires',
+			) )
 		);
 		if ( false !== $readme ) {
 			$from_readme = self::parse_headers(
@@ -1531,6 +1542,11 @@ final class SFLS_Releases {
 		}
 		if ( '' === $headers['version'] || strlen( $headers['version'] ) > 40 || ! preg_match( '/^\d+(\.\d+){0,3}([-.+][0-9A-Za-z.]+)?$/', $headers['version'] ) ) {
 			return new WP_Error( 'no_version', __( 'The plugin file in this zip has no valid Version header.', 'subtleforms-license-server' ) );
+		}
+		foreach ( array( 'requires_free', 'requires_pro' ) as $min ) {
+			if ( isset( $headers[ $min ] ) && '' !== $headers[ $min ] && ! preg_match( '/^\d+(\.\d+){0,3}([-.+][0-9A-Za-z.]+)?$/', $headers[ $min ] ) ) {
+				return new WP_Error( 'bad_requires_header', __( 'The SubtleForms Requires and SubtleForms Pro Requires headers must be version numbers such as 1.4.0.', 'subtleforms-license-server' ) );
+			}
 		}
 		return $headers;
 	}

@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '15';
+	const SCHEMA_VERSION = '16';
 
 	/**
 	 * Licence IDs whose Agency seats were already more than the plan's 25
@@ -276,6 +276,8 @@ final class SFLS_DB {
   requires varchar(20) NOT NULL DEFAULT '',
   tested varchar(20) NOT NULL DEFAULT '',
   requires_php varchar(20) NOT NULL DEFAULT '',
+  requires_free varchar(20) NULL,
+  requires_pro varchar(20) NULL,
   changelog text NULL,
   source varchar(10) NOT NULL DEFAULT 'upload',
   git_ref varchar(190) NOT NULL DEFAULT '',

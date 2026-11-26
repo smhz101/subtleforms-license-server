@@ -469,14 +469,15 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 	 *
 	 * @param string $slug    Extension slug.
 	 * @param string $version Version header.
+	 * @param string $headers Extra plugin header lines, such as " * SubtleForms Requires: 1.4.0\n".
 	 */
-	protected function extension_zip( string $slug, string $version ): string {
+	protected function extension_zip( string $slug, string $version, string $headers = '' ): string {
 		$path               = wp_tempnam( 'sfls-test-' . $slug . '-' . $version . '.zip' );
 		$this->temp_files[] = $path;
 		$folder             = 'subtleforms-' . $slug;
 		$zip                = new ZipArchive();
 		$zip->open( $path, ZipArchive::CREATE | ZipArchive::OVERWRITE );
-		$zip->addFromString( $folder . '/' . $folder . '.php', "<?php\n/**\n * Plugin Name: SubtleForms Test\n * Version: {$version}\n * Requires at least: 6.5\n * Requires PHP: 8.1\n */\n" );
+		$zip->addFromString( $folder . '/' . $folder . '.php', "<?php\n/**\n * Plugin Name: SubtleForms Test\n * Version: {$version}\n * Requires at least: 6.5\n * Requires PHP: 8.1\n{$headers} */\n" );
 		$zip->addFromString( $folder . '/readme.txt', "=== Test ===\nTested up to: 7.1\nStable tag: {$version}\n" );
 		$zip->close();
 		return $path;
@@ -491,7 +492,9 @@ abstract class SFLS_Test_Case extends \PHPUnit\Framework\TestCase {
 	 */
 	protected function add_extension_release( string $slug, string $version, array $args = array() ): array {
 		$this->isolate_releases();
-		$result = SFLS_Releases::ingest( $this->extension_zip( $slug, $version ), array_merge( array( 'publish' => true ), $args, array( 'product' => $slug ) ) );
+		$headers = (string) ( $args['zip_headers'] ?? '' );
+		unset( $args['zip_headers'] );
+		$result  = SFLS_Releases::ingest( $this->extension_zip( $slug, $version, $headers ), array_merge( array( 'publish' => true ), $args, array( 'product' => $slug ) ) );
 		$this->assertIsArray( $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
 		return (array) SFLS_Releases::get( $version, true, $slug );
 	}

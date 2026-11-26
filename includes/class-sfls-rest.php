@@ -463,14 +463,16 @@ final class SFLS_REST {
 					$extra['product'] = $slug;
 				}
 				$answer[ $slug ] = array(
-					'version'      => $release['version'],
-					'package'      => self::package_address( $lic, $domain, $extra, $slug ),
-					'requires'     => $release['requires'],
-					'requires_php' => $release['requires_php'],
-					'tested'       => $release['tested'],
-					'changelog'    => SFLS_Releases::changelog_html( $release ),
-					'sha256'       => strtolower( (string) $release['sha256'] ),
-					'package_sig'  => SFLS_Signing::release_signature( $release ),
+					'version'       => $release['version'],
+					'package'       => self::package_address( $lic, $domain, $extra, $slug ),
+					'requires'      => $release['requires'],
+					'requires_php'  => $release['requires_php'],
+					'requires_free' => null === $release['requires_free'] ? null : (string) $release['requires_free'],
+					'requires_pro'  => null === $release['requires_pro'] ? null : (string) $release['requires_pro'],
+					'tested'        => $release['tested'],
+					'changelog'     => SFLS_Releases::changelog_html( $release ),
+					'sha256'        => strtolower( (string) $release['sha256'] ),
+					'package_sig'   => SFLS_Signing::release_signature( $release ),
 				);
 			}
 			SFLS_Licenses::touch_activation( (int) $lic['id'], $domain, $products[ SFLS_Releases::PRO ] ?? '' );

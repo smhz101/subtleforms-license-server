@@ -121,7 +121,7 @@ class SFLS_Release_Product_Migration_Test extends SFLS_Test_Case {
 		SFLS_DB::install();
 
 		$this->assertSame( SFLS_DB::SCHEMA_VERSION, get_option( 'sfls_schema_version' ) );
-		$this->assertSame( '15', SFLS_DB::SCHEMA_VERSION );
+		$this->assertSame( '16', SFLS_DB::SCHEMA_VERSION );
 		$this->assertSame( SFLS_Releases::PRO, SFLS_Releases::get_by_id( $id )['product'] );
 		$this->assertSame( SFLS_DB::extensions(), $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', SFLS_DB::extensions() ) ) );
 		$this->assertArrayNotHasKey( 'version', $this->indexes() );
@@ -167,6 +167,70 @@ class SFLS_Release_Product_Migration_Test extends SFLS_Test_Case {
 		$this->assertIsArray( $ok );
 		$this->assertSame( $slug, $ok['release']['product'] );
 		$this->assertStringStartsWith( 'subtleforms-' . $slug . '-1.0.0-', $ok['release']['file'] );
+	}
+
+	/**
+	 * The minimum Free and Pro versions come from the extension's plugin headers.
+	 */
+	public function test_requires_headers_are_stored_and_served(): void {
+		$slug = $this->make_extension( 'req' );
+		$rel  = $this->add_extension_release( $slug, '1.0.0', array( 'zip_headers' => " * SubtleForms Requires: 1.4.0\n * SubtleForms Pro Requires: 2.1.0-beta.1\n" ) );
+		$this->assertSame( '1.4.0', $rel['requires_free'] );
+		$this->assertSame( '2.1.0-beta.1', $rel['requires_pro'] );
+
+		$entry = array_values( array_filter( $this->rest( 'GET', '/sfls/v1/extensions' )->get_data()['extensions'], static fn( $e ) => $e['slug'] === $slug ) )[0];
+		$this->assertSame( '1.4.0', $entry['requires_free'] );
+		$this->assertSame( '2.1.0-beta.1', $entry['requires_pro'] );
+
+		$lic = $this->make_license( array( 'plan' => 'pro' ) );
+		SFLS_Licenses::add_activation( (int) $lic['id'], 'req.example.com' );
+		$answer   = $this->rest(
+			'POST',
+			'/sfls/v1/update/check',
+			array(
+				'license_key' => $lic['license_key'],
+				'site_url'    => 'https://req.example.com',
+				'products'    => array( $slug => '0.1.0' ),
+			)
+		)->get_data();
+		$products = (array) $answer['products'];
+		$this->assertSame( '1.4.0', $products[ $slug ]['requires_free'] );
+		$this->assertSame( '2.1.0-beta.1', $products[ $slug ]['requires_pro'] );
+	}
+
+	/**
+	 * A missing header is null, one header alone is fine.
+	 */
+	public function test_missing_requires_headers_are_null(): void {
+		$slug = $this->make_extension( 'req' );
+		$none = $this->add_extension_release( $slug, '1.0.0' );
+		$this->assertNull( $none['requires_free'] );
+		$this->assertNull( $none['requires_pro'] );
+		$one = $this->add_extension_release( $slug, '1.1.0', array( 'zip_headers' => " * SubtleForms Pro Requires: 2.0.0\n" ) );
+		$this->assertNull( $one['requires_free'] );
+		$this->assertSame( '2.0.0', $one['requires_pro'] );
+
+		$entry = array_values( array_filter( $this->rest( 'GET', '/sfls/v1/extensions' )->get_data()['extensions'], static fn( $e ) => $e['slug'] === $slug ) )[0];
+		$this->assertNull( $entry['requires_free'] );
+		$this->assertSame( '2.0.0', $entry['requires_pro'] );
+	}
+
+	/**
+	 * A header that is not a version is refused, and Pro zips ignore the headers.
+	 */
+	public function test_invalid_requires_header_is_rejected(): void {
+		$slug = $this->make_extension( 'req' );
+		$this->isolate_releases();
+		foreach ( array( 'latest', '1.x', '>=1.4', '1.4.0; drop' ) as $bad ) {
+			$res = SFLS_Releases::ingest( $this->extension_zip( $slug, '1.0.0', " * SubtleForms Requires: {$bad}\n" ), array( 'product' => $slug ) );
+			$this->assertWPError( $res, 'bad_requires_header' );
+		}
+		$res = SFLS_Releases::ingest( $this->extension_zip( $slug, '1.0.0', " * SubtleForms Pro Requires: nope\n" ), array( 'product' => $slug ) );
+		$this->assertWPError( $res, 'bad_requires_header' );
+		$this->assertSame( array(), SFLS_Releases::rows( $slug ) );
+
+		$pro = $this->add_release( '9.0.0', array( 'extra' => array() ) );
+		$this->assertNull( $pro['requires_free'] );
 	}
 
 	/**

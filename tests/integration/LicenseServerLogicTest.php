@@ -372,7 +372,7 @@ class SFLS_License_Server_Logic_Test extends SFLS_Test_Case {
 	 */
 	public function test_schema_9(): void {
 		global $wpdb;
-		$this->assertSame( '15', SFLS_DB::SCHEMA_VERSION );
+		$this->assertSame( '16', SFLS_DB::SCHEMA_VERSION );
 		$this->assertSame( SFLS_DB::SCHEMA_VERSION, get_option( 'sfls_schema_version' ) );
 		$keys = wp_list_pluck( (array) $wpdb->get_results( "SHOW INDEX FROM {$wpdb->prefix}sfls_licenses", ARRAY_A ), 'Key_name' );
 		$this->assertContains( 'status', $keys );

@@ -270,8 +270,7 @@ final class SFLS_Extensions {
 	/**
 	 * Published entries with the version and requirements of the latest
 	 * published release of each product (null while there is none). Kept for
-	 * five minutes. The fields requires_free and requires_pro are null:
-	 * releases do not record them yet.
+	 * five minutes.
 	 *
 	 * @return array[]
 	 */
@@ -293,8 +292,8 @@ final class SFLS_Extensions {
 				'docs_url'      => (string) $entry['docs_url'],
 				'sort'          => (int) $entry['sort'],
 				'version'       => $release ? (string) $release['version'] : null,
-				'requires_free' => null,
-				'requires_pro'  => null,
+				'requires_free' => $release && '' !== (string) $release['requires_free'] ? (string) $release['requires_free'] : null,
+				'requires_pro'  => $release && '' !== (string) $release['requires_pro'] ? (string) $release['requires_pro'] : null,
 				'requires_wp'   => $release && '' !== (string) $release['requires'] ? (string) $release['requires'] : null,
 				'requires_php'  => $release && '' !== (string) $release['requires_php'] ? (string) $release['requires_php'] : null,
 				'tested'        => $release && '' !== (string) $release['tested'] ? (string) $release['tested'] : null,
