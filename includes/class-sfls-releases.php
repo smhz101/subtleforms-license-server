@@ -62,6 +62,16 @@ final class SFLS_Releases {
 	const MAIN_FILE = 'subtleforms-pro/subtleforms-pro.php';
 
 	/**
+	 * The product every release belonged to before extensions (schema 15).
+	 */
+	const PRO = 'subtleforms-pro';
+
+	/**
+	 * The rows() argument for the releases of every product.
+	 */
+	const ALL_PRODUCTS = '*';
+
+	/**
 	 * Rows of this request, newest version first (null = not loaded).
 	 *
 	 * @var array[]|null
@@ -103,6 +113,7 @@ final class SFLS_Releases {
 	private static function defaults(): array {
 		return array(
 			'id'             => 0,
+			'product'        => self::PRO,
 			'version'        => '',
 			'channel'        => 'stable',
 			'status'         => 'published',
@@ -112,6 +123,8 @@ final class SFLS_Releases {
 			'requires'       => '6.4',
 			'tested'         => '',
 			'requires_php'   => '8.1',
+			'requires_free'  => null,
+			'requires_pro'   => null,
 			'changelog'      => '',
 			'source'         => 'upload',
 			'git_ref'        => '',
@@ -153,11 +166,27 @@ final class SFLS_Releases {
 	}
 
 	/**
-	 * Every release, any status, highest version first.
+	 * Every release of a product, any status, highest version first. The
+	 * default is Pro, so code written before extensions never sees the
+	 * releases of an extension; pass ALL_PRODUCTS for every product.
+	 *
+	 * @param string $product Product slug, or ALL_PRODUCTS.
+	 * @return array[]
+	 */
+	public static function rows( string $product = self::PRO ): array {
+		$rows = self::all_rows();
+		if ( self::ALL_PRODUCTS === $product ) {
+			return $rows;
+		}
+		return array_values( array_filter( $rows, static fn( $r ) => $r['product'] === $product ) );
+	}
+
+	/**
+	 * Every release of every product, highest version first.
 	 *
 	 * @return array[]
 	 */
-	public static function rows(): array {
+	private static function all_rows(): array {
 		if ( null !== self::$cache ) {
 			return self::$cache;
 		}
@@ -203,6 +232,7 @@ final class SFLS_Releases {
 	 */
 	public static function flush(): void {
 		self::$cache = null;
+		SFLS_Extensions::forget_catalog_cache();
 	}
 
 	/**
@@ -272,12 +302,13 @@ final class SFLS_Releases {
 	 *
 	 * @param string $version Version.
 	 * @param bool   $fresh   Skip the request cache.
+	 * @param string $product Product slug.
 	 */
-	public static function get( string $version, bool $fresh = false ): ?array {
+	public static function get( string $version, bool $fresh = false, string $product = self::PRO ): ?array {
 		if ( $fresh ) {
 			self::flush();
 		}
-		foreach ( self::rows() as $row ) {
+		foreach ( self::rows( $product ) as $row ) {
 			if ( $row['version'] === $version ) {
 				return $row;
 			}
@@ -291,7 +322,7 @@ final class SFLS_Releases {
 	 * @param int $id ID.
 	 */
 	public static function get_by_id( int $id ): ?array {
-		foreach ( self::rows() as $row ) {
+		foreach ( self::rows( self::ALL_PRODUCTS ) as $row ) {
 			if ( $row['id'] === $id ) {
 				return $row;
 			}
@@ -312,12 +343,13 @@ final class SFLS_Releases {
 	 * Published releases (never drafts or yanked ones), highest first.
 	 *
 	 * @param string $channel stable (stable only) or beta (stable and beta) or '' for both.
+	 * @param string $product Product slug.
 	 * @return array[]
 	 */
-	public static function published( string $channel = '' ): array {
+	public static function published( string $channel = '', string $product = self::PRO ): array {
 		return array_values(
 			array_filter(
-				self::rows(),
+				self::rows( $product ),
 				static fn( $r ) => self::is_live( $r ) && ( 'stable' !== $channel || 'stable' === $r['channel'] )
 			)
 		);
@@ -337,12 +369,13 @@ final class SFLS_Releases {
 	 * left out for them too).
 	 *
 	 * @param string $channel  stable | beta.
-	 * @param bool   $use_pin  Respect the pin.
+	 * @param bool   $use_pin  Respect the pin (the pin is a Pro setting; extensions have none).
+	 * @param string $product  Product slug.
 	 */
-	public static function latest( string $channel = 'stable', bool $use_pin = true ): ?array {
+	public static function latest( string $channel = 'stable', bool $use_pin = true, string $product = self::PRO ): ?array {
 		$channel = in_array( $channel, self::CHANNELS, true ) ? $channel : 'stable';
-		$rows    = self::published();
-		$pin     = $use_pin ? self::pinned() : '';
+		$rows    = self::published( '', $product );
+		$pin     = $use_pin && self::PRO === $product ? self::pinned() : '';
 		if ( '' !== $pin ) {
 			$pinned = self::get( $pin );
 			if ( $pinned && self::is_live( $pinned ) && 'stable' === $pinned['channel'] ) {
@@ -366,7 +399,7 @@ final class SFLS_Releases {
 	 */
 	public static function above_pin( array $release ): bool {
 		$pin = self::pinned();
-		if ( '' === $pin || 'stable' !== $release['channel'] ) {
+		if ( '' === $pin || 'stable' !== $release['channel'] || self::PRO !== $release['product'] ) {
 			return false;
 		}
 		$pinned = self::get( $pin );
@@ -412,9 +445,10 @@ final class SFLS_Releases {
 	 * Find a published release by version.
 	 *
 	 * @param string $version Version.
+	 * @param string $product Product slug.
 	 */
-	public static function find( string $version ): ?array {
-		$release = self::get( $version );
+	public static function find( string $version, string $product = self::PRO ): ?array {
+		$release = self::get( $version, false, $product );
 		return $release && self::is_live( $release ) ? $release : null;
 	}
 
@@ -428,7 +462,7 @@ final class SFLS_Releases {
 	 */
 	public static function update( int $id, array $data ): void {
 		global $wpdb;
-		$allowed = array_flip( array( 'channel', 'status', 'file', 'size', 'sha256', 'requires', 'tested', 'requires_php', 'changelog', 'source', 'git_ref', 'git_commit', 'notes', 'yank_reason', 'package_sig', 'replaced_files', 'downloads', 'released_at' ) );
+		$allowed = array_flip( array( 'channel', 'status', 'file', 'size', 'sha256', 'requires', 'tested', 'requires_php', 'requires_free', 'requires_pro', 'changelog', 'source', 'git_ref', 'git_commit', 'notes', 'yank_reason', 'package_sig', 'replaced_files', 'downloads', 'released_at' ) );
 		$data    = array_intersect_key( $data, $allowed );
 		if ( isset( $data['channel'] ) && ! in_array( $data['channel'], self::CHANNELS, true ) ) {
 			unset( $data['channel'] );
@@ -464,7 +498,7 @@ final class SFLS_Releases {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$wpdb->insert( SFLS_DB::releases(), $data );
 		self::flush();
-		return (array) self::get( (string) $data['version'] );
+		return (array) self::get( (string) $data['version'], false, (string) ( $data['product'] ?? self::PRO ) );
 	}
 
 	/**
@@ -542,7 +576,7 @@ final class SFLS_Releases {
 	 */
 	private static function drop_pin_if( int $id ): void {
 		$release = self::get_by_id( $id );
-		if ( $release && self::pinned() === $release['version'] ) {
+		if ( $release && self::PRO === $release['product'] && self::pinned() === $release['version'] ) {
 			self::unpin();
 		}
 	}
@@ -588,7 +622,7 @@ final class SFLS_Releases {
 				wp_delete_file( $path );
 			}
 		}
-		if ( self::pinned() === $release['version'] ) {
+		if ( self::PRO === $release['product'] && self::pinned() === $release['version'] ) {
 			self::unpin();
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -663,6 +697,7 @@ final class SFLS_Releases {
 	 * @param string $path Local zip.
 	 * @param array  $args {
 	 *     @type string $source        upload | api | github | cli.
+	 *     @type string $product       subtleforms-pro (default) or the slug of a catalog extension.
 	 *     @type string $channel       stable | beta.
 	 *     @type bool   $publish       Publish now (else a new release is a draft).
 	 *     @type string $changelog     Changelog (one change per line).
@@ -681,6 +716,7 @@ final class SFLS_Releases {
 			$args,
 			array(
 				'source'          => 'upload',
+				'product'         => self::PRO,
 				'channel'         => '',
 				'publish'         => false,
 				'changelog'       => '',
@@ -694,6 +730,10 @@ final class SFLS_Releases {
 			)
 		);
 
+		$product = (string) $args['product'];
+		if ( self::PRO !== $product && ! SFLS_Extensions::get( $product ) ) {
+			return new WP_Error( 'unknown_product', __( 'That product is not in the extension catalog. Add it with wp sfls extension add first.', 'subtleforms-license-server' ), array( 'status' => 422 ) );
+		}
 		if ( ! self::uses_table() ) {
 			return new WP_Error( 'not_ready', __( 'The releases table is not ready yet. Reload the page and try again.', 'subtleforms-license-server' ), array( 'status' => 503 ) );
 		}
@@ -721,7 +761,7 @@ final class SFLS_Releases {
 		if ( '' !== $expected && ( ! preg_match( '/^[a-f0-9]{64}$/', $expected ) || ! hash_equals( $expected, $sha256 ) ) ) {
 			return new WP_Error( 'sha256_mismatch', __( 'The package does not match the sha256 that was sent with it.', 'subtleforms-license-server' ), array( 'status' => 422 ) );
 		}
-		$headers = self::inspect_zip( $path );
+		$headers = self::inspect_zip( $path, $product );
 		if ( is_wp_error( $headers ) ) {
 			$headers->add_data( array( 'status' => 422 ) );
 			return $headers;
@@ -751,6 +791,11 @@ final class SFLS_Releases {
 			'requires_php' => $headers['requires_php'],
 			'source'       => $source,
 		);
+		if ( self::PRO !== $product ) {
+			// Minimum Free and Pro versions an extension declares in its plugin headers (null when it declares none).
+			$fields['requires_free'] = '' !== $headers['requires_free'] ? $headers['requires_free'] : null;
+			$fields['requires_pro']  = '' !== $headers['requires_pro'] ? $headers['requires_pro'] : null;
+		}
 		foreach ( array( 'git_ref', 'git_commit' ) as $git ) {
 			if ( '' !== (string) $args[ $git ] ) {
 				$fields[ $git ] = substr( sanitize_text_field( (string) $args[ $git ] ), 0, 'git_ref' === $git ? 190 : 64 );
@@ -758,7 +803,7 @@ final class SFLS_Releases {
 		}
 		$changelog = trim( sanitize_textarea_field( (string) $args['changelog'] ) );
 
-		$existing = self::get( $version, true );
+		$existing = self::get( $version, true, $product );
 		if ( $existing ) {
 			if ( '' !== $existing['sha256'] && hash_equals( $existing['sha256'], $sha256 ) && self::has_package( $existing ) ) {
 				if ( $args['publish'] && 'draft' === $existing['status'] ) {
@@ -796,7 +841,7 @@ final class SFLS_Releases {
 					array( 'status' => 409 )
 				);
 			}
-			$file = self::store_file( $path, $version, $sha256 );
+			$file = self::store_file( $path, $version, $sha256, $product );
 			if ( is_wp_error( $file ) ) {
 				return $file;
 			}
@@ -832,7 +877,7 @@ final class SFLS_Releases {
 			);
 		}
 
-		$file = self::store_file( $path, $version, $sha256 );
+		$file = self::store_file( $path, $version, $sha256, $product );
 		if ( is_wp_error( $file ) ) {
 			return $file;
 		}
@@ -840,6 +885,7 @@ final class SFLS_Releases {
 			array_merge(
 				$fields,
 				array(
+					'product'   => $product,
 					'version'   => substr( $version, 0, 40 ),
 					'channel'   => '' !== $channel ? $channel : ( str_contains( $version, '-' ) ? 'beta' : 'stable' ),
 					'status'    => 'draft',
@@ -886,15 +932,16 @@ final class SFLS_Releases {
 	 * @param string $path    Source.
 	 * @param string $version Version.
 	 * @param string $sha256  Hash of the source (unused, kept for callers).
+	 * @param string $product Product slug.
 	 * @return string|WP_Error File name.
 	 */
-	private static function store_file( string $path, string $version, string $sha256 ) {
+	private static function store_file( string $path, string $version, string $sha256, string $product = self::PRO ) {
 		unset( $sha256 );
 		$dir = self::dir();
 		if ( ! is_dir( $dir ) ) {
 			wp_mkdir_p( $dir );
 		}
-		$name = self::private_name( $version );
+		$name = self::private_name( $version, $product );
 		$dest = trailingslashit( $dir ) . $name;
 		if ( ! copy( $path, $dest ) ) {
 			return new WP_Error( 'store_failed', __( 'The package could not be saved in the private releases folder. Check that wp-content/uploads is writable.', 'subtleforms-license-server' ), array( 'status' => 500 ) );
@@ -906,9 +953,10 @@ final class SFLS_Releases {
 	 * A new random package file name for a version.
 	 *
 	 * @param string $version Version.
+	 * @param string $product Product slug.
 	 */
-	public static function private_name( string $version ): string {
-		$base = sanitize_file_name( 'subtleforms-pro-' . preg_replace( '/[^0-9A-Za-z.\-+]/', '', $version ) );
+	public static function private_name( string $version, string $product = self::PRO ): string {
+		$base = sanitize_file_name( ( self::PRO === $product ? self::PRO : 'subtleforms-' . $product ) . '-' . preg_replace( '/[^0-9A-Za-z.\-+]/', '', $version ) );
 		return basename( $base . '-' . bin2hex( random_bytes( 16 ) ) . '.zip' );
 	}
 
@@ -1256,7 +1304,7 @@ final class SFLS_Releases {
 		if ( '' === $path || ! is_readable( $path ) ) {
 			wp_die( esc_html__( 'This package is not available.', 'subtleforms-license-server' ), '', array( 'response' => 404 ) );
 		}
-		$name = 'subtleforms-pro-' . sanitize_file_name( $release['version'] ) . '.zip';
+		$name = ( self::PRO === $release['product'] ? self::PRO : 'subtleforms-' . sanitize_file_name( $release['product'] ) ) . '-' . sanitize_file_name( $release['version'] ) . '.zip';
 		while ( ob_get_level() > 0 ) {
 			ob_end_clean();
 		}
@@ -1281,12 +1329,13 @@ final class SFLS_Releases {
 	 * @param string $key     License key.
 	 * @param string $domain  Domain ("account" for the members area).
 	 * @param string $version Version ('' for the current release, 1.5 links).
+	 * @param string $product Product slug. The signature covers it for an extension; Pro links are unchanged.
 	 */
-	public static function signed_url( string $key, string $domain, string $version = '' ): string {
+	public static function signed_url( string $key, string $domain, string $version = '', string $product = self::PRO ): string {
 		$lic     = SFLS_Licenses::find_by_key( $key );
 		$expires = time() + self::LINK_TTL;
 		$token   = bin2hex( random_bytes( 16 ) );
-		$sig     = self::sign( $key, $domain, $expires, $token, $version );
+		$sig     = self::sign( $key, $domain, $expires, $token, $version, $product );
 		$args    = array(
 			'lid'     => $lic ? (int) $lic['id'] : 0,
 			'site'    => rawurlencode( $domain ),
@@ -1296,6 +1345,9 @@ final class SFLS_Releases {
 		);
 		if ( '' !== $version ) {
 			$args['version'] = rawurlencode( $version );
+		}
+		if ( self::PRO !== $product ) {
+			$args['product'] = rawurlencode( $product );
 		}
 		return add_query_arg( $args, rest_url( 'sfls/v1/update/download' ) );
 	}
@@ -1309,9 +1361,13 @@ final class SFLS_Releases {
 	 * @param int    $expires Expiry timestamp.
 	 * @param string $token   One-time token.
 	 * @param string $version Version, '' for the current release.
+	 * @param string $product Product slug; only an extension adds it to the message.
 	 */
-	public static function sign( string $key, string $domain, int $expires, string $token = '', string $version = '' ): string {
+	public static function sign( string $key, string $domain, int $expires, string $token = '', string $version = '', string $product = self::PRO ): string {
 		$message = strtoupper( $key ) . '|' . $domain . '|' . $expires . '|' . $token;
+		if ( self::PRO !== $product ) {
+			$message .= '|p=' . $product;
+		}
 		if ( '' !== $version ) {
 			$message .= '|v=' . $version;
 		}
@@ -1327,12 +1383,13 @@ final class SFLS_Releases {
 	 * @param string $sig     Signature.
 	 * @param string $token   One-time token.
 	 * @param string $version Version the link was signed for ('' = current).
+	 * @param string $product Product slug the link was signed for.
 	 */
-	public static function verify( string $key, string $domain, int $expires, string $sig, string $token = '', string $version = '' ): bool {
+	public static function verify( string $key, string $domain, int $expires, string $sig, string $token = '', string $version = '', string $product = self::PRO ): bool {
 		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
 			return false; // Links without a one-time token (1.2.0 and older) are no longer accepted.
 		}
-		return $expires >= time() && $expires <= time() + self::LINK_TTL && hash_equals( self::sign( $key, $domain, $expires, $token, $version ), $sig );
+		return $expires >= time() && $expires <= time() + self::LINK_TTL && hash_equals( self::sign( $key, $domain, $expires, $token, $version, $product ), $sig );
 	}
 
 	/**
@@ -1364,11 +1421,46 @@ final class SFLS_Releases {
 	 * update/versions, so that address names the license by ID instead of
 	 * carrying its key. Changes when the key is regenerated.
 	 *
-	 * @param array  $lic    License.
-	 * @param string $domain Normalised domain.
+	 * The HMAC input is package|<product>|<lid>|<KEY>|<domain>. For Pro,
+	 * whose addresses sites cache for hours, package_token() keeps the input
+	 * without the product (package|<lid>|<KEY>|<domain>) so every answer and
+	 * address stays as it was; package_token_valid() accepts both for Pro.
+	 *
+	 * @param array  $lic     License.
+	 * @param string $domain  Normalised domain.
+	 * @param string $product Product slug.
 	 */
-	public static function package_token( array $lic, string $domain ): string {
-		return hash_hmac( 'sha256', 'package|' . (int) $lic['id'] . '|' . strtoupper( (string) $lic['license_key'] ) . '|' . $domain, wp_salt( 'auth' ) . 'subtleforms-license-server' );
+	public static function package_token( array $lic, string $domain, string $product = self::PRO ): string {
+		$message = self::PRO === $product
+			? 'package|' . (int) $lic['id'] . '|' . strtoupper( (string) $lic['license_key'] ) . '|' . $domain
+			: self::product_token_input( $lic, $domain, $product );
+		return hash_hmac( 'sha256', $message, wp_salt( 'auth' ) . 'subtleforms-license-server' );
+	}
+
+	/**
+	 * Whether a package token belongs to a license, site and product.
+	 *
+	 * @param array  $lic     License.
+	 * @param string $domain  Normalised domain.
+	 * @param string $token   Token from the address.
+	 * @param string $product Product slug.
+	 */
+	public static function package_token_valid( array $lic, string $domain, string $token, string $product = self::PRO ): bool {
+		if ( hash_equals( self::package_token( $lic, $domain, $product ), $token ) ) {
+			return true;
+		}
+		return self::PRO === $product && hash_equals( hash_hmac( 'sha256', self::product_token_input( $lic, $domain, $product ), wp_salt( 'auth' ) . 'subtleforms-license-server' ), $token );
+	}
+
+	/**
+	 * HMAC input of a package token with the product in it.
+	 *
+	 * @param array  $lic     License.
+	 * @param string $domain  Normalised domain.
+	 * @param string $product Product slug.
+	 */
+	private static function product_token_input( array $lic, string $domain, string $product ): string {
+		return 'package|' . $product . '|' . (int) $lic['id'] . '|' . strtoupper( (string) $lic['license_key'] ) . '|' . $domain;
 	}
 
 	/**
@@ -1386,9 +1478,10 @@ final class SFLS_Releases {
 	 * Read the plugin headers from a release zip and check its layout.
 	 *
 	 * @param string $zip_path Path to the zip.
-	 * @return array{version:string,requires:string,tested:string,requires_php:string}|WP_Error
+	 * @param string $product  Product slug: an extension zip has subtleforms-<slug>/subtleforms-<slug>.php.
+	 * @return array{version:string,requires:string,tested:string,requires_php:string,requires_free?:string,requires_pro?:string}|WP_Error
 	 */
-	public static function inspect_zip( string $zip_path ) {
+	public static function inspect_zip( string $zip_path, string $product = self::PRO ) {
 		if ( ! class_exists( 'ZipArchive' ) ) {
 			return new WP_Error( 'no_zip', __( 'The PHP zip extension is missing on this server, so the release cannot be checked.', 'subtleforms-license-server' ) );
 		}
@@ -1396,7 +1489,9 @@ final class SFLS_Releases {
 		if ( true !== $zip->open( $zip_path ) ) {
 			return new WP_Error( 'bad_zip', __( 'That file is not a valid zip archive.', 'subtleforms-license-server' ) );
 		}
-		$main = $zip->getFromName( self::MAIN_FILE );
+		$folder = self::PRO === $product ? self::PRO : 'subtleforms-' . $product;
+		$file   = $folder . '/' . $folder . '.php';
+		$main   = $zip->getFromName( $file );
 		if ( false === $main ) {
 			$top = array();
 			for ( $i = 0; $i < min( $zip->numFiles, 500 ); $i++ ) {
@@ -1409,12 +1504,12 @@ final class SFLS_Releases {
 				sprintf(
 					/* translators: 1: expected path, 2: folders found in the zip */
 					__( 'This zip does not contain %1$s. Upload the SubtleForms Pro plugin zip (it must have a subtleforms-pro folder at the top). Found: %2$s.', 'subtleforms-license-server' ),
-					self::MAIN_FILE,
+					$file,
 					implode( ', ', array_slice( array_keys( $top ), 0, 5 ) )
 				)
 			);
 		}
-		$readme = $zip->getFromName( 'subtleforms-pro/readme.txt' );
+		$readme = $zip->getFromName( $folder . '/readme.txt' );
 		$zip->close();
 
 		$headers = self::parse_headers(
@@ -1425,6 +1520,10 @@ final class SFLS_Releases {
 				'tested'       => 'Tested up to',
 				'requires_php' => 'Requires PHP',
 			)
+			+ ( self::PRO === $product ? array() : array(
+				'requires_free' => 'SubtleForms Requires',
+				'requires_pro'  => 'SubtleForms Pro Requires',
+			) )
 		);
 		if ( false !== $readme ) {
 			$from_readme = self::parse_headers(
@@ -1443,6 +1542,11 @@ final class SFLS_Releases {
 		}
 		if ( '' === $headers['version'] || strlen( $headers['version'] ) > 40 || ! preg_match( '/^\d+(\.\d+){0,3}([-.+][0-9A-Za-z.]+)?$/', $headers['version'] ) ) {
 			return new WP_Error( 'no_version', __( 'The plugin file in this zip has no valid Version header.', 'subtleforms-license-server' ) );
+		}
+		foreach ( array( 'requires_free', 'requires_pro' ) as $min ) {
+			if ( isset( $headers[ $min ] ) && '' !== $headers[ $min ] && ! preg_match( '/^\d+(\.\d+){0,3}(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$/', $headers[ $min ] ) ) {
+				return new WP_Error( 'bad_requires_header', __( 'The SubtleForms Requires and SubtleForms Pro Requires headers must be version numbers such as 1.4.0.', 'subtleforms-license-server' ) );
+			}
 		}
 		return $headers;
 	}

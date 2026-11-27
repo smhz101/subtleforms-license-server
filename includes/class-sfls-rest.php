@@ -6,9 +6,10 @@
  *   POST /wp-json/sfls/v1/license/validate    { license_key, site_url }
  *   POST /wp-json/sfls/v1/license/deactivate  { license_key, site_url }
  *   GET  /wp-json/sfls/v1/license/status      ?license_key&site_url
- *   GET  /wp-json/sfls/v1/update/check        ?license_key&site_url&version&slug[&channel=beta]
- *   GET  /wp-json/sfls/v1/update/package      ?lid&ptoken&site_url[&channel][&version], or ?license_key&site_url (redirects to a fresh signed link)
- *   GET  /wp-json/sfls/v1/update/download     ?lid&site&expires&token&sig[&version] (15 minutes, single use)
+ *   GET  /wp-json/sfls/v1/update/check        ?license_key&site_url&version&slug[&channel=beta], or with products={"<slug>":"<version>"} for every installed product (answer: { products: { <slug>: {...} } })
+ *   GET  /wp-json/sfls/v1/update/package      ?lid&ptoken&site_url[&channel][&version][&product], or ?license_key&site_url (redirects to a fresh signed link)
+ *   GET  /wp-json/sfls/v1/update/download     ?lid&site&expires&token&sig[&version][&product] (15 minutes, single use)
+ *   GET  /wp-json/sfls/v1/extensions          published extension catalog (open, signed)
  *   GET  /wp-json/sfls/v1/update/versions     ?license_key&site_url[&channel=beta] (versions this license may download)
  *   POST /wp-json/sfls/v1/branding            { license_key, site_url[, version] } (white-label profile, Agency plan)
  *   POST /wp-json/sfls/v1/connect/exchange    { code, site_url }
@@ -58,6 +59,22 @@ final class SFLS_REST {
 	 */
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'routes' ) );
+		add_action( 'rest_api_init', array( $this, 'extension_routes' ) );
+	}
+
+	/**
+	 * Register the public extension catalog route.
+	 */
+	public function extension_routes(): void {
+		register_rest_route(
+			self::NS,
+			'/extensions',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'extensions' ),
+				'permission_callback' => '__return_true', // Public and signed; the catalog is not secret.
+			)
+		);
 	}
 
 	/**
@@ -157,6 +174,10 @@ final class SFLS_REST {
 		if ( ! $payload['valid'] ) {
 			$payload['reason'] = $payload['status'];
 		}
+		$extensions = SFLS_Extensions::entitlement( $lic );
+		if ( $extensions ) {
+			$payload['extensions'] = $extensions;
+		}
 
 		return rest_ensure_response( self::with_data( $payload ) );
 	}
@@ -250,6 +271,85 @@ final class SFLS_REST {
 	}
 
 	/**
+	 * Public catalog of the published extensions. Open (no key), signed like
+	 * a license answer (sign_rest_response), cached for five minutes.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function extensions( WP_REST_Request $req ) {
+		unset( $req );
+		$limited = $this->rate_limit( 'update', SFLS_Licenses::client_ip() );
+		if ( $limited ) {
+			return $limited;
+		}
+		return rest_ensure_response( array( 'extensions' => SFLS_Extensions::public_catalog() ) );
+	}
+
+	/**
+	 * The product a package or download request is for: Pro unless named.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 */
+	private static function product( WP_REST_Request $req ): string {
+		$product = substr( sanitize_key( (string) $req->get_param( 'product' ) ), 0, 64 );
+		return '' === $product ? SFLS_Releases::PRO : $product;
+	}
+
+	/**
+	 * Why a license may not download an extension, or null when it may. Pro
+	 * is not checked here: it keeps its own rules.
+	 *
+	 * @param array  $lic     License.
+	 * @param string $domain  Normalised domain.
+	 * @param string $product Extension slug.
+	 */
+	private function extension_refusal( array $lic, string $domain, string $product ): ?WP_REST_Response {
+		if ( ! SFLS_Licenses::state( $lic )['valid'] ) {
+			return $this->error( 403, 'licence_inactive', __( 'An active license is required to download extensions.', 'subtleforms-license-server' ) );
+		}
+		if ( ! SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
+			return $this->error( 403, 'site_not_activated', __( 'This site is not activated for this license.', 'subtleforms-license-server' ) );
+		}
+		if ( ! SFLS_Extensions::may_download( $lic, $product ) ) {
+			return $this->error( 403, 'not_entitled', __( 'This extension is not included in your plan.', 'subtleforms-license-server' ) );
+		}
+		return null;
+	}
+
+	/**
+	 * The products of a batched update check: slug => installed version, or
+	 * null when the request has none (the old single-product check), or false
+	 * when `products` is not a JSON object of strings.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return array<string,string>|false|null
+	 */
+	private static function requested_products( WP_REST_Request $req ) {
+		$raw = $req->get_param( 'products' );
+		if ( null === $raw || '' === $raw ) {
+			return null;
+		}
+		if ( is_string( $raw ) ) {
+			$raw = json_decode( $raw, true );
+		}
+		if ( ! is_array( $raw ) || ( $raw && array_is_list( $raw ) ) ) {
+			return false;
+		}
+		$out = array();
+		foreach ( $raw as $slug => $version ) {
+			if ( ! is_scalar( $version ) || is_bool( $version ) ) {
+				return false;
+			}
+			$slug = substr( sanitize_key( (string) $slug ), 0, 64 );
+			if ( '' !== $slug ) {
+				$out[ $slug ] = sanitize_text_field( (string) $version );
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * The channel a request asks for: beta when the site opted in, else stable.
 	 *
 	 * @param WP_REST_Request $req Request.
@@ -277,6 +377,14 @@ final class SFLS_REST {
 		$limited = $this->rate_limit( 'pair', $pair, false );
 		if ( $limited ) {
 			return $limited;
+		}
+
+		$products = self::requested_products( $req );
+		if ( false === $products ) {
+			return $this->error( 400, 'invalid_products', __( 'products must be a JSON object of product slug and installed version.', 'subtleforms-license-server' ) );
+		}
+		if ( null !== $products ) {
+			return $this->update_check_products( $req, $products, $pair );
 		}
 
 		$channel = self::channel( $req );
@@ -322,6 +430,57 @@ final class SFLS_REST {
 	}
 
 	/**
+	 * Batched update check: the newer published release of each product the
+	 * license may download, for a site it is activated on. A product the
+	 * license may not download, or that has nothing newer, is left out.
+	 *
+	 * @param WP_REST_Request      $req      Request.
+	 * @param array<string,string> $products Product slug => installed version.
+	 * @param string               $pair     Rate limit key of key, address and site.
+	 * @return WP_REST_Response
+	 */
+	private function update_check_products( WP_REST_Request $req, array $products, string $pair ) {
+		[ $lic, $domain, $error ] = $this->resolve( $req );
+		if ( $error && 404 === $error->get_status() ) {
+			$this->rate_limit( 'pair', $pair, true );
+		}
+		$answer = array();
+		if ( ! $error && SFLS_Licenses::state( $lic )['valid'] && SFLS_Licenses::activation( (int) $lic['id'], $domain ) ) {
+			$channel = self::channel( $req );
+			foreach ( $products as $slug => $installed ) {
+				if ( SFLS_Releases::PRO !== $slug && ! SFLS_Extensions::may_download( $lic, $slug ) ) {
+					continue;
+				}
+				$release = SFLS_Releases::latest( $channel, true, $slug );
+				if ( ! $release || ! SFLS_Releases::has_package( $release ) || ! version_compare( (string) $release['version'], $installed, '>' ) ) {
+					continue;
+				}
+				$extra = array( 'version' => $release['version'] );
+				if ( 'beta' === $channel ) {
+					$extra['channel'] = 'beta';
+				}
+				if ( SFLS_Releases::PRO !== $slug ) {
+					$extra['product'] = $slug;
+				}
+				$answer[ $slug ] = array(
+					'version'       => $release['version'],
+					'package'       => self::package_address( $lic, $domain, $extra, $slug ),
+					'requires'      => $release['requires'],
+					'requires_php'  => $release['requires_php'],
+					'requires_free' => null === $release['requires_free'] ? null : (string) $release['requires_free'],
+					'requires_pro'  => null === $release['requires_pro'] ? null : (string) $release['requires_pro'],
+					'tested'        => $release['tested'],
+					'changelog'     => SFLS_Releases::changelog_html( $release ),
+					'sha256'        => strtolower( (string) $release['sha256'] ),
+					'package_sig'   => SFLS_Signing::release_signature( $release ),
+				);
+			}
+			SFLS_Licenses::touch_activation( (int) $lic['id'], $domain, $products[ SFLS_Releases::PRO ] ?? '' );
+		}
+		return rest_ensure_response( array( 'products' => (object) $answer ) );
+	}
+
+	/**
 	 * Package endpoint: checks the license and the site, then redirects to a
 	 * newly signed download link that works once within 15 minutes. Without
 	 * a version (addresses cached before 1.9.2) it serves the latest release
@@ -345,13 +504,14 @@ final class SFLS_REST {
 	 *
 	 * @param array  $lic    License.
 	 * @param string $domain Normalised domain.
-	 * @param array  $extra  channel, version.
+	 * @param array  $extra  channel, version, product.
+	 * @param string $product Product slug the address is for (Pro unless an extension).
 	 */
-	public static function package_address( array $lic, string $domain, array $extra = array() ): string {
+	public static function package_address( array $lic, string $domain, array $extra = array(), string $product = SFLS_Releases::PRO ): string {
 		$args = array(
 			'lid'      => (int) $lic['id'],
 			'site_url' => rawurlencode( $domain ),
-			'ptoken'   => SFLS_Releases::package_token( $lic, $domain ),
+			'ptoken'   => SFLS_Releases::package_token( $lic, $domain, $product ),
 		);
 		foreach ( $extra as $name => $value ) {
 			$args[ $name ] = rawurlencode( (string) $value );
@@ -374,7 +534,7 @@ final class SFLS_REST {
 		$token  = strtolower( sanitize_text_field( (string) $req->get_param( 'ptoken' ) ) );
 		$domain = SFLS_Licenses::normalize_domain( (string) $req->get_param( 'site_url' ) );
 		$lic    = $id ? SFLS_Licenses::find( $id ) : null;
-		if ( $lic && '' !== $domain && preg_match( '/^[a-f0-9]{64}$/', $token ) && hash_equals( SFLS_Releases::package_token( $lic, $domain ), $token ) ) {
+		if ( $lic && '' !== $domain && preg_match( '/^[a-f0-9]{64}$/', $token ) && SFLS_Releases::package_token_valid( $lic, $domain, $token, self::product( $req ) ) ) {
 			$req->set_param( 'license_key', (string) $lic['license_key'] );
 		}
 	}
@@ -389,6 +549,10 @@ final class SFLS_REST {
 		[ $lic, $domain, $error ] = $this->resolve( $req );
 		if ( $error ) {
 			return $error;
+		}
+		$product = self::product( $req );
+		if ( SFLS_Releases::PRO !== $product ) {
+			return $this->package_extension( $req, $lic, $domain, $product );
 		}
 		$version = sanitize_text_field( (string) $req->get_param( 'version' ) );
 		if ( '' === $version && ! SFLS_Licenses::state( $lic )['valid'] ) {
@@ -425,14 +589,48 @@ final class SFLS_REST {
 	}
 
 	/**
+	 * Package endpoint for an extension: the license must be valid or in
+	 * grace, the site activated, and the extension in the license's plan.
+	 * The redirect goes to a signed link that names the product.
+	 *
+	 * @param WP_REST_Request $req     Request.
+	 * @param array           $lic     License.
+	 * @param string          $domain  Normalised domain.
+	 * @param string          $product Extension slug.
+	 * @return WP_REST_Response
+	 */
+	private function package_extension( WP_REST_Request $req, array $lic, string $domain, string $product ) {
+		$refused = $this->extension_refusal( $lic, $domain, $product );
+		if ( $refused ) {
+			return $refused;
+		}
+		$version = sanitize_text_field( (string) $req->get_param( 'version' ) );
+		if ( '' !== $version && self::is_withdrawn( $version, $product ) ) {
+			return $this->withdrawn();
+		}
+		$release = '' === $version ? SFLS_Releases::latest( self::channel( $req ), true, $product ) : SFLS_Releases::find( $version, $product );
+		if ( ! $release || ! SFLS_Releases::has_package( $release ) ) {
+			return $this->error( 404, 'no_package', __( 'No package is available.', 'subtleforms-license-server' ) );
+		}
+		if ( '' !== $version && 'beta' === $release['channel'] && 'beta' !== self::channel( $req ) ) {
+			return $this->error( 410, 'wrong_channel', __( 'This version is not on your update channel. Check for updates again to get the current version.', 'subtleforms-license-server' ) );
+		}
+		$response = new WP_REST_Response( null, 302 );
+		$response->header( 'Location', SFLS_Releases::signed_url( $lic['license_key'], $domain, $release['version'], $product ) );
+		$response->header( 'Cache-Control', 'no-store' );
+		return $response;
+	}
+
+	/**
 	 * Whether a release exists and is no longer published: yanked, or taken
 	 * back to a draft ("Unpublish to draft"). A version that never existed is
 	 * not withdrawn.
 	 *
 	 * @param string $version Version.
+	 * @param string $product Product slug.
 	 */
-	private static function is_withdrawn( string $version ): bool {
-		$release = SFLS_Releases::get( $version );
+	private static function is_withdrawn( string $version, string $product = SFLS_Releases::PRO ): bool {
+		$release = SFLS_Releases::get( $version, false, $product );
 		return $release && ! SFLS_Releases::is_live( $release );
 	}
 
@@ -519,13 +717,21 @@ final class SFLS_REST {
 		$token   = strtolower( sanitize_key( (string) $req->get_param( 'token' ) ) );
 		$sig     = sanitize_text_field( (string) $req->get_param( 'sig' ) );
 		$version = sanitize_text_field( (string) $req->get_param( 'version' ) );
+		$product = self::product( $req );
 
-		if ( ! SFLS_Releases::verify( $key, $domain, $expires, $sig, $token, $version ) ) {
+		if ( ! SFLS_Releases::verify( $key, $domain, $expires, $sig, $token, $version, $product ) ) {
 			return $this->error( 403, 'invalid_signature', __( 'This download link has expired. Check for updates again.', 'subtleforms-license-server' ) );
 		}
-		$lic     = SFLS_Licenses::find_by_key( $key );
-		$release = '' === $version ? SFLS_Releases::latest( 'stable' ) : SFLS_Releases::find( $version );
-		if ( $lic && '' !== $version && self::is_withdrawn( $version ) ) {
+		$lic = SFLS_Licenses::find_by_key( $key );
+		if ( $lic && SFLS_Releases::PRO !== $product ) {
+			// Checked again at download time, before the link is used up: the license may have lapsed since the link was made.
+			$refused = $this->extension_refusal( $lic, $domain, $product );
+			if ( $refused ) {
+				return $refused;
+			}
+		}
+		$release = '' === $version ? SFLS_Releases::latest( 'stable', true, $product ) : SFLS_Releases::find( $version, $product );
+		if ( $lic && '' !== $version && self::is_withdrawn( $version, $product ) ) {
 			return $this->withdrawn();
 		}
 		if ( ! $lic || ( $release && ! SFLS_Releases::allowed( $lic, $release ) ) || ( ! $release && ! SFLS_Licenses::state( $lic )['valid'] ) ) {

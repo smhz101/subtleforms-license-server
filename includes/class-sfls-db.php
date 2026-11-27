@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SFLS_DB {
 
-	const SCHEMA_VERSION = '14';
+	const SCHEMA_VERSION = '16';
 
 	/**
 	 * Licence IDs whose Agency seats were already more than the plan's 25
@@ -131,6 +131,14 @@ final class SFLS_DB {
 	}
 
 	/**
+	 * Extension catalog table (schema 15).
+	 */
+	public static function extensions(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'sfls_extensions';
+	}
+
+	/**
 	 * Create or upgrade the tables and the private release folder.
 	 */
 	public static function install(): void {
@@ -151,6 +159,7 @@ final class SFLS_DB {
 		$rates    = self::rate_limits();
 		$audit    = self::audit_log();
 		$reports  = self::reports();
+		$exts     = self::extensions();
 
 		dbDelta(
 			"CREATE TABLE {$licenses} (
@@ -257,6 +266,7 @@ final class SFLS_DB {
 		dbDelta(
 			"CREATE TABLE {$releases} (
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  product varchar(64) NOT NULL DEFAULT 'subtleforms-pro',
   version varchar(40) NOT NULL,
   channel varchar(10) NOT NULL DEFAULT 'stable',
   status varchar(10) NOT NULL DEFAULT 'draft',
@@ -266,6 +276,8 @@ final class SFLS_DB {
   requires varchar(20) NOT NULL DEFAULT '',
   tested varchar(20) NOT NULL DEFAULT '',
   requires_php varchar(20) NOT NULL DEFAULT '',
+  requires_free varchar(20) NULL,
+  requires_pro varchar(20) NULL,
   changelog text NULL,
   source varchar(10) NOT NULL DEFAULT 'upload',
   git_ref varchar(190) NOT NULL DEFAULT '',
@@ -279,7 +291,8 @@ final class SFLS_DB {
   created_at datetime NOT NULL,
   updated_at datetime NOT NULL,
   PRIMARY KEY  (id),
-  UNIQUE KEY version (version),
+  UNIQUE KEY product_version (product,version),
+  KEY product_status (product,status),
   KEY status (status)
 ) {$charset};"
 		);
@@ -394,6 +407,27 @@ final class SFLS_DB {
 ) {$charset};"
 		);
 
+		// Schema 15 (1.15.0): the extension catalog. Additive only.
+		dbDelta(
+			"CREATE TABLE {$exts} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  slug varchar(64) NOT NULL,
+  title varchar(190) NOT NULL DEFAULT '',
+  description text NULL,
+  category varchar(20) NOT NULL DEFAULT 'integrations',
+  min_plan varchar(20) NOT NULL DEFAULT 'pro',
+  icon varchar(40) NOT NULL DEFAULT '',
+  docs_url varchar(255) NOT NULL DEFAULT '',
+  status varchar(20) NOT NULL DEFAULT 'draft',
+  sort int(11) NOT NULL DEFAULT 0,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY slug (slug),
+  KEY status (status)
+) {$charset};"
+		);
+
 		self::backfill_billing();
 
 		// Schema 9: package signatures moved from an option into releases.package_sig.
@@ -420,6 +454,11 @@ final class SFLS_DB {
 			self::remove_trials();
 		}
 
+		// Schema 15: releases are per product. dbDelta added the product column (existing
+		// rows take the default, subtleforms-pro) and the (product, version) key; the old
+		// key on version alone would stop two products from sharing a version number.
+		self::drop_old_version_key();
+
 		update_option( 'sfls_schema_version', self::SCHEMA_VERSION );
 
 		// Private folder for release packages.
@@ -436,6 +475,23 @@ final class SFLS_DB {
 
 		// Schema 5 (1.6.0): move the releases out of the two options.
 		SFLS_Releases::migrate_from_options();
+	}
+
+	/**
+	 * Schema 15: drop the unique key on releases.version, which the
+	 * (product, version) key replaces. Does nothing when it is gone.
+	 */
+	public static function drop_old_version_key(): void {
+		global $wpdb;
+		$table = self::releases();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$has_new = $wpdb->get_var( "SHOW INDEX FROM {$table} WHERE Key_name = 'product_version'" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$has_old = $wpdb->get_var( "SHOW INDEX FROM {$table} WHERE Key_name = 'version'" );
+		if ( $has_new && $has_old ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.SchemaChange
+			$wpdb->query( "ALTER TABLE {$table} DROP INDEX version" );
+		}
 	}
 
 	/**

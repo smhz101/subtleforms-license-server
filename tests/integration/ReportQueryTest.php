@@ -328,7 +328,7 @@ class SFLS_Report_Query_Test extends SFLS_Test_Case {
 	 */
 	public function test_schema_14(): void {
 		global $wpdb;
-		$this->assertSame( '14', SFLS_DB::SCHEMA_VERSION );
+		$this->assertSame( '16', SFLS_DB::SCHEMA_VERSION );
 		SFLS_DB::install();
 		$this->assertSame( SFLS_DB::reports(), $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', SFLS_DB::reports() ) ) );
 		$cols = $wpdb->get_col( 'SHOW COLUMNS FROM ' . SFLS_DB::reports() );
